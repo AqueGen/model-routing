@@ -1,0 +1,13 @@
+{
+  "name": "model-routing",
+  "owner": {
+    "name": "AqueGen"
+  },
+  "plugins": [
+    {
+      "name": "model-routing",
+      "source": "./",
+      "description": "Tiered model routing for token economy: the strongest model thinks, cheaper models grind."
+    }
+  ]
+}
