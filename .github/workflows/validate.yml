@@ -1,0 +1,31 @@
+name: validate
+
+on: [push, pull_request]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate JSON manifests
+        run: |
+          jq empty .claude-plugin/plugin.json
+          jq empty .claude-plugin/marketplace.json
+          jq empty hooks/hooks.json
+
+      - name: Validate agent frontmatter
+        run: |
+          for f in agents/*.md; do
+            for key in name description model; do
+              grep -q "^$key:" "$f" || { echo "$f missing '$key'"; exit 1; }
+            done
+          done
+
+      - name: Validate skill frontmatter
+        run: |
+          for f in skills/*/SKILL.md; do
+            for key in name description; do
+              grep -q "^$key:" "$f" || { echo "$f missing '$key'"; exit 1; }
+            done
+          done

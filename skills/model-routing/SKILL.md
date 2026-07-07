@@ -25,6 +25,7 @@ Think in tiers, not model names - names rot, tiers do not:
 | Task | Where | Agent / model |
 |------|-------|---------------|
 | Planning, brainstorming, specs, docs, architecture | main session | strongest (user's /model choice) |
+| Codebase exploration ("where is X", "how does Y work") | subagent | `scout` (sonnet) |
 | Implementing an approved plan/spec | subagent | `implementer` (opus) |
 | Trivial mechanical tasks: renames, boilerplate, mirrored constants | subagent | sonnet |
 | Small interactive edits, quick fixes | main session | strongest |
@@ -37,6 +38,8 @@ Think in tiers, not model names - names rot, tiers do not:
 
 - Never burn main-session tokens on raw test or build output. Dispatch to
   `test-runner` and consume its compact report.
+- Route codebase exploration to `scout` - conclusions and file:line refs
+  come back, file dumps stay in the subagent.
 - Batch related plan tasks per subagent. Each subagent re-reads files from
   scratch; one tiny task per agent costs more than it saves.
 - Subagents cannot see the conversation. Write self-contained task

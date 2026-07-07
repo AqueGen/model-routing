@@ -14,22 +14,55 @@ gateway, no ToS gray zones.
 ## What's inside
 
 | Component | Model | Purpose |
-|-----------|-------|---------|
+| --------- | ----- | ------- |
+| `agents/scout.md` | sonnet | Read-only codebase exploration: conclusions and file:line refs come back, file dumps stay out. |
 | `agents/test-runner.md` | haiku | Run tests/builds/linters, report failures compactly. Never fixes anything. |
 | `agents/e2e-runner.md` | sonnet | Drive Playwright/E2E scenarios, interpret failures (product bug vs test bug vs flake). |
 | `agents/implementer.md` | opus | Implement one well-defined task from an approved plan. Verifies its own work. |
 | `agents/reviewer.md` | opus | Review a diff for correctness bugs, ranked by severity. |
 | `skills/model-routing/` | - | The routing table and delegation rules Claude follows when deciding where work goes. |
+| `hooks/routing-anchor.md` | - | Short routing anchor auto-injected at session start - zero config. |
+
+## Example
+
+A typical feature session on a strong main model (Opus/Fable):
+
+> Implement tasks 1-2 from the plan, then run the unit tests.
+
+Without the plugin everything happens in the main session: it reads a
+dozen files, writes code, and dumps the full test log into your context.
+Thousands of expensive tokens spent on mechanics.
+
+With the plugin:
+
+```text
+Main session (strong model, plans and coordinates):
+  dispatches implementer (opus) with two self-contained tasks
+
+    implementer: Changed OrderService.cs (null-payload guard) and
+    OrderServiceTests.cs (3 new tests). Build OK, 214/214 unit
+    tests pass.
+
+  dispatches test-runner (haiku) for the final check
+
+    test-runner: PASS. 214/214, 0 skipped.
+    Command: dotnet test src/Orders.Tests.csproj
+
+  reports back to you.
+```
+
+The file reads, diffs, and raw test logs stayed inside the subagents.
+Your expensive main-session context grew by two short reports.
 
 ## Install
 
-```
+```text
 claude marketplace add AqueGen/model-routing
 ```
 
 Then enable the plugin:
 
-```
+```text
 /plugin install model-routing@model-routing
 ```
 
@@ -45,6 +78,9 @@ For local development: clone the repo and
 The agents show up as regular subagent types. Ask for them explicitly or
 let Claude route via the skill:
 
+- "Where is the webhook retry logic?" - Claude dispatches `scout`
+  (sonnet); you get the answer with file:line refs, not a pile of file
+  contents in your context.
 - "Run the unit tests" - Claude dispatches `test-runner` (haiku); you get
   a compact pass/fail report instead of a wall of logs.
 - "Implement tasks 1-3 from the plan" - Claude dispatches `implementer`
@@ -78,34 +114,19 @@ Fallback down the tier ladder when your primary model hits its quota
 For sessions that do not need the strongest tier, the built-in hybrid is a
 good lazy default:
 
-```
+```text
 /model opusplan
 ```
 
 (Opus plans, Sonnet executes - no plugin needed.)
 
-## Optional CLAUDE.md snippet
+## Zero config
 
-The skill activates on demand. If you want the routing rules always in
-context, paste this into your `~/.claude/CLAUDE.md`:
-
-```markdown
-### Model Routing (token economy)
-
-Expensive model thinks, cheap models grind. Enforced via subagent
-delegation - Claude cannot switch the main-session model, only delegate.
-
-- Planning, specs, docs, architecture: main session.
-- Implementing an approved plan: `implementer` subagents; batch related
-  tasks per agent. Trivial mechanical tasks: sonnet is enough.
-- Small interactive edits: main session.
-- Code review: `reviewer` subagent; high-risk diffs get a final review
-  in the main session.
-- Test/build runs: `test-runner` subagent - never burn main-session
-  tokens on raw test output.
-- Playwright/E2E and failure interpretation: `e2e-runner` subagent.
-- Repo-specific test policies override this.
-```
+The plugin injects a short routing anchor at session start (SessionStart
+hook), so the rules are always in context - no CLAUDE.md edits needed.
+The anchor text lives in `hooks/routing-anchor.md`; the full logic is in
+the `model-routing` skill. If you had pasted a routing snippet into your
+`CLAUDE.md` before, remove it - the hook replaces it.
 
 ## Why not a router proxy?
 
