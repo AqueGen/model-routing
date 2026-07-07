@@ -1,5 +1,7 @@
 # model-routing
 
+[![validate](https://github.com/AqueGen/model-routing/actions/workflows/validate.yml/badge.svg)](https://github.com/AqueGen/model-routing/actions/workflows/validate.yml)
+
 Tiered model routing for Claude Code token economy: **the strongest model
 thinks, cheaper models grind.**
 

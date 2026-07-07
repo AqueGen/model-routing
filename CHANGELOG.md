@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Release automation: pushing a `v*` tag creates the GitHub release with
+  notes from the matching CHANGELOG section.
+- CI badge in README.
+
 ## 0.2.0 - 2026-07-07
 
 - SessionStart hook: the routing anchor is now auto-injected into every
