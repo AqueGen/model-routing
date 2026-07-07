@@ -23,26 +23,22 @@ gateway, no ToS gray zones.
 
 ## Install
 
-While the repo is private, add it as a local marketplace:
-
 ```
-claude marketplace add E:\model-routing
-```
-
-Or, with git access to the private repo:
-
-```
-claude marketplace add <your-github-user>/model-routing
+claude marketplace add AqueGen/model-routing
 ```
 
 Then enable the plugin:
 
 ```
-/plugin
+/plugin install model-routing@model-routing
 ```
 
-and toggle `model-routing` on (or add `"model-routing@model-routing": true`
-to `enabledPlugins` in `~/.claude/settings.json`).
+(or toggle it in the `/plugin` menu, or add
+`"model-routing@model-routing": true` to `enabledPlugins` in
+`~/.claude/settings.json`).
+
+For local development: clone the repo and
+`claude marketplace add /path/to/model-routing`.
 
 ## Usage
 
@@ -121,4 +117,4 @@ is native, supported, and does the same tier-splitting.
 
 ## License
 
-Private for now. License TBD before publishing.
+MIT

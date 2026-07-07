@@ -1,7 +1,8 @@
 {
   "name": "model-routing",
   "owner": {
-    "name": "AqueGen"
+    "name": "AqueGen",
+    "url": "https://github.com/AqueGen"
   },
   "plugins": [
     {
