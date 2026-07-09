@@ -38,8 +38,11 @@ which model, and how hard it thinks.
 
 Match effort to task difficulty, not to tier. Reserve `high`/`max` for the
 few tasks that actually need it - most work is a `low`/`medium` task in
-disguise. Set effort per-dispatch with the Agent tool's `effort` param;
-the bundled agents state a sensible default you can override.
+disguise. Set effort where the harness exposes it: Workflow scripts take
+an `effort` option per `agent()` call; a plain Agent dispatch inherits the
+session effort, so there the levers are tier choice and the user's session
+setting. The bundled agents state the effort they are designed for - a
+hint for the caller, not a self-applied setting.
 
 ## Routing table
 
@@ -58,6 +61,9 @@ not the tier:
 | Run tests/builds/linters, report failures | subagent | `test-runner` (haiku) | low |
 | Playwright/E2E scenarios, failure interpretation | subagent | `e2e-runner` (sonnet) | medium |
 | Fresh external context, knowledge-cutoff gap (new APIs, recent releases) | subagent / skill | `deep-research` or a mid-tier research pass | medium |
+
+Main-session rows: the effort there is the user's session setting - Claude
+cannot change it mid-session, only suggest.
 
 ## Rules
 
@@ -78,7 +84,10 @@ not the tier:
   just missing a fact), it should package its state - what it tried, why
   each attempt failed, the candidate directions it sees - and hand it back
   for a main-session decision. A strong model advising a stuck subagent is
-  cheaper than that subagent thrashing at the wrong approach.
+  cheaper than that subagent thrashing at the wrong approach. After
+  deciding, continue the SAME agent (SendMessage) with the direction - a
+  fresh dispatch pays the full file re-read the batching rule exists to
+  avoid.
 - If an entire session is one phase (pure implementation), suggest the
   user switch /model instead of delegating everything - a session on the
   right model beats a swarm of subagents.

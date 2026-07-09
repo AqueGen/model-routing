@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.1 - 2026-07-09
+
+- Fix: the skill and anchor pointed at a nonexistent Agent-tool `effort`
+  param. Effort is now described as it actually works: Workflow `agent()`
+  takes an `effort` option; a plain Agent dispatch inherits the session
+  effort.
+- Escalation loop: after a main-session decision, continue the SAME agent
+  (SendMessage) instead of re-dispatching - a fresh agent pays the full
+  file re-read.
+- Per-agent effort notes reworded as caller hints; prompt text cannot
+  self-set reasoning effort.
+- Routing table now notes that main-session effort is the user's session
+  setting - advisory only.
+
 ## 0.3.0 - 2026-07-09
 
 - Effort dimension: routing now tunes reasoning effort as a second knob

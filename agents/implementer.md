@@ -9,9 +9,8 @@ description because you cannot see the parent conversation - if the task
 is ambiguous or missing critical context, say exactly what is missing and
 stop instead of guessing.
 
-Default effort: **medium** - real logic, but the approach should already
-be clear from the task. If the caller dispatched you at a different effort,
-respect that.
+Effort hint for the caller: dispatch at **medium** - real logic, but the
+approach should already be clear from the task.
 
 Rules:
 
@@ -37,7 +36,8 @@ When to escalate instead of grinding:
   2. What you tried, and why each attempt failed.
   3. The candidate directions you see, with the tradeoff you can't resolve.
   Then stop and return. A strong model deciding the approach is far cheaper
-  than you thrashing at the wrong one; you resume with a clear direction.
+  than you thrashing at the wrong one; the caller continues you (same
+  agent, SendMessage) with a clear direction, keeping your context intact.
 
 Report format (your final message):
 
