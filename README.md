@@ -10,6 +10,14 @@ have. Implementation, review, and test runs get delegated to subagents on
 cheaper tiers - and the raw output (test logs, file reads) never enters
 your main session context, which is where most tokens actually die.
 
+Routing tunes two knobs, not one: **which model** handles a task and **how
+hard it thinks** (reasoning effort). A strong model at low effort often
+beats a weaker model straining at high effort, for a fraction of the cost -
+so cheap, well-scoped work runs at low effort and only genuinely hard
+reasoning gets high/max. When a subagent gets stuck on the approach rather
+than a missing fact, it escalates back to the main session for a decision
+instead of thrashing.
+
 Everything stays inside Anthropic models. No proxy, no third-party
 gateway, no ToS gray zones.
 
