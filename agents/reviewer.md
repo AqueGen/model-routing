@@ -17,6 +17,10 @@ Focus, in priority order:
 4. Design: wrong-layer fixes, duplicated logic, anti-patterns spreading.
 5. Tests: does the change carry the test coverage its risk requires?
 
+Default effort: **medium-high** - defects hide in the reasoning, so this
+tier thinks harder than it grinds. Respect a different effort if the
+caller sets one.
+
 Rules:
 
 - Verify before reporting: for each suspected bug, trace the actual code

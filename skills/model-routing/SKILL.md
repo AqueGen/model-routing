@@ -20,19 +20,44 @@ Think in tiers, not model names - names rot, tiers do not:
   when the session runs Opus).
 - **cheap** - Sonnet/Haiku class. Mechanical work.
 
+## Effort, not just tier
+
+Model tier is one knob; reasoning effort is the second, and it moves cost
+as hard as tier does. The same model at `low` effort can cost a fraction
+of `max` and still clear a task that was never hard - a strong model
+thinking lightly often beats a weaker model thinking hard. Pick both:
+which model, and how hard it thinks.
+
+- **low** - mechanical or well-scoped work: exploration, renames, running
+  tests, reading a diff for a known-shape change.
+- **medium** - normal implementation and review: real logic, but the
+  approach is already clear.
+- **high / max** - genuinely hard reasoning: architecture, subtle
+  debugging, high-risk final review, anything where a wrong approach is
+  expensive to unwind.
+
+Match effort to task difficulty, not to tier. Reserve `high`/`max` for the
+few tasks that actually need it - most work is a `low`/`medium` task in
+disguise. Set effort per-dispatch with the Agent tool's `effort` param;
+the bundled agents state a sensible default you can override.
+
 ## Routing table
 
-| Task | Where | Agent / model |
-|------|-------|---------------|
-| Planning, brainstorming, specs, docs, architecture | main session | strongest (user's /model choice) |
-| Codebase exploration ("where is X", "how does Y work") | subagent | `scout` (sonnet) |
-| Implementing an approved plan/spec | subagent | `implementer` (opus) |
-| Trivial mechanical tasks: renames, boilerplate, mirrored constants | subagent | sonnet |
-| Small interactive edits, quick fixes | main session | strongest |
-| Code review of implemented work | subagent | `reviewer` (opus) |
-| Final review of high-risk or large diffs | main session | strongest |
-| Run tests/builds/linters, report failures | subagent | `test-runner` (haiku) |
-| Playwright/E2E scenarios, failure interpretation | subagent | `e2e-runner` (sonnet) |
+Each row carries a default effort - the second knob, tuned to the task,
+not the tier:
+
+| Task | Where | Agent / model | Effort |
+|------|-------|---------------|--------|
+| Planning, brainstorming, specs, docs, architecture | main session | strongest (user's /model choice) | high |
+| Codebase exploration ("where is X", "how does Y work") | subagent | `scout` (sonnet) | low |
+| Implementing an approved plan/spec | subagent | `implementer` (opus) | medium |
+| Trivial mechanical tasks: renames, boilerplate, mirrored constants | subagent | sonnet | low |
+| Small interactive edits, quick fixes | main session | strongest | low-medium |
+| Code review of implemented work | subagent | `reviewer` (opus) | medium-high |
+| Final review of high-risk or large diffs | main session | strongest | high |
+| Run tests/builds/linters, report failures | subagent | `test-runner` (haiku) | low |
+| Playwright/E2E scenarios, failure interpretation | subagent | `e2e-runner` (sonnet) | medium |
+| Fresh external context, knowledge-cutoff gap (new APIs, recent releases) | subagent / skill | `deep-research` or a mid-tier research pass | medium |
 
 ## Rules
 
@@ -49,6 +74,11 @@ Think in tiers, not model names - names rot, tiers do not:
 - Review is one cheap pass; missed bugs are expensive. When a diff is
   high-risk, escalate the final review to the main session instead of
   delegating it.
+- Escalate, don't guess. When a subagent is stuck on the *approach* (not
+  just missing a fact), it should package its state - what it tried, why
+  each attempt failed, the candidate directions it sees - and hand it back
+  for a main-session decision. A strong model advising a stuck subagent is
+  cheaper than that subagent thrashing at the wrong approach.
 - If an entire session is one phase (pure implementation), suggest the
   user switch /model instead of delegating everything - a session on the
   right model beats a swarm of subagents.
@@ -61,3 +91,6 @@ Think in tiers, not model names - names rot, tiers do not:
 - `/model opusplan`: built-in two-tier hybrid (Opus plans, Sonnet
   executes) - a good lazy default for sessions that do not need the
   strongest tier.
+- Output-token reducers (terser-output skills like ponytail/caveman) cut
+  ~15-20% on top of routing - orthogonal to tier and effort. They trim
+  what the model emits; routing decides who emits it. Use together.

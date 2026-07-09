@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Effort dimension: routing now tunes reasoning effort as a second knob
+  alongside model tier. New "Effort, not just tier" section in the skill,
+  an effort column in the routing table, a per-agent default effort, and
+  an effort note in the session-start anchor.
+- Advisor-escalation: an "escalate, don't guess" rule plus an explicit
+  escalation protocol in `implementer` - a subagent stuck on the approach
+  packages its state and hands back for a main-session decision instead of
+  thrashing.
+- Routing table gains a row for knowledge-cutoff gaps (deep-research /
+  mid-tier research pass) and a note on output-token reducers as an
+  orthogonal saving.
 - Release automation: pushing a `v*` tag creates the GitHub release with
   notes from the matching CHANGELOG section.
 - CI badge in README.
