@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 - 2026-07-09
 
 - Effort dimension: routing now tunes reasoning effort as a second knob
   alongside model tier. New "Effort, not just tier" section in the skill,
