@@ -2,7 +2,7 @@ MODEL ROUTING ACTIVE - expensive model thinks, cheap models grind. You cannot sw
 
 - Planning, specs, docs, architecture, small interactive edits: main session.
 - Codebase exploration ("where is X handled", "how does Y work"): `scout` agent - conclusions and file:line refs come back, file dumps stay out.
-- Structural questions ("what connects A and B", "what depends on X", impact) when a code-graph MCP is connected (e.g. `mcp__graphify__*`): one cheap graph call in the main session may beat a scout dispatch - query the graph first, send scout to verify file:line specifics.
+- Structural questions ("what connects A and B", "what depends on X", impact) when a code-graph MCP is connected: one cheap graph call in the main session may beat a scout dispatch - query the graph first, send scout to verify file:line specifics.
 - Implementing an approved plan/spec: `implementer` agents; batch related tasks per agent (each re-reads files from scratch). Trivial mechanical tasks: sonnet is enough.
 - Code review: `reviewer` agent; high-risk or large diffs get final review in the main session instead.
 - Test/build runs: `test-runner` agent - never burn main-session tokens on raw test output.
