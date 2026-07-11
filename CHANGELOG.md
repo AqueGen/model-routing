@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1 - 2026-07-11
+
+- Agent pins are ceilings, not floors: when an agent's pinned model is
+  above the session model, routing caps the dispatch at the session
+  model (verified: the Agent `model` param overrides frontmatter pins).
+  Fixes the tier inversion where opus-pinned implementer/reviewer cost
+  more than a sonnet main session.
+
 ## 0.4.0 - 2026-07-11
 
 - Universality pass: the plugin no longer names any specific tool stack.
