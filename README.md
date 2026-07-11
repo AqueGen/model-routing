@@ -84,6 +84,51 @@ Then enable the plugin:
 For local development: clone the repo and
 `claude marketplace add /path/to/model-routing`.
 
+## Getting started
+
+### Plain use
+
+1. Pick your session model with `/model` (opus, fable, whatever your
+   plan offers). The plugin never changes it - the main session is where
+   planning and decisions happen, so give it the strongest tier you are
+   willing to pay for. Session effort: leave the default (medium); the
+   bundled agents pin their own.
+2. Work normally. Mechanical work routes down automatically:
+
+   | You ask | Who runs it | Model / effort |
+   | ------- | ----------- | -------------- |
+   | "Where is X handled?" | `scout` | sonnet / low |
+   | "Run the tests" | `test-runner` | haiku / low |
+   | "Implement tasks from the plan" | `implementer` | opus / medium |
+   | "Review the diff" | `reviewer` | opus / high |
+   | "Walk through the flow in the browser" | `e2e-runner` | sonnet / medium |
+
+   The main session spends tokens only on planning, decisions, final
+   review of high-risk diffs, and reading the agents' short reports.
+
+### Workflow use (brainstorm - plan - execute)
+
+Works with any plan-driven workflow (superpowers or similar):
+
+1. Brainstorming and plan-writing stay in the main session on the
+   strongest model - protecting this thinking is the point of the
+   plugin.
+2. Plan execution goes to `implementer` with a batch of related tasks
+   per dispatch (one agent per batch, not per task - every fresh agent
+   re-reads files from scratch).
+3. Verification: `test-runner` after each batch, `reviewer` on the
+   completed chunk, and for high-risk diffs a final review in the main
+   session.
+
+### "I don't want the expensive model"
+
+Switch the session down: `/model opus` or `/model opusplan`. Agent pins
+do not move - tiers are relative, "strongest" simply means your session
+model. One inversion to know about: on a `sonnet` session the
+opus-pinned `implementer` and `reviewer` cost MORE than your main
+session. Context isolation still pays off, tier economy does not - on a
+sonnet-only budget, review in the main session instead.
+
 ## Usage
 
 The agents show up as regular subagent types. Ask for them explicitly or
