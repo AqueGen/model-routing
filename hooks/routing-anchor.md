@@ -9,5 +9,6 @@ MODEL ROUTING ACTIVE - expensive model thinks, cheap models grind. You cannot sw
 - Playwright/E2E scenarios and failure interpretation: `e2e-runner` agent.
 - Effort is the second knob: match reasoning effort to task difficulty, not to tier. Low for exploration/mechanical work, medium for normal implementation/review, high/max only for hard architecture or subtle debugging. The bundled agents pin their effort in frontmatter (scout/test-runner low, implementer/e2e-runner medium, reviewer high); Workflow `agent()` takes an `effort` option per call; other agents inherit the session effort.
 - Escalate, don't guess: a subagent stuck on the approach (not just a missing fact) should package what it tried and hand back for a main-session decision, rather than thrashing at high cost. After deciding, continue the same agent (SendMessage) instead of re-dispatching - a fresh agent pays the full file re-read.
+- Agent model pins are ceilings, not floors: when an agent's pinned model is above the session model, cap the dispatch at the session model (Agent `model` param) - on a sonnet session implementer/reviewer run on sonnet. High-risk review still goes to the main session.
 - Repo-specific policies (e.g. "unit tests only") override this routing.
 - If an entire session is one phase, suggest the user switch /model instead of delegating everything.
