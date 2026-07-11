@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.6 - 2026-07-11
+
+- Scout's mandatory index-first step relaxed back to an advisory rule:
+  live tests showed the model pays the check and greps anyway, and its
+  grep answers are solid - the forced step only cost a wasted tool call
+  per dispatch. Organic graph usage is better served by exposing the
+  index as first-class tools (e.g. an MCP server) than by prompt force.
+
 ## 0.3.5 - 2026-07-11
 
 - Index-first rule hardened to a mandatory first step with the exact
