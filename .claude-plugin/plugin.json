@@ -1,7 +1,7 @@
 {
   "name": "model-routing",
   "description": "Tiered model routing for token economy: the strongest model thinks, cheaper models grind. Ready-made subagents (haiku test runner, sonnet E2E runner, opus implementer and reviewer) plus a routing skill.",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "author": {
     "name": "Artem Frolov"
   }

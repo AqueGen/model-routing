@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.8 - 2026-07-11
+
+- Scout's tool allowlist replaced with a denylist
+  (`disallowedTools: Agent, SendMessage, Edit, Write, NotebookEdit`).
+  The allowlist enforced the same two guarantees (no delegation, real
+  read-only) but silently hid every MCP tool - including a connected
+  code-graph server (the 0.3.7 gap) - and demanded a plugin release per
+  new tool. The denylist bans exactly the two failure modes and inherits
+  everything else, future MCP tools included, with zero maintenance.
+
 ## 0.3.7 - 2026-07-11
 
 - Close the graph-orphan gap: the routing anchor sent all exploration to
