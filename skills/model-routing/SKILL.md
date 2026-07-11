@@ -61,7 +61,7 @@ it:
 | Final review of high-risk or large diffs | main session | strongest | high |
 | Run tests/builds/linters, report failures | subagent | `test-runner` (haiku) | low |
 | Playwright/E2E scenarios, failure interpretation | subagent | `e2e-runner` (sonnet) | medium |
-| Fresh external context, knowledge-cutoff gap (new APIs, recent releases) | subagent / skill | `deep-research` or a mid-tier research pass | medium |
+| Fresh external context, knowledge-cutoff gap (new APIs, recent releases) | subagent | mid-tier agent with web access | medium |
 
 Main-session rows: the effort there is the user's session setting - Claude
 cannot change it mid-session, only suggest.
@@ -72,6 +72,10 @@ cannot change it mid-session, only suggest.
   `test-runner` and consume its compact report.
 - Route codebase exploration to `scout` - conclusions and file:line refs
   come back, file dumps stay in the subagent.
+- For locate-only sweeps ("which files mention X") the harness's built-in
+  Explore agent, when present, is cheaper than `scout`. Use `scout` when
+  the answer needs verification - tracing real code paths and confirming
+  file:line - not just finding candidates.
 - Batch related plan tasks per subagent. Each subagent re-reads files from
   scratch; one tiny task per agent costs more than it saves.
 - Subagents cannot see the conversation. Write self-contained task
