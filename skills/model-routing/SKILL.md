@@ -89,6 +89,9 @@ cannot change it mid-session, only suggest.
   deciding, continue the SAME agent (SendMessage) with the direction - a
   fresh dispatch pays the full file re-read the batching rule exists to
   avoid.
+- When the user re-asks the same question or calls the answer shallow,
+  redo it one step up - a higher tier or higher effort - never at the
+  same level that just failed.
 - If an entire session is one phase (pure implementation), suggest the
   user switch /model instead of delegating everything - a session on the
   right model beats a swarm of subagents.
