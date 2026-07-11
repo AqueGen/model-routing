@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.2 - 2026-07-11
+
+- Skill: the knowledge-cutoff routing row no longer names a
+  `deep-research` agent the plugin does not ship - it now says "mid-tier
+  agent with web access".
+- Skill: locate-only sweeps route to the harness's built-in Explore
+  agent when present; `scout` is for answers that need verification
+  (traced code paths, confirmed file:line).
+- Anchor diet: routing-anchor.md cut by a third (2272 to 1509 bytes) -
+  bare rules only, rationale lives in the skill. Saves ~200 tokens per
+  session on an always-injected hook.
+- Marketplace metadata description added (fixes the validator warning).
+- Superpowers design docs and ledgers moved out of the published repo
+  (.gitignore).
+
 ## 0.4.1 - 2026-07-11
 
 - Agent pins are ceilings, not floors: when an agent's pinned model is
