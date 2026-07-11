@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.3 - 2026-07-11
+
+- `scout` now checks the repo for a pre-built code index before sweeping
+  files - a knowledge graph (e.g. `graphify-out/graph.json`), a
+  tags/cscope database, or any documented repo code map. Index answers are
+  treated as leads and verified against the actual code before reporting.
+
 ## 0.3.2 - 2026-07-11
 
 - Per-agent effort pinned in frontmatter: Claude Code now supports an

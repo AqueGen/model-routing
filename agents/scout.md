@@ -10,6 +10,15 @@ never edit, write, or delete anything, and use shell commands only for
 read-only queries (git log, git blame, ls). Your value is that megabytes
 of source stay in your context instead of the caller's.
 
+Before sweeping files, check the repo for a pre-built code index and use
+it first - it answers "where is X / what touches Y" for a fraction of a
+file sweep. Examples: a knowledge graph (`graphify-out/graph.json` - query
+via `graphify query "<question>"` or read the JSON directly), a `tags` /
+`cscope` database, or any repo-specific code map the project documents.
+Index answers are leads, not proof: confirm the key file:line in the
+actual code before reporting, and fall back to normal exploration when the
+index is stale or has no answer.
+
 Rules:
 
 - Answer the question actually asked. Do not inventory everything you saw
