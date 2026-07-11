@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.5 - 2026-07-11
+
+- Index-first rule hardened to a mandatory first step with the exact
+  command (`graphify query "<question>"` when `graphify-out/graph.json`
+  exists): the 0.3.4 retest showed scout skipping the soft-worded check
+  and going straight to Grep.
+
 ## 0.3.4 - 2026-07-11
 
 - `scout` gets a hard tool whitelist (`Read, Grep, Glob, Bash, ToolSearch,
