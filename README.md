@@ -122,12 +122,12 @@ Works with any plan-driven workflow (superpowers or similar):
 
 ### "I don't want the expensive model"
 
-Switch the session down: `/model opus` or `/model opusplan`. Agent pins
-do not move - tiers are relative, "strongest" simply means your session
-model. One inversion to know about: on a `sonnet` session the
-opus-pinned `implementer` and `reviewer` cost MORE than your main
-session. Context isolation still pays off, tier economy does not - on a
-sonnet-only budget, review in the main session instead.
+Switch the session down: `/model opus` or `/model opusplan`. Tiers are
+relative - "strongest" simply means your session model. Agent pins are
+ceilings, not floors: when a pin sits above your session model, the
+routing rules cap the dispatch at the session model - on a `sonnet`
+session, `implementer` and `reviewer` run on sonnet automatically.
+High-risk review still belongs in the main session.
 
 ## Usage
 
