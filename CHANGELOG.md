@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 - 2026-07-11
+
+- Universality pass: the plugin no longer names any specific tool stack.
+  Scout's index rule and the routing anchor speak of "a code-graph or
+  code-index MCP server" generically instead of graphify and its tool
+  names. Behavior with a connected graph server is unchanged; nothing
+  assumes one exists.
+- New skill rule: a re-asked question or a "too shallow" verdict redoes
+  the work one step up (tier or effort), never at the same level.
+- README: Getting started section - plain and workflow recipes, what
+  runs where at which effort, and the sonnet-session inversion warning.
+
 ## 0.3.8 - 2026-07-11
 
 - Scout's tool allowlist replaced with a denylist
