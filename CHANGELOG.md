@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.4 - 2026-07-11
+
+- `scout` gets a hard tool whitelist (`Read, Grep, Glob, Bash, ToolSearch,
+  LSP`): no `Agent`/`SendMessage`, so it can no longer delegate exploration
+  to nested subagents (observed in the wild: an injected "work in a
+  sandbox" hook talked scout into dispatching a general-purpose agent,
+  doubling the cost and bypassing scout's own instructions). The whitelist
+  also makes read-only actual, not declarative - no Write/Edit.
+- The pre-built-index check moved from an intro paragraph into the first
+  rule, plus an explicit "do the exploration yourself" rule.
+
 ## 0.3.3 - 2026-07-11
 
 - `scout` now checks the repo for a pre-built code index before sweeping
