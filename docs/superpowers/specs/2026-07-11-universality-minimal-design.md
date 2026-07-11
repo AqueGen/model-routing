@@ -42,7 +42,25 @@ smaller. No new files, no new mechanisms, no scripts.
    "User re-asks or calls the answer shallow = redo one step up (tier or
    effort), never at the same level." Nothing else added.
 
-4. `CHANGELOG.md` + version bump to 0.4.0 in
+4. `README.md`: add a "Getting started" section with two short recipes.
+   - Plain use: pick the session model (`/model`) - the strongest tier
+     you are willing to pay for; the plugin never changes it. Table of
+     what runs where: exploration -> scout (sonnet, low), tests ->
+     test-runner (haiku, low), implementation -> implementer (opus,
+     medium), review -> reviewer (opus, high), E2E -> e2e-runner
+     (sonnet, medium); the main session burns tokens only on planning,
+     decisions, final review, and coordination.
+   - Workflow use (brainstorm -> plan -> execute, e.g. superpowers):
+     brainstorming and plan-writing stay in the main session on the
+     strongest model; executing the plan dispatches implementer per task
+     batch, test-runner for verification, reviewer per completed chunk.
+   - "I don't want the expensive model": switch `/model` down (opus,
+     opusplan) - agent pins do not change, tiers are relative. Warn
+     about the inversion: on a sonnet session, opus-pinned
+     implementer/reviewer cost MORE than the main session (isolation
+     still works, tier economy does not).
+
+5. `CHANGELOG.md` + version bump to 0.4.0 in
    `.claude-plugin/plugin.json`. Rationale for
    the minor bump: the plugin no longer knows about any specific tool
    stack - a semantic shift, not a patch.
@@ -61,5 +79,7 @@ smaller. No new files, no new mechanisms, no scripts.
 
 - `grep -ri graphify` over the plugin (excluding CHANGELOG and this spec)
   returns nothing.
-- Total plugin text (agents + skill + anchor) is not larger than before.
+- Total injected text (agents + skill + anchor) is not larger than
+  before; the README guide adds repo-docs weight only, never enters any
+  model context.
 - Existing behavior unchanged when no graph/index MCP is connected.
