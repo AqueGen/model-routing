@@ -92,6 +92,11 @@ cannot change it mid-session, only suggest.
 - When the user re-asks the same question or calls the answer shallow,
   redo it one step up - a higher tier or higher effort - never at the
   same level that just failed.
+- Agent pins are ceilings, not floors. A pin says "this task never needs
+  more than X"; the session model says what the user is willing to pay.
+  When a pin sits above the session model, cap the dispatch at the
+  session model via the Agent `model` param - on a sonnet session,
+  implementer and reviewer run on sonnet.
 - If an entire session is one phase (pure implementation), suggest the
   user switch /model instead of delegating everything - a session on the
   right model beats a swarm of subagents.
