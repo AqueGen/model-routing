@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.7 - 2026-07-11
+
+- Close the graph-orphan gap: the routing anchor sent all exploration to
+  scout, whose 0.3.4 tool whitelist made code-graph MCP tools invisible -
+  so a connected graph server was never queried by anyone. Scout's
+  whitelist now includes `mcp__graphify__*` (inert when no such server is
+  connected) and its index rule names the MCP tools explicitly for
+  structural questions. The anchor gains a line: structural questions may
+  be answered by one cheap graph call in the main session, with scout for
+  file:line verification.
+
 ## 0.3.6 - 2026-07-11
 
 - Scout's mandatory index-first step relaxed back to an advisory rule:
