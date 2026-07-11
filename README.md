@@ -14,7 +14,8 @@ Routing tunes two knobs, not one: **which model** handles a task and **how
 hard it thinks** (reasoning effort). A strong model at low effort often
 beats a weaker model straining at high effort, for a fraction of the cost -
 so cheap, well-scoped work runs at low effort and only genuinely hard
-reasoning gets high/max. When a subagent gets stuck on the approach rather
+reasoning gets high/max. Each bundled agent pins its effort in frontmatter,
+overriding the session setting. When a subagent gets stuck on the approach rather
 than a missing fact, it escalates back to the main session for a decision
 instead of thrashing.
 
@@ -23,13 +24,13 @@ gateway, no ToS gray zones.
 
 ## What's inside
 
-| Component | Model | Purpose |
-| --------- | ----- | ------- |
-| `agents/scout.md` | sonnet | Read-only codebase exploration: conclusions and file:line refs come back, file dumps stay out. |
-| `agents/test-runner.md` | haiku | Run tests/builds/linters, report failures compactly. Never fixes anything. |
-| `agents/e2e-runner.md` | sonnet | Drive Playwright/E2E scenarios, interpret failures (product bug vs test bug vs flake). |
-| `agents/implementer.md` | opus | Implement one well-defined task from an approved plan. Verifies its own work. |
-| `agents/reviewer.md` | opus | Review a diff for correctness bugs, ranked by severity. |
+| Component | Model | Effort | Purpose |
+| --------- | ----- | ------ | ------- |
+| `agents/scout.md` | sonnet | low | Read-only codebase exploration: conclusions and file:line refs come back, file dumps stay out. |
+| `agents/test-runner.md` | haiku | low | Run tests/builds/linters, report failures compactly. Never fixes anything. |
+| `agents/e2e-runner.md` | sonnet | medium | Drive Playwright/E2E scenarios, interpret failures (product bug vs test bug vs flake). |
+| `agents/implementer.md` | opus | medium | Implement one well-defined task from an approved plan. Verifies its own work. |
+| `agents/reviewer.md` | opus | high | Review a diff for correctness bugs, ranked by severity. |
 | `skills/model-routing/` | - | The routing table and delegation rules Claude follows when deciding where work goes. |
 | `hooks/routing-anchor.md` | - | Short routing anchor auto-injected at session start - zero config. |
 

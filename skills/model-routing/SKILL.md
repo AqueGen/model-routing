@@ -38,16 +38,17 @@ which model, and how hard it thinks.
 
 Match effort to task difficulty, not to tier. Reserve `high`/`max` for the
 few tasks that actually need it - most work is a `low`/`medium` task in
-disguise. Set effort where the harness exposes it: Workflow scripts take
-an `effort` option per `agent()` call; a plain Agent dispatch inherits the
-session effort, so there the levers are tier choice and the user's session
-setting. The bundled agents state the effort they are designed for - a
-hint for the caller, not a self-applied setting.
+disguise. Where effort is set: the bundled agents pin theirs in frontmatter
+(`effort:` field - overrides the session level for that agent); Workflow
+scripts take an `effort` option per `agent()` call; any other Agent
+dispatch inherits the session effort.
 
 ## Routing table
 
 Each row carries a default effort - the second knob, tuned to the task,
-not the tier:
+not the tier. For the bundled agents the effort is pinned in their
+frontmatter; the column documents it rather than asking the caller to set
+it:
 
 | Task | Where | Agent / model | Effort |
 |------|-------|---------------|--------|
@@ -56,7 +57,7 @@ not the tier:
 | Implementing an approved plan/spec | subagent | `implementer` (opus) | medium |
 | Trivial mechanical tasks: renames, boilerplate, mirrored constants | subagent | sonnet | low |
 | Small interactive edits, quick fixes | main session | strongest | low-medium |
-| Code review of implemented work | subagent | `reviewer` (opus) | medium-high |
+| Code review of implemented work | subagent | `reviewer` (opus) | high |
 | Final review of high-risk or large diffs | main session | strongest | high |
 | Run tests/builds/linters, report failures | subagent | `test-runner` (haiku) | low |
 | Playwright/E2E scenarios, failure interpretation | subagent | `e2e-runner` (sonnet) | medium |

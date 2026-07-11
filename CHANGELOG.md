@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.2 - 2026-07-11
+
+- Per-agent effort pinned in frontmatter: Claude Code now supports an
+  `effort` field in agent definitions (overrides the session level), so
+  the bundled agents set it directly - scout/test-runner `low`,
+  implementer/e2e-runner `medium`, reviewer `high`.
+- Prose "Effort hint for the caller" lines removed from the agents;
+  frontmatter is the single source of truth.
+- Skill and session-start anchor updated to describe the new mechanics;
+  reviewer's routing-table effort is now `high` (was medium-high).
+
 ## 0.3.1 - 2026-07-09
 
 - Fix: the skill and anchor pointed at a nonexistent Agent-tool `effort`
