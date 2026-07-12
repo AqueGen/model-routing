@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.0 - 2026-07-13
+
+- New agent: `verifier` (haiku/low) - cheap gate on subagent diffs
+  before accepting them. Checks scope match, completeness, obvious
+  breakage, and unbacked "tests pass" claims; PASS/FAIL under 15 lines.
+  Not a code review - reviewer owns quality (#5).
+- Dispatch counter: a PostToolUse hook logs every Agent dispatch (agent
+  name + model only) to `<config>/model-routing/dispatches.jsonl`,
+  self-pruned to 7 days; `dispatch-counter.mjs stats` prints
+  `routed-down: N today / M 7d` for status-line embedding. Dispatch
+  counts, not invented dollar savings (#6).
+- Trivial-first rule: questions answerable from context or general
+  knowledge get answered inline - a dispatch costs more than the answer
+  (#3).
+- Escalation ladder formalized: a failed or weak subagent RESULT retries
+  exactly one step up (next tier or higher effort), fresh dispatch; a
+  second failure goes to the main session. Distinct from the
+  stuck-on-approach handback, which continues the same agent (#4).
+
 ## 0.4.2 - 2026-07-11
 
 - Skill: the knowledge-cutoff routing row no longer names a
