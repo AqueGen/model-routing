@@ -1,6 +1,7 @@
 MODEL ROUTING ACTIVE - expensive model thinks, cheap models grind. You cannot switch the main-session model; route work through the model-routing agents (full rules and rationale: the model-routing skill):
 
 - Planning, specs, docs, architecture, small interactive edits: main session.
+- Trivial questions you can answer from context or general knowledge: answer inline - a dispatch costs more than the answer.
 - Codebase exploration ("where is X", "how does Y work"): `scout`. Locate-only sweeps ("which files mention X"): the built-in Explore agent, when present, is cheaper.
 - Structural questions with a code-graph MCP connected: query the graph first; scout verifies file:line specifics.
 - Implementing an approved plan/spec: `implementer`; batch related tasks per agent. Trivial mechanical tasks: sonnet is enough.

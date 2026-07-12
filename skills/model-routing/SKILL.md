@@ -68,6 +68,13 @@ cannot change it mid-session, only suggest.
 
 ## Rules
 
+- Trivial first: when the question is answerable from the conversation,
+  general knowledge, or one obvious file already in context, answer inline.
+  A subagent dispatch has a fixed overhead (system prompt, file re-reads,
+  report) that dwarfs a one-liner - dispatching `scout` for "what does this
+  flag mean" burns more than it saves. Dispatch only when the task needs
+  real exploration, execution, or produces output worth keeping out of the
+  main context.
 - Never burn main-session tokens on raw test or build output. Dispatch to
   `test-runner` and consume its compact report.
 - Route codebase exploration to `scout` - conclusions and file:line refs
