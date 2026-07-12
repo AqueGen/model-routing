@@ -60,6 +60,7 @@ it:
 | Code review of implemented work | subagent | `reviewer` (opus) | high |
 | Final review of high-risk or large diffs | main session | strongest | high |
 | Run tests/builds/linters, report failures | subagent | `test-runner` (haiku) | low |
+| Sanity-check a subagent's diff against its task | subagent | `verifier` (haiku) | low |
 | Playwright/E2E scenarios, failure interpretation | subagent | `e2e-runner` (sonnet) | medium |
 | Fresh external context, knowledge-cutoff gap (new APIs, recent releases) | subagent | mid-tier agent with web access | medium |
 
@@ -85,6 +86,13 @@ cannot change it mid-session, only suggest.
 - Review is one cheap pass; missed bugs are expensive. When a diff is
   high-risk, escalate the final review to the main session instead of
   delegating it.
+- Gate batched implementer output with `verifier` before accepting it.
+  It answers one question for pennies: is this diff the task that was
+  asked? Scope creep, missing pieces, and obvious breakage get caught
+  before the main session builds on a wrong diff or a `reviewer` pass
+  burns opus tokens on work that missed the point. Skip it when the main
+  session reads the full diff anyway - the read IS the verification; a
+  verifier on top would double-pay.
 - Escalate, don't guess. When a subagent is stuck on the *approach* (not
   just missing a fact), it should package its state - what it tried, why
   each attempt failed, the candidate directions it sees - and hand it back

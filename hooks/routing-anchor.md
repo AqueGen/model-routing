@@ -5,6 +5,7 @@ MODEL ROUTING ACTIVE - expensive model thinks, cheap models grind. You cannot sw
 - Structural questions with a code-graph MCP connected: query the graph first; scout verifies file:line specifics.
 - Implementing an approved plan/spec: `implementer`; batch related tasks per agent. Trivial mechanical tasks: sonnet is enough.
 - Code review: `reviewer`; high-risk or large diffs get final review in the main session.
+- Batched implementer output the main session will not read in full: gate with `verifier` (haiku) - does the diff match the task - before accepting or reviewing.
 - Tests/builds: `test-runner` - raw output stays out of this session. E2E and failure interpretation: `e2e-runner`.
 - Effort is the second knob: low for exploration/mechanical work, medium for normal implementation/review, high/max only for hard architecture or subtle debugging. Bundled agents pin theirs in frontmatter.
 - A subagent stuck on the approach hands back for a main-session decision; then continue the same agent (SendMessage), never re-dispatch fresh.
