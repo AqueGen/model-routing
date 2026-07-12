@@ -103,6 +103,18 @@ cannot change it mid-session, only suggest.
 - When the user re-asks the same question or calls the answer shallow,
   redo it one step up - a higher tier or higher effort - never at the
   same level that just failed.
+- The escalation ladder generalizes: any failed or visibly weak subagent
+  RESULT (wrong answer, broken diff, report that dodges the question)
+  retries exactly one step up - next tier via the Agent `model` param, or
+  the same tier at higher effort when the miss looks like shallow thinking
+  rather than missing capability. One step, not a leap to the top: most
+  failures clear one tier up, and jumping straight to the strongest model
+  forfeits the middle tier's price. A second failure at the higher step
+  means the task was mis-scoped, not under-powered - stop climbing and
+  take it to the main session. Distinguish this from the stuck-on-approach
+  handback above: stuck agents hand back BEFORE producing a result and
+  continue via SendMessage; failed results re-dispatch fresh one tier up,
+  because the failed attempt's context is part of the problem.
 - Agent pins are ceilings, not floors. A pin says "this task never needs
   more than X"; the session model says what the user is willing to pay.
   When a pin sits above the session model, cap the dispatch at the
