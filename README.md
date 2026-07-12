@@ -176,6 +176,22 @@ good lazy default:
 
 (Opus plans, Sonnet executes - no plugin needed.)
 
+## Dispatch counter
+
+Every Agent dispatch is logged by a PostToolUse hook (agent name + model,
+nothing else) to `<config>/model-routing/dispatches.jsonl`, self-pruned to
+7 days. Stats show how much work routing actually kept off your strongest
+model - dispatch counts, not invented dollar savings:
+
+```text
+node "<plugin>/hooks/dispatch-counter.mjs" stats
+# routed-down: 14 today · 92 7d
+```
+
+Embed it in your status line by appending the command's output to whatever
+your `statusLine.command` already prints. Delete the `.jsonl` any time to
+reset; a missing file just means zero.
+
 ## Zero config
 
 The plugin injects a short routing anchor at session start (SessionStart
