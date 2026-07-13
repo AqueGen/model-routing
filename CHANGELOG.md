@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.4 - 2026-07-13
+
+- Conscious tier choice for unpinned dispatches: general-purpose and
+  custom agents dispatched bare silently inherit the session model.
+  Mechanical/exploratory work now gets an explicit sonnet/haiku param;
+  the session tier stays right for genuinely hard tasks - the rule kills
+  accidental inheritance, not top-tier usage.
+
 ## 0.5.3 - 2026-07-13
 
 - Session-model breakdown in both reports: `report` and `tokens` now show
