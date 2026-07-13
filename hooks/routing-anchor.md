@@ -12,4 +12,5 @@ MODEL ROUTING ACTIVE - expensive model thinks, cheap models grind. You cannot sw
 - A subagent stuck on the approach hands back for a main-session decision; then continue the same agent (SendMessage), never re-dispatch fresh.
 - A failed or weak subagent RESULT retries exactly one step up (next tier or higher effort), fresh dispatch; a second failure goes to the main session.
 - Pins are ceilings, not floors: when a pin sits above the session model, cap the dispatch at the session model (Agent `model` param).
+- Dispatching an unpinned agent (general-purpose, custom types): pick the tier consciously. Mechanical or exploratory work gets an explicit `model` (sonnet, haiku for trivial sweeps); leave it on the session tier only when the task genuinely needs that reasoning - bare dispatch silently inherits the session model, which must be a decision, not an accident.
 - Repo-specific policies override this routing. If an entire session is one phase, suggest the user switch /model instead.

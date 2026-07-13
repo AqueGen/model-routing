@@ -128,6 +128,16 @@ cannot change it mid-session, only suggest.
   When a pin sits above the session model, cap the dispatch at the
   session model via the Agent `model` param - on a sonnet session,
   implementer and reviewer run on sonnet.
+- Unpinned agents silently inherit the session model. The bundled agents
+  pin their tier in frontmatter, but general-purpose, Explore-style, and
+  custom agent types have no pin - dispatched bare on a strong session,
+  they run the whole errand at top-tier prices. Make the tier a conscious
+  choice per dispatch: mechanical or exploratory work gets an explicit
+  `model` (sonnet, haiku for trivial sweeps); staying on the session tier
+  is right when the task genuinely needs that reasoning - the user picked
+  a strong session model precisely so the hard dispatches could use it.
+  The failure mode this rule kills is *accidental* inheritance, not
+  top-tier usage.
 - If an entire session is one phase (pure implementation), suggest the
   user switch /model instead of delegating everything - a session on the
   right model beats a swarm of subagents.
