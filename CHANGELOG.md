@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.6.0 - 2026-07-13
+
+- Research-tuned tiers. `implementer` now pins **sonnet** (was opus):
+  SWE-bench Verified puts the top tier only ~1-2 points ahead at several
+  times the cost, so sonnet is the value default for ordinary
+  implementation; dispatch with `model=opus` for multi-file, architectural,
+  or subtle-reasoning work. reviewer stays opus/high (review is the
+  asymmetric bet worth the top tier).
+- Tier-leak detection in the dispatch report: flags unpinned
+  general-purpose/custom dispatches that inherited a strong session model
+  bare, and warns past the 20% rework threshold from coding-agent routing
+  practice. Surfaces accidental inheritance as a number.
+- Skill + README now carry per-choice rationale: why each model and each
+  effort, backed by RouteLLM (ICLR 2025, task-type > complexity-score
+  routing) and SWE-bench tier gaps.
+- README: recommended session model + effort (weighted price/quality) -
+  pick the session tier for the hardest thing kept in the main seat, since
+  everything else routes down.
+
 ## 0.5.4 - 2026-07-13
 
 - Conscious tier choice for unpinned dispatches: general-purpose and
