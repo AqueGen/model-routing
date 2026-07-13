@@ -31,8 +31,11 @@ gateway, no ToS gray zones.
 | `agents/e2e-runner.md` | sonnet | medium | Drive Playwright/E2E scenarios, interpret failures (product bug vs test bug vs flake). |
 | `agents/implementer.md` | opus | medium | Implement one well-defined task from an approved plan. Verifies its own work. |
 | `agents/reviewer.md` | opus | high | Review a diff for correctness bugs, ranked by severity. |
+| `agents/verifier.md` | haiku | low | Cheap gate on a subagent's diff: does it match the task (scope, completeness, obvious breakage)? Not a code review. |
 | `skills/model-routing/` | - | - | The routing table and delegation rules Claude follows when deciding where work goes. |
 | `hooks/routing-anchor.md` | - | - | Short routing anchor auto-injected at session start - zero config. |
+| `hooks/dispatch-counter.mjs` | - | - | Logs every Agent dispatch; `stats`/`report`/`tokens` modes measure what stayed off the session model. |
+| `commands/stats.md` | - | - | `/model-routing:stats` - dispatch + token-volume report in the chat. |
 
 ## Example
 
@@ -180,17 +183,22 @@ good lazy default:
 
 Every Agent dispatch is logged by a PostToolUse hook (agent name + model,
 nothing else) to `<config>/model-routing/dispatches.jsonl`, self-pruned to
-7 days. Stats show how much work routing actually kept off your strongest
-model - dispatch counts, not invented dollar savings:
+7 days. Stats show how much work routing actually kept off your session
+model - real counts, not invented dollar savings:
 
 ```text
 /model-routing:stats
-# in-chat report: routed-down counts + per-agent 7d breakdown
+# in-chat report: per-agent dispatch breakdown + real token volume per model
 ```
 
 ```text
 node "<plugin>/hooks/dispatch-counter.mjs" stats
 # routed-down: 14 today · 92 7d  (one-liner for status lines)
+
+node "<plugin>/hooks/dispatch-counter.mjs" tokens
+# token volume per model from subagent transcripts (7d), with the share
+# that ran BELOW its own session's model - fable days and opus days are
+# each judged against their own baseline
 ```
 
 Embed the one-liner in your status line by appending the command's output
