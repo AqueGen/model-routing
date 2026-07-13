@@ -49,13 +49,34 @@ function isRoutedDown(e) {
   return CHEAP_AGENTS.has(e.agent) || CHEAP_MODELS.has(e.model);
 }
 
-if (process.argv[2] === "stats") {
+if (process.argv[2] === "stats" || process.argv[2] === "report") {
   const now = Date.now();
   const dayStart = new Date().setHours(0, 0, 0, 0);
   const entries = readEntries(dataFile()).filter((e) => now - e.ts < WEEK_MS);
   const down = entries.filter(isRoutedDown);
   const today = down.filter((e) => e.ts >= dayStart).length;
-  process.stdout.write(`routed-down: ${today} today · ${down.length} 7d`);
+  if (process.argv[2] === "stats") {
+    process.stdout.write(`routed-down: ${today} today · ${down.length} 7d`);
+    process.exit(0);
+  }
+  // report: per-agent breakdown over 7d, routed-down agents marked with a check.
+  const byAgent = new Map();
+  for (const e of entries) {
+    const key = e.model ? `${e.agent} (model=${e.model})` : e.agent;
+    byAgent.set(key, (byAgent.get(key) ?? 0) + 1);
+  }
+  const rows = [...byAgent.entries()].sort((a, b) => b[1] - a[1]);
+  const lines = [
+    `routed-down: ${today} today · ${down.length} of ${entries.length} dispatches 7d`,
+    "",
+    ...rows.map(([agent, n]) => {
+      const probe = { agent: agent.split(" (model=")[0], model: agent.match(/model=(\w+)/)?.[1] ?? null };
+      return `${String(n).padStart(4)}  ${isRoutedDown(probe) ? "v" : "-"} ${agent}`;
+    }),
+    "",
+    "v = kept off the strongest model. Log: <config>/model-routing/dispatches.jsonl (7d window)",
+  ];
+  process.stdout.write(lines.join("\n"));
   process.exit(0);
 }
 
