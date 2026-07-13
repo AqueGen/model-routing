@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.2 - 2026-07-13
+
+- `tokens` mode in dispatch-counter.mjs: real token volume per model from
+  subagent transcripts (7d), with a routed-down share judged against each
+  subagent's OWN session model - fable days and opus days both count
+  fairly instead of assuming one fixed top tier.
+- `/model-routing:stats` now prints both the dispatch report and the
+  token-volume report.
+
 ## 0.5.1 - 2026-07-13
 
 - `/model-routing:stats` command - prints the dispatch report into the

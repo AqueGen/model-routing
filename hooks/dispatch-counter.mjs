@@ -4,6 +4,8 @@
 //
 //   node dispatch-counter.mjs          <- hook mode: read event JSON on stdin, append
 //   node dispatch-counter.mjs stats    <- print "routed-down: N today · M 7d"
+//   node dispatch-counter.mjs report   <- per-agent 7d dispatch breakdown
+//   node dispatch-counter.mjs tokens   <- real token volume per model from subagent transcripts (7d)
 //
 // "Kept off the strongest model" = dispatches to the plugin's sub-strongest
 // agents or any Agent call with an explicit haiku/sonnet model param. Counts
@@ -77,6 +79,86 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     "v = kept off the strongest model. Log: <config>/model-routing/dispatches.jsonl (7d window)",
   ];
   process.stdout.write(lines.join("\n"));
+  process.exit(0);
+}
+
+if (process.argv[2] === "tokens") {
+  // Real token volume per model from subagent transcripts (7d window), and
+  // how much of it ran BELOW each subagent's own session model - sessions
+  // vary (fable one day, opus another), so "routed down" is judged against
+  // the parent session's model, not a fixed top tier.
+  const { readdirSync, statSync } = await import("node:fs");
+  const projRoot = (() => {
+    const cfg = process.env.CLAUDE_CONFIG_DIR?.trim()
+      ? resolve(process.env.CLAUDE_CONFIG_DIR)
+      : join(homedir(), ".claude");
+    return join(cfg, "projects");
+  })();
+  const cutoff = Date.now() - WEEK_MS;
+  const tierOf = (m) => !m ? 0 : /fable|mythos/.test(m) ? 4 : /opus/.test(m) ? 3 : /sonnet/.test(m) ? 2 : /haiku/.test(m) ? 1 : 0;
+  const firstModelIn = (file, bytes) => {
+    // Cheap sample: first chunk of the main-session jsonl names the session
+    // model; mid-session /model switches are rare enough to ignore.
+    try {
+      const fd = readFileSync(file, { encoding: "utf-8", flag: "r" });
+      const head = fd.slice(0, bytes);
+      return head.match(/"model":"(claude-[a-z0-9.-]+)"/)?.[1] ?? null;
+    } catch { return null; }
+  };
+  const sessionModelCache = new Map();
+  const perModel = new Map(); // model -> {agents, in, out, cr, cw, down}
+  const walk = (dir, depth) => {
+    let entries;
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) { if (depth < 3) walk(p, depth + 1); continue; }
+      if (!e.name.startsWith("agent-") || !e.name.endsWith(".jsonl")) continue;
+      let st; try { st = statSync(p); } catch { continue; }
+      if (st.mtimeMs < cutoff) continue;
+      let model = null, inT = 0, outT = 0, cr = 0, cw = 0;
+      for (const line of readFileSync(p, "utf-8").split("\n")) {
+        if (!line.includes('"usage"')) continue;
+        try {
+          const m = (JSON.parse(line)).message ?? {};
+          const u = m.usage; if (!u) continue;
+          if (m.model) model = m.model;
+          inT += u.input_tokens ?? 0; outT += u.output_tokens ?? 0;
+          cr += u.cache_read_input_tokens ?? 0; cw += u.cache_creation_input_tokens ?? 0;
+        } catch {}
+      }
+      if (!model || model.startsWith("<")) continue;
+      // subagents dir sits under <session-id>/subagents - the sibling
+      // <session-id>.jsonl is the parent session.
+      const sessionJsonl = dir.replace(/[\\/]subagents$/, "") + ".jsonl";
+      if (!sessionModelCache.has(sessionJsonl)) {
+        sessionModelCache.set(sessionJsonl, firstModelIn(sessionJsonl, 262144));
+      }
+      const sessionModel = sessionModelCache.get(sessionJsonl);
+      const down = tierOf(model) < tierOf(sessionModel);
+      const s = perModel.get(model) ?? { agents: 0, in: 0, out: 0, cr: 0, cw: 0, downVol: 0, downAgents: 0 };
+      s.agents++; s.in += inT; s.out += outT; s.cr += cr; s.cw += cw;
+      if (down) { s.downVol += inT + cr + cw; s.downAgents++; }
+      perModel.set(model, s);
+    }
+  };
+  walk(projRoot, 0);
+  const fmtN = (n) => n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(0) + "k" : String(n);
+  const rows = [...perModel.entries()].map(([m, s]) => ({ m, vol: s.in + s.cr + s.cw, ...s }))
+    .sort((a, b) => b.vol - a.vol);
+  const total = rows.reduce((a, r) => a + r.vol, 0) || 1;
+  const downTotal = rows.reduce((a, r) => a + r.downVol, 0);
+  const bar = (v) => "#".repeat(Math.max(1, Math.round((v / total) * 24)));
+  const short = (m) => m.replace(/^claude-/, "").replace(/-\d{8}$/, "");
+  const out = [
+    "Subagent token volume by model, 7d (input + cache):",
+    "",
+    ...rows.map((r) => `${short(r.m).padEnd(16)} ${bar(r.vol).padEnd(25)} ${fmtN(r.vol).padStart(7)} (${Math.round((r.vol / total) * 100)}%)  ${r.agents} agents, out ${fmtN(r.out)}`),
+    "",
+    `Below own session model: ${fmtN(downTotal)} of ${fmtN(total)} (${Math.round((downTotal / total) * 100)}%) - judged per session (fable/opus days both count fairly).`,
+    "Volume = tokens the subagent processed; cache reads are billed at the subagent's model rate, which is where routing saves.",
+  ];
+  process.stdout.write(out.join("\n"));
   process.exit(0);
 }
 
