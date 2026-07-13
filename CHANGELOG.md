@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1 - 2026-07-13
+
+- `/model-routing:stats` command - prints the dispatch report into the
+  chat: routed-down counts plus a per-agent 7d breakdown.
+- `dispatch-counter.mjs report` mode backing the command; `stats` stays
+  the one-liner for status lines.
+
 ## 0.5.0 - 2026-07-13
 
 - New agent: `verifier` (haiku/low) - cheap gate on subagent diffs

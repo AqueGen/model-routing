@@ -31,8 +31,8 @@ gateway, no ToS gray zones.
 | `agents/e2e-runner.md` | sonnet | medium | Drive Playwright/E2E scenarios, interpret failures (product bug vs test bug vs flake). |
 | `agents/implementer.md` | opus | medium | Implement one well-defined task from an approved plan. Verifies its own work. |
 | `agents/reviewer.md` | opus | high | Review a diff for correctness bugs, ranked by severity. |
-| `skills/model-routing/` | - | The routing table and delegation rules Claude follows when deciding where work goes. |
-| `hooks/routing-anchor.md` | - | Short routing anchor auto-injected at session start - zero config. |
+| `skills/model-routing/` | - | - | The routing table and delegation rules Claude follows when deciding where work goes. |
+| `hooks/routing-anchor.md` | - | - | Short routing anchor auto-injected at session start - zero config. |
 
 ## Example
 
@@ -184,13 +184,18 @@ nothing else) to `<config>/model-routing/dispatches.jsonl`, self-pruned to
 model - dispatch counts, not invented dollar savings:
 
 ```text
-node "<plugin>/hooks/dispatch-counter.mjs" stats
-# routed-down: 14 today · 92 7d
+/model-routing:stats
+# in-chat report: routed-down counts + per-agent 7d breakdown
 ```
 
-Embed it in your status line by appending the command's output to whatever
-your `statusLine.command` already prints. Delete the `.jsonl` any time to
-reset; a missing file just means zero.
+```text
+node "<plugin>/hooks/dispatch-counter.mjs" stats
+# routed-down: 14 today · 92 7d  (one-liner for status lines)
+```
+
+Embed the one-liner in your status line by appending the command's output
+to whatever your `statusLine.command` already prints. Delete the `.jsonl`
+any time to reset; a missing file just means zero.
 
 ## Zero config
 
