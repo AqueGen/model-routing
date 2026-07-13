@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.3 - 2026-07-13
+
+- Session-model breakdown in both reports: `report` and `tokens` now show
+  which MAIN model each dispatch / token volume was routed FROM (e.g.
+  fable sessions route 90% down, opus sessions 45%).
+- The dispatch hook records `session` (sampled from the head of the
+  session transcript) in each log entry; `isRoutedDown` judges by tier
+  comparison when both model and session are known, so implementer/
+  reviewer on sonnet in a fable session now count as routed down.
+- Pre-0.5.3 log entries lack the field and group as "(session not
+  recorded)" until the 7d window rolls over.
+
 ## 0.5.2 - 2026-07-13
 
 - `tokens` mode in dispatch-counter.mjs: real token volume per model from

@@ -47,7 +47,25 @@ function readEntries(file) {
     .filter(Boolean);
 }
 
+// Tier ladder shared by dispatch judging and the tokens report.
+const tierOf = (m) => !m ? 0 : /fable|mythos/.test(m) ? 4 : /opus/.test(m) ? 3 : /sonnet/.test(m) ? 2 : /haiku/.test(m) ? 1 : 0;
+const shortModel = (m) => m ? m.replace(/^claude-/, "").replace(/-\d{8}$/, "") : m;
+
+function firstModelIn(file, bytes) {
+  // Cheap sample: first chunk of the main-session jsonl names the session
+  // model; mid-session /model switches are rare enough to ignore.
+  try {
+    const head = readFileSync(file, { encoding: "utf-8", flag: "r" }).slice(0, bytes);
+    return head.match(/"model":"(claude-[a-z0-9.-]+)"/)?.[1] ?? null;
+  } catch { return null; }
+}
+
 function isRoutedDown(e) {
+  // With the session model recorded (0.5.3+ entries), judge by tier: an
+  // explicit model below the session tier is routed down even for agents
+  // outside the static cheap list (e.g. implementer on sonnet in a fable
+  // session). Entries without both fields fall back to the heuristic.
+  if (e.model && e.session) return tierOf(e.model) < tierOf(e.session);
   return CHEAP_AGENTS.has(e.agent) || CHEAP_MODELS.has(e.model);
 }
 
@@ -68,6 +86,16 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     byAgent.set(key, (byAgent.get(key) ?? 0) + 1);
   }
   const rows = [...byAgent.entries()].sort((a, b) => b[1] - a[1]);
+  // Session-model breakdown: which main model the dispatch was routed FROM.
+  // Entries older than 0.5.3 lack the field and are grouped as unrecorded.
+  const bySession = new Map();
+  for (const e of entries) {
+    const key = e.session ? shortModel(e.session) : "(session not recorded)";
+    const s = bySession.get(key) ?? { n: 0, down: 0 };
+    s.n++; if (isRoutedDown(e)) s.down++;
+    bySession.set(key, s);
+  }
+  const sessionRows = [...bySession.entries()].sort((a, b) => b[1].n - a[1].n);
   const lines = [
     `routed-down: ${today} today · ${down.length} of ${entries.length} dispatches 7d`,
     "",
@@ -75,6 +103,9 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
       const probe = { agent: agent.split(" (model=")[0], model: agent.match(/model=(\w+)/)?.[1] ?? null };
       return `${String(n).padStart(4)}  ${isRoutedDown(probe) ? "v" : "-"} ${agent}`;
     }),
+    "",
+    "By session model (dispatches routed FROM, 7d):",
+    ...sessionRows.map(([m, s]) => `${String(s.n).padStart(4)}  ${m} - ${s.down} routed down`),
     "",
     "v = kept off the strongest model. Log: <config>/model-routing/dispatches.jsonl (7d window)",
   ];
@@ -95,18 +126,9 @@ if (process.argv[2] === "tokens") {
     return join(cfg, "projects");
   })();
   const cutoff = Date.now() - WEEK_MS;
-  const tierOf = (m) => !m ? 0 : /fable|mythos/.test(m) ? 4 : /opus/.test(m) ? 3 : /sonnet/.test(m) ? 2 : /haiku/.test(m) ? 1 : 0;
-  const firstModelIn = (file, bytes) => {
-    // Cheap sample: first chunk of the main-session jsonl names the session
-    // model; mid-session /model switches are rare enough to ignore.
-    try {
-      const fd = readFileSync(file, { encoding: "utf-8", flag: "r" });
-      const head = fd.slice(0, bytes);
-      return head.match(/"model":"(claude-[a-z0-9.-]+)"/)?.[1] ?? null;
-    } catch { return null; }
-  };
   const sessionModelCache = new Map();
   const perModel = new Map(); // model -> {agents, in, out, cr, cw, down}
+  const perSession = new Map(); // session model -> {agents, vol, downVol}
   const walk = (dir, depth) => {
     let entries;
     try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
@@ -140,6 +162,11 @@ if (process.argv[2] === "tokens") {
       s.agents++; s.in += inT; s.out += outT; s.cr += cr; s.cw += cw;
       if (down) { s.downVol += inT + cr + cw; s.downAgents++; }
       perModel.set(model, s);
+      const sessKey = sessionModel ? shortModel(sessionModel) : "(session unknown)";
+      const ss = perSession.get(sessKey) ?? { agents: 0, vol: 0, downVol: 0 };
+      ss.agents++; ss.vol += inT + cr + cw;
+      if (down) ss.downVol += inT + cr + cw;
+      perSession.set(sessKey, ss);
     }
   };
   walk(projRoot, 0);
@@ -149,11 +176,14 @@ if (process.argv[2] === "tokens") {
   const total = rows.reduce((a, r) => a + r.vol, 0) || 1;
   const downTotal = rows.reduce((a, r) => a + r.downVol, 0);
   const bar = (v) => "#".repeat(Math.max(1, Math.round((v / total) * 24)));
-  const short = (m) => m.replace(/^claude-/, "").replace(/-\d{8}$/, "");
+  const sessionRows = [...perSession.entries()].sort((a, b) => b[1].vol - a[1].vol);
   const out = [
     "Subagent token volume by model, 7d (input + cache):",
     "",
-    ...rows.map((r) => `${short(r.m).padEnd(16)} ${bar(r.vol).padEnd(25)} ${fmtN(r.vol).padStart(7)} (${Math.round((r.vol / total) * 100)}%)  ${r.agents} agents, out ${fmtN(r.out)}`),
+    ...rows.map((r) => `${shortModel(r.m).padEnd(16)} ${bar(r.vol).padEnd(25)} ${fmtN(r.vol).padStart(7)} (${Math.round((r.vol / total) * 100)}%)  ${r.agents} agents, out ${fmtN(r.out)}`),
+    "",
+    "By session model (volume routed FROM, 7d):",
+    ...sessionRows.map(([m, s]) => `${m.padEnd(16)} ${fmtN(s.vol).padStart(7)} across ${s.agents} agents - ${s.vol ? Math.round((s.downVol / s.vol) * 100) : 0}% below session tier`),
     "",
     `Below own session model: ${fmtN(downTotal)} of ${fmtN(total)} (${Math.round((downTotal / total) * 100)}%) - judged per session (fable/opus days both count fairly).`,
     "Volume = tokens the subagent processed; cache reads are billed at the subagent's model rate, which is where routing saves.",
@@ -177,6 +207,9 @@ try {
     ts: Date.now(),
     agent: input.subagent_type ?? "general-purpose",
     model: input.model ?? null,
+    // Which main model this dispatch was routed FROM - sampled from the head
+    // of the session transcript the hook event points at.
+    session: event.transcript_path ? firstModelIn(event.transcript_path, 262144) : null,
   };
   const file = dataFile();
   appendFileSync(file, JSON.stringify(entry) + "\n");

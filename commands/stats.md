@@ -13,6 +13,7 @@ Real token volume (7-day window, from subagent transcripts):
 
 Present both reports above to the user as-is in code blocks, then add 2-3
 short sentences of interpretation: what share of dispatches and of token
-volume stayed below the session model, and anything that looks off (e.g.
-many subagents running AT the session tier). Do not re-run the commands,
-no extra tables, no dollar estimates.
+volume stayed below the session model, how the per-session-model split
+compares (e.g. fable sessions routing down more than opus sessions), and
+anything that looks off (e.g. many subagents running AT the session tier).
+Do not re-run the commands, no extra tables, no dollar estimates.
