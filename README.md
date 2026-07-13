@@ -29,7 +29,7 @@ gateway, no ToS gray zones.
 | `agents/scout.md` | sonnet | low | Read-only codebase exploration: conclusions and file:line refs come back, file dumps stay out. |
 | `agents/test-runner.md` | haiku | low | Run tests/builds/linters, report failures compactly. Never fixes anything. |
 | `agents/e2e-runner.md` | sonnet | medium | Drive Playwright/E2E scenarios, interpret failures (product bug vs test bug vs flake). |
-| `agents/implementer.md` | opus | medium | Implement one well-defined task from an approved plan. Verifies its own work. |
+| `agents/implementer.md` | sonnet | medium | Implement one well-defined task from an approved plan. Verifies its own work. Dispatch with `model=opus` for multi-file/architectural/subtle work. |
 | `agents/reviewer.md` | opus | high | Review a diff for correctness bugs, ranked by severity. |
 | `agents/verifier.md` | haiku | low | Cheap gate on a subagent's diff: does it match the task (scope, completeness, obvious breakage)? Not a code review. |
 | `skills/model-routing/` | - | - | The routing table and delegation rules Claude follows when deciding where work goes. |
@@ -51,7 +51,7 @@ With the plugin:
 
 ```text
 Main session (strong model, plans and coordinates):
-  dispatches implementer (opus) with two self-contained tasks
+  dispatches implementer (sonnet) with two self-contained tasks
 
     implementer: Changed OrderService.cs (null-payload guard) and
     OrderServiceTests.cs (3 new tests). Build OK, 214/214 unit
@@ -143,7 +143,8 @@ let Claude route via the skill:
 - "Run the unit tests" - Claude dispatches `test-runner` (haiku); you get
   a compact pass/fail report instead of a wall of logs.
 - "Implement tasks 1-3 from the plan" - Claude dispatches `implementer`
-  (opus) with self-contained task descriptions.
+  (sonnet) with self-contained task descriptions; multi-file or subtle
+  work goes out with `model=opus`.
 - "Review the diff" - Claude dispatches `reviewer` (opus). For high-risk
   diffs, ask for review in the main session instead - one expensive pass
   is cheaper than a missed bug.
@@ -159,7 +160,58 @@ Claude decides where to send work. Two rules worth knowing:
 - **Repo policies win.** If your project says "never run integration
   tests", the runner respects it.
 
+## Why each choice
+
+Every model and effort assignment follows from where a tier actually earns
+its cost. The knobs are two: **model** (raw capability) and **effort**
+(how hard it thinks) - a strong model at low effort routinely beats a weak
+model at high effort for a fraction of the price, so both are tuned per
+task, not set together.
+
+| Situation | Model | Effort | Why this model | Why this effort |
+| --------- | ----- | ------ | -------------- | --------------- |
+| Exploration (`scout`) | sonnet | low | Finding and tracing code is retrieval, not reasoning - a cheap tier reports as well as a costly one, and the file volume stays in the subagent regardless. | The work is mechanical lookup; extra thinking buys nothing. |
+| Ordinary implementation (`implementer`) | sonnet | medium | SWE-bench Verified puts the top tier only ~1-2 points over sonnet (e.g. 80.8% vs 79.6%) at several times the cost - for single-file, clear-shape work that margin never changes the outcome. | The plan already decided the approach; the agent executes real logic, not design. |
+| Complex implementation (`implementer` `model=opus`) | opus | medium-high | Multi-file refactors, concurrency, and security are exactly where the 1-2 point gap turns into a wrong-approach-is-expensive gap; the stronger reasoning pays for itself. | Higher because the approach itself is part of the problem, not just the code. |
+| Code review (`reviewer`) | opus | high | Review is an asymmetric bet - one pass guards against a bug that costs far more if it ships, so it is the one place to prefer the top tier by default. | High: subtle correctness bugs hide from shallow reading. |
+| Tests / builds (`test-runner`) | haiku | low | Running a command and summarizing output is mechanical; the value is keeping raw logs out of the main context, not the model doing it. | Low: no reasoning, just report. |
+| Diff sanity gate (`verifier`) | haiku | low | Checking a diff matches its task (scope, completeness, obvious breakage) is a cheap spot-check, not a quality judgment. | Low: pattern-matching against the task, not deep analysis. |
+| E2E / failure interpretation (`e2e-runner`) | sonnet | medium | Driving a browser and telling a product bug from a flake needs some judgment, but not top-tier reasoning. | Medium: real interpretation, clear method. |
+| Planning, architecture, high-risk final review | main session (strongest) | high | These set the direction everything else follows - the one place raw capability changes the outcome most. | High: a wrong call here is the most expensive kind to unwind. |
+
+Research backing: task-type routing beats complexity-score routing
+([RouteLLM, ICLR 2025](https://arxiv.org/pdf/2406.18665)); the sonnet-vs-top-tier
+SWE-bench Verified margin is what makes sonnet the implementation default
+with opus reserved for the margin cases; the 20% rework threshold the
+dispatch report warns on comes from coding-agent routing practice
+([Augment](https://www.augmentcode.com/guides/ai-model-routing-guide)) -
+if a routed-down tier needs rework more than ~1 time in 5, the price edge
+is gone and that task type should route up.
+
 ## Recommended settings
+
+**Session model + effort (the weighted price/quality pick).** The session
+model is not where the grind happens - the plugin routes exploration,
+implementation, and tests down to cheaper tiers - so the session model
+only needs to be strong enough for the high-value seat: planning,
+coordination, and final review. That makes the balanced default:
+
+- **Session model: Opus.** Near-frontier reasoning for the decisions that
+  cascade through everything downstream, without paying the very top tier
+  on every turn. The plugin already keeps the cheap work off it. Reserve
+  the strongest tier (Fable/Mythos-class) for sessions that are *entirely*
+  hard reasoning - a thorny architecture day or a subtle debugging hunt -
+  where the whole session sits in the seat that tier is worth. Drop to a
+  **Sonnet** session for pure-implementation days with no hard decisions.
+- **Effort: medium** as the everyday default; **high** for sessions built
+  around architecture or subtle debugging. Session effort mainly governs
+  main-session work - the bundled agents pin their own - so raise it when
+  the thinking you keep in the main seat is genuinely hard, not across the
+  board.
+
+Rule of thumb: pick the session tier for the *hardest thing you keep in
+the main session*, not for the average task - the average task gets routed
+down anyway.
 
 Fallback down the tier ladder when your primary model hits its quota
 (`~/.claude/settings.json`):
@@ -189,6 +241,8 @@ model - real counts, not invented dollar savings:
 ```text
 /model-routing:stats
 # in-chat report: per-agent dispatch breakdown + real token volume per model
+# also flags "tier leaks" - unpinned dispatches that inherited a strong
+# session model bare; warns past the 20% rework threshold
 ```
 
 ```text

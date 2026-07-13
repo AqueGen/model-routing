@@ -96,6 +96,25 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     bySession.set(key, s);
   }
   const sessionRows = [...bySession.entries()].sort((a, b) => b[1].n - a[1].n);
+  // Tier leaks: unpinned dispatches of a non-bundled agent (general-purpose,
+  // custom types) that ran bare on a strong session (> sonnet) and so
+  // silently inherited the expensive model. These are the accidental-
+  // inheritance cost the 0.5.4 rule targets - work that could have been
+  // cheaper. Bundled agents are frontmatter-pinned and never leak; Explore
+  // is inherently cheap. Threshold is the research rework line: when a
+  // routed-down tier would need rework >~20% of the time the price edge
+  // is gone - here inverted, >20% of cheap-capable dispatches leaking UP
+  // is the same signal that the tier assignment is not holding.
+  const BUNDLED = new Set(["model-routing:scout", "model-routing:test-runner", "model-routing:e2e-runner", "model-routing:reviewer", "model-routing:implementer", "model-routing:verifier", "Explore"]);
+  const capable = entries.filter((e) => !BUNDLED.has(e.agent));
+  const leaks = capable.filter((e) => !e.model && e.session && tierOf(e.session) > 2);
+  const LEAK_WARN = 0.20;
+  const leakLines = [];
+  if (capable.length) {
+    const rate = leaks.length / capable.length;
+    leakLines.push("", `Tier leaks: ${leaks.length} of ${capable.length} unpinned dispatches inherited a strong session model bare (${Math.round(rate * 100)}%).`);
+    if (rate > LEAK_WARN) leakLines.push(`  ! above the 20% rework threshold - pass an explicit model= on general-purpose/custom dispatches (sonnet default).`);
+  }
   const lines = [
     `routed-down: ${today} today · ${down.length} of ${entries.length} dispatches 7d`,
     "",
@@ -106,6 +125,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     "",
     "By session model (dispatches routed FROM, 7d):",
     ...sessionRows.map(([m, s]) => `${String(s.n).padStart(4)}  ${m} - ${s.down} routed down`),
+    ...leakLines,
     "",
     "v = kept off the strongest model. Log: <config>/model-routing/dispatches.jsonl (7d window)",
   ];

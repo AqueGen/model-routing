@@ -54,7 +54,8 @@ it:
 |------|-------|---------------|--------|
 | Planning, brainstorming, specs, docs, architecture | main session | strongest (user's /model choice) | high |
 | Codebase exploration ("where is X", "how does Y work") | subagent | `scout` (sonnet) | low |
-| Implementing an approved plan/spec | subagent | `implementer` (opus) | medium |
+| Implementing an approved plan/spec (ordinary: single-file, clear shape) | subagent | `implementer` (sonnet) | medium |
+| Complex implementation: multi-file refactor, subtle concurrency/security | subagent | `implementer` with `model=opus` | medium-high |
 | Trivial mechanical tasks: renames, boilerplate, mirrored constants | subagent | sonnet | low |
 | Small interactive edits, quick fixes | main session | strongest | low-medium |
 | Code review of implemented work | subagent | `reviewer` (opus) | high |
@@ -66,6 +67,45 @@ it:
 
 Main-session rows: the effort there is the user's session setting - Claude
 cannot change it mid-session, only suggest.
+
+## Why these tiers and efforts
+
+The assignments are not arbitrary - each follows from where a model tier
+actually earns its cost:
+
+- **Exploration -> sonnet/low.** Finding where code lives and tracing a
+  path is retrieval, not reasoning. A cheap model at low effort reads and
+  reports as well as an expensive one; the cost is in the file volume,
+  which stays in the subagent regardless of tier.
+- **Ordinary implementation -> sonnet/medium.** On SWE-bench Verified the
+  strongest tier leads sonnet by ~1-2 points (e.g. 80.8% vs 79.6%) while
+  costing several times more. For single-file, clear-shape work that
+  margin does not change the outcome, so sonnet is the value default.
+  Medium effort because the approach is already decided by the plan - the
+  agent executes, it does not design.
+- **Complex implementation -> opus/medium-high.** Multi-file refactors,
+  concurrency, and security changes are exactly the cases where the 1-2
+  point SWE-bench gap becomes a wrong-approach-is-expensive gap. Here the
+  stronger tier's reasoning pays for itself; spend it deliberately, not by
+  default.
+- **Review -> opus/high.** Review is one cheap pass guarding against
+  expensive misses - an asymmetric bet where the strongest reasoning at
+  high effort is worth it, because a bug that ships costs far more than
+  the review. This is the one place to prefer the top tier by default.
+- **Tests / verification -> haiku/low.** Running a command and
+  summarizing output, or checking a diff matches its task, is mechanical.
+  The cheapest tier at low effort suffices; the value is keeping raw
+  output out of the main context, not the model doing it.
+- **Effort tracks task shape, not tier.** Low when the work is mechanical
+  or the shape is known; medium when there is real logic but the approach
+  is clear; high/max only when a wrong approach is expensive to unwind
+  (architecture, subtle debugging, high-risk review). A strong model at
+  low effort beats a weak model at high effort for a fraction of the cost,
+  so effort is a real cost lever, not a formality.
+
+Research backing: task-type routing outperforms complexity-score routing
+(RouteLLM, ICLR 2025); SWE-bench Verified tier gaps confirm sonnet as the
+implementation default with opus reserved for the margin cases.
 
 ## Rules
 
