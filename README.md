@@ -253,7 +253,7 @@ good lazy default:
 
 Every Agent dispatch is logged by a PostToolUse hook (agent name + model,
 nothing else) to `<config>/model-routing/dispatches.jsonl`, self-pruned to
-7 days. Stats show how much work routing actually kept off your session
+30 days. Stats show how much work routing actually kept off your session
 model - real counts, not invented dollar savings:
 
 ```text
@@ -261,6 +261,14 @@ model - real counts, not invented dollar savings:
 # in-chat report: per-agent dispatch breakdown + real token volume per model
 # also flags "tier leaks" - unpinned dispatches that inherited a strong
 # session model bare; warns past the 20% rework threshold
+
+/model-routing:stats --days 1
+# today's slice; --days N sizes the window (default 7)
+
+/model-routing:stats --days 7 --ago 7
+# the week before last week's end - before/after comparison when you
+# tune routing (dispatch history reaches 30 days back; token history as
+# far as Claude Code keeps transcripts)
 ```
 
 ```text

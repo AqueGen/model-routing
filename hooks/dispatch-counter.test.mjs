@@ -42,11 +42,11 @@ test("report with no log explains itself instead of printing nothing", () => {
 test("stats with no log prints a no-data marker", () => {
   const cfg = freshConfigDir();
   try {
-    assert.equal(run(["stats"], cfg), "routed-down: no data");
+    assert.equal(run(["stats"], cfg), "routed-down: no data (7d)");
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
-test("report counts routed-down by tier and never ranks unknown models", () => {
+test("report groups by tier and never ranks unknown models", () => {
   const cfg = freshConfigDir();
   const now = Date.now();
   writeLog(cfg, [
@@ -59,9 +59,30 @@ test("report counts routed-down by tier and never ranks unknown models", () => {
   ]);
   try {
     const out = run(["report"], cfg);
-    assert.match(out, /1 of 3 dispatches 7d/);
-    // Unknown-model row is marked "?" - honest unknown, not a false v/-.
-    assert.match(out, /\?\s+general-purpose \(model=zephyr-1\)/);
+    assert.match(out, /1 of 3 dispatches \(33%\) ran on a cheaper model/);
+    // Unknown-model rows land in their own section - honest unknown,
+    // not silently counted as routed down or at-tier.
+    assert.match(out, /Unrecognized models[\s\S]*general-purpose \(model=zephyr-1\)/);
+    assert.match(out, /Ran at the session tier[\s\S]*implementer \(model=opus\)/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("--days and --ago window the report", () => {
+  const cfg = freshConfigDir();
+  const now = Date.now();
+  const DAY = 24 * 60 * 60 * 1000;
+  writeLog(cfg, [
+    { ts: now - 3 * DAY, agent: "model-routing:scout", model: "sonnet", session: "claude-opus-4-8" },
+    { ts: now - 1000, agent: "model-routing:scout", model: "sonnet", session: "claude-opus-4-8" },
+  ]);
+  try {
+    assert.match(run(["report", "--days", "1"], cfg), /1 of 1 dispatches/);
+    // Window [now-4d, now-2d) catches only the 3-day-old entry.
+    const past = run(["report", "--days", "2", "--ago", "2"], cfg);
+    assert.match(past, /1 of 1 dispatches/);
+    assert.match(past, /2d ending 2d ago/);
+    // Bad values fall back to the 7d default instead of erroring.
+    assert.match(run(["report", "--days", "banana"], cfg), /2 of 2 dispatches/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 

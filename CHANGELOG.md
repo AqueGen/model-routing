@@ -19,6 +19,14 @@ author's instead of printing nothing.
 - README: Requirements section (node 18+ is stats-only), honest
   validated-on status, dated benchmark snapshots (mid-2026), stale
   implementer row fixed (sonnet since 0.6.0).
+- Window flags: `--days N` (size, default 7) and `--ago M` (shift back)
+  on stats/report/tokens; `/model-routing:stats --days 1` is today's
+  slice, `--days 7 --ago 7` the week before - for before/after
+  comparisons when tuning routing. Dispatch retention raised 7d -> 30d
+  to make past windows real.
+- Readable report: grouped sections (ran cheaper / at session tier /
+  unrecognized) with a plain-language summary line instead of per-row
+  v/- markers; tokens mode leads with its summary.
 
 ## 0.6.0 - 2026-07-13
 

@@ -1,15 +1,16 @@
 ---
-description: Show model-routing stats - dispatches and real token volume kept off the session model
+description: Show model-routing stats - dispatches and real token volume kept off the session model. Args - --days N (window size, default 7), --ago M (shift window M days back)
+argument-hint: [--days N] [--ago M]
 allowed-tools: Bash
 ---
 
-Dispatch report (7-day window):
+Dispatch report:
 
-!`node "${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-counter.mjs" report 2>&1 || echo "model-routing: stats script failed - node 18+ must be on PATH"`
+!`node "${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-counter.mjs" report $ARGUMENTS 2>&1 || echo "model-routing: stats script failed - node 18+ must be on PATH"`
 
-Real token volume (7-day window, from subagent transcripts):
+Real token volume (from subagent transcripts):
 
-!`node "${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-counter.mjs" tokens 2>&1 || echo "model-routing: tokens script failed - node 18+ must be on PATH"`
+!`node "${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-counter.mjs" tokens $ARGUMENTS 2>&1 || echo "model-routing: tokens script failed - node 18+ must be on PATH"`
 
 If either block above is empty or shows a shell error (not a script message -
 the script itself always explains empty data in words), the embedded shell run
