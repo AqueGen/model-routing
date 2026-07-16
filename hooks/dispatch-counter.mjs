@@ -47,8 +47,16 @@ function readEntries(file) {
     .filter(Boolean);
 }
 
-// Tier ladder shared by dispatch judging and the tokens report.
-const tierOf = (m) => !m ? 0 : /fable|mythos/.test(m) ? 4 : /opus/.test(m) ? 3 : /sonnet/.test(m) ? 2 : /haiku/.test(m) ? 1 : 0;
+// Tier ladder shared by dispatch judging and the tokens report. Returns null
+// for models it does not recognize (a future model family) - callers must
+// treat null as "unknown", never as a rank, or new models silently corrupt
+// the routed-down math. Extend TIER_PATTERNS when a new family ships.
+const TIER_PATTERNS = [[/fable|mythos/, 4], [/opus/, 3], [/sonnet/, 2], [/haiku/, 1]];
+const tierOf = (m) => {
+  if (!m) return null;
+  for (const [re, tier] of TIER_PATTERNS) if (re.test(m)) return tier;
+  return null;
+};
 const shortModel = (m) => m ? m.replace(/^claude-/, "").replace(/-\d{8}$/, "") : m;
 
 function firstModelIn(file, bytes) {
@@ -64,8 +72,12 @@ function isRoutedDown(e) {
   // With the session model recorded (0.5.3+ entries), judge by tier: an
   // explicit model below the session tier is routed down even for agents
   // outside the static cheap list (e.g. implementer on sonnet in a fable
-  // session). Entries without both fields fall back to the heuristic.
-  if (e.model && e.session) return tierOf(e.model) < tierOf(e.session);
+  // session). Unknown tiers (null) and entries without both fields fall
+  // back to the heuristic instead of comparing against a made-up rank.
+  if (e.model && e.session) {
+    const tm = tierOf(e.model), ts = tierOf(e.session);
+    if (tm != null && ts != null) return tm < ts;
+  }
   return CHEAP_AGENTS.has(e.agent) || CHEAP_MODELS.has(e.model);
 }
 
@@ -73,6 +85,14 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   const now = Date.now();
   const dayStart = new Date().setHours(0, 0, 0, 0);
   const entries = readEntries(dataFile()).filter((e) => now - e.ts < WEEK_MS);
+  if (!entries.length) {
+    // Say WHY there is nothing rather than printing nothing - an empty
+    // report is indistinguishable from a broken node/shell run.
+    process.stdout.write(process.argv[2] === "stats"
+      ? "routed-down: no data"
+      : `No dispatches logged in the last 7 days.\nLog: ${dataFile()}\nEntries appear after the first Agent dispatch once the plugin's PostToolUse hook is active (plugin enabled + session restarted).`);
+    process.exit(0);
+  }
   const down = entries.filter(isRoutedDown);
   const today = down.filter((e) => e.ts >= dayStart).length;
   if (process.argv[2] === "stats") {
@@ -107,7 +127,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   // is the same signal that the tier assignment is not holding.
   const BUNDLED = new Set(["model-routing:scout", "model-routing:test-runner", "model-routing:e2e-runner", "model-routing:reviewer", "model-routing:implementer", "model-routing:verifier", "Explore"]);
   const capable = entries.filter((e) => !BUNDLED.has(e.agent));
-  const leaks = capable.filter((e) => !e.model && e.session && tierOf(e.session) > 2);
+  const leaks = capable.filter((e) => !e.model && e.session && (tierOf(e.session) ?? 0) > 2);
   const LEAK_WARN = 0.20;
   const leakLines = [];
   if (capable.length) {
@@ -120,14 +140,17 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     "",
     ...rows.map(([agent, n]) => {
       const probe = { agent: agent.split(" (model=")[0], model: agent.match(/model=(\w+)/)?.[1] ?? null };
-      return `${String(n).padStart(4)}  ${isRoutedDown(probe) ? "v" : "-"} ${agent}`;
+      // "?" = explicit model this script cannot rank (new family) - honest
+      // unknown instead of a false v/-.
+      const mark = probe.model && tierOf(probe.model) == null ? "?" : isRoutedDown(probe) ? "v" : "-";
+      return `${String(n).padStart(4)}  ${mark} ${agent}`;
     }),
     "",
     "By session model (dispatches routed FROM, 7d):",
     ...sessionRows.map(([m, s]) => `${String(s.n).padStart(4)}  ${m} - ${s.down} routed down`),
     ...leakLines,
     "",
-    "v = kept off the strongest model. Log: <config>/model-routing/dispatches.jsonl (7d window)",
+    "v = kept off the strongest model · ? = unrecognized model, tier unknown. Log: <config>/model-routing/dispatches.jsonl (7d window)",
   ];
   process.stdout.write(lines.join("\n"));
   process.exit(0);
@@ -149,6 +172,7 @@ if (process.argv[2] === "tokens") {
   const sessionModelCache = new Map();
   const perModel = new Map(); // model -> {agents, in, out, cr, cw, down}
   const perSession = new Map(); // session model -> {agents, vol, downVol}
+  let unknownAgents = 0, unknownVol = 0; // models tierOf cannot rank
   const walk = (dir, depth) => {
     let entries;
     try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
@@ -177,7 +201,11 @@ if (process.argv[2] === "tokens") {
         sessionModelCache.set(sessionJsonl, firstModelIn(sessionJsonl, 262144));
       }
       const sessionModel = sessionModelCache.get(sessionJsonl);
-      const down = tierOf(model) < tierOf(sessionModel);
+      const tm = tierOf(model), tsess = tierOf(sessionModel);
+      if (tm == null) { unknownAgents++; unknownVol += inT + cr + cw; }
+      // Unknown tier on either side = not comparable; count as not-down
+      // rather than inventing a rank.
+      const down = tm != null && tsess != null && tm < tsess;
       const s = perModel.get(model) ?? { agents: 0, in: 0, out: 0, cr: 0, cw: 0, downVol: 0, downAgents: 0 };
       s.agents++; s.in += inT; s.out += outT; s.cr += cr; s.cw += cw;
       if (down) { s.downVol += inT + cr + cw; s.downAgents++; }
@@ -190,6 +218,10 @@ if (process.argv[2] === "tokens") {
     }
   };
   walk(projRoot, 0);
+  if (!perModel.size) {
+    process.stdout.write(`No subagent transcripts found under ${projRoot} (last 7 days).\nToken stats read Claude Code agent-*.jsonl transcript files; they appear after subagent dispatches. If your config lives elsewhere, set CLAUDE_CONFIG_DIR.`);
+    process.exit(0);
+  }
   const fmtN = (n) => n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(0) + "k" : String(n);
   const rows = [...perModel.entries()].map(([m, s]) => ({ m, vol: s.in + s.cr + s.cw, ...s }))
     .sort((a, b) => b.vol - a.vol);
@@ -206,6 +238,7 @@ if (process.argv[2] === "tokens") {
     ...sessionRows.map(([m, s]) => `${m.padEnd(16)} ${fmtN(s.vol).padStart(7)} across ${s.agents} agents - ${s.vol ? Math.round((s.downVol / s.vol) * 100) : 0}% below session tier`),
     "",
     `Below own session model: ${fmtN(downTotal)} of ${fmtN(total)} (${Math.round((downTotal / total) * 100)}%) - judged per session (fable/opus days both count fairly).`,
+    ...(unknownAgents ? [`${unknownAgents} agents on unrecognized models (${fmtN(unknownVol)}) - tier unknown, excluded from routed-down math; extend TIER_PATTERNS in dispatch-counter.mjs.`] : []),
     "Volume = tokens the subagent processed; cache reads are billed at the subagent's model rate, which is where routing saves.",
   ];
   process.stdout.write(out.join("\n"));

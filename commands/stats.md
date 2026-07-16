@@ -5,11 +5,17 @@ allowed-tools: Bash
 
 Dispatch report (7-day window):
 
-!`node "${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-counter.mjs" report`
+!`node "${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-counter.mjs" report 2>&1 || echo "model-routing: stats script failed - node 18+ must be on PATH"`
 
 Real token volume (7-day window, from subagent transcripts):
 
-!`node "${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-counter.mjs" tokens`
+!`node "${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-counter.mjs" tokens 2>&1 || echo "model-routing: tokens script failed - node 18+ must be on PATH"`
+
+If either block above is empty or shows a shell error (not a script message -
+the script itself always explains empty data in words), the embedded shell run
+failed silently. In that case run the two commands yourself through whatever
+shell tool works in this session (`node <plugin>/hooks/dispatch-counter.mjs
+report` and `... tokens`) and present those results instead.
 
 Present both reports above to the user as-is in code blocks, then add 2-3
 short sentences of interpretation: what share of dispatches and of token
