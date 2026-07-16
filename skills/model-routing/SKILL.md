@@ -78,8 +78,8 @@ actually earns its cost:
   reports as well as an expensive one; the cost is in the file volume,
   which stays in the subagent regardless of tier.
 - **Ordinary implementation -> sonnet/medium.** On SWE-bench Verified the
-  strongest tier leads sonnet by ~1-2 points (e.g. 80.8% vs 79.6%) while
-  costing several times more. For single-file, clear-shape work that
+  strongest tier leads sonnet by ~1-2 points (as of mid-2026: 80.8% vs
+  79.6%) while costing several times more. For single-file, clear-shape work that
   margin does not change the outcome, so sonnet is the value default.
   Medium effort because the approach is already decided by the plan - the
   agent executes, it does not design.
