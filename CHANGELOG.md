@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.0 - 2026-07-16
+
+Release hardening: the plugin now degrades honestly on setups unlike the
+author's instead of printing nothing.
+
+- Stats never emit silent emptiness: report/stats/tokens explain in words
+  why there is no data (no log yet, no transcripts, wrong config dir), and
+  `/model-routing:stats` falls back to a loud error line when node is
+  missing - plus an instruction to re-run via a working shell tool when
+  the embedded shell run itself fails.
+- Unknown-tier guard: `tierOf` no longer ranks unrecognized model families
+  as 0. A future model cannot silently corrupt routed-down math or leak
+  detection; such rows are marked `?` in the report and counted separately
+  in tokens mode.
+- Smoke tests: 5 `node:test` cases drive the counter CLI end-to-end
+  (`node --test hooks/dispatch-counter.test.mjs`), zero dependencies.
+- README: Requirements section (node 18+ is stats-only), honest
+  validated-on status, dated benchmark snapshots (mid-2026), stale
+  implementer row fixed (sonnet since 0.6.0).
+
 ## 0.6.0 - 2026-07-13
 
 - Research-tuned tiers. `implementer` now pins **sonnet** (was opus):
