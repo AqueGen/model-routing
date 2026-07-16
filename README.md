@@ -87,6 +87,21 @@ Then enable the plugin:
 For local development: clone the repo and
 `claude marketplace add /path/to/model-routing`.
 
+## Requirements
+
+- Claude Code with plugin support (agents, skills, hooks).
+- `node` 18+ on PATH - used only by the dispatch counter and
+  `/model-routing:stats`. The routing itself (skill, agents, session
+  anchor) works without node; if node is missing you lose stats, nothing
+  else, and the stats command says so instead of printing nothing.
+- The tier ladder recognizes the current Claude families
+  (fable/opus/sonnet/haiku). A future model family shows up in stats as
+  tier-unknown (`?`) rather than silently skewing the numbers.
+- Status: validated in daily use (Windows, opus/fable sessions). The
+  `tokens` mode parses Claude Code transcript files, whose format may
+  evolve - if it breaks, stats degrade to an explanatory message, not
+  wrong numbers. Issues welcome.
+
 ## Getting started
 
 ### Plain use
@@ -102,7 +117,7 @@ For local development: clone the repo and
    | ------- | ----------- | -------------- |
    | "Where is X handled?" | `scout` | sonnet / low |
    | "Run the tests" | `test-runner` | haiku / low |
-   | "Implement tasks from the plan" | `implementer` | opus / medium |
+   | "Implement tasks from the plan" | `implementer` | sonnet / medium (`model=opus` for complex work) |
    | "Review the diff" | `reviewer` | opus / high |
    | "Walk through the flow in the browser" | `e2e-runner` | sonnet / medium |
 
@@ -171,7 +186,7 @@ task, not set together.
 | Situation | Model | Effort | Why this model | Why this effort |
 | --------- | ----- | ------ | -------------- | --------------- |
 | Exploration (`scout`) | sonnet | low | Finding and tracing code is retrieval, not reasoning - a cheap tier reports as well as a costly one, and the file volume stays in the subagent regardless. | The work is mechanical lookup; extra thinking buys nothing. |
-| Ordinary implementation (`implementer`) | sonnet | medium | SWE-bench Verified puts the top tier only ~1-2 points over sonnet (e.g. 80.8% vs 79.6%) at several times the cost - for single-file, clear-shape work that margin never changes the outcome. | The plan already decided the approach; the agent executes real logic, not design. |
+| Ordinary implementation (`implementer`) | sonnet | medium | SWE-bench Verified puts the top tier only ~1-2 points over sonnet (as of mid-2026: 80.8% vs 79.6%) at several times the cost - for single-file, clear-shape work that margin never changes the outcome. | The plan already decided the approach; the agent executes real logic, not design. |
 | Complex implementation (`implementer` `model=opus`) | opus | medium-high | Multi-file refactors, concurrency, and security are exactly where the 1-2 point gap turns into a wrong-approach-is-expensive gap; the stronger reasoning pays for itself. | Higher because the approach itself is part of the problem, not just the code. |
 | Code review (`reviewer`) | opus | high | Review is an asymmetric bet - one pass guards against a bug that costs far more if it ships, so it is the one place to prefer the top tier by default. | High: subtle correctness bugs hide from shallow reading. |
 | Tests / builds (`test-runner`) | haiku | low | Running a command and summarizing output is mechanical; the value is keeping raw logs out of the main context, not the model doing it. | Low: no reasoning, just report. |
@@ -186,7 +201,10 @@ with opus reserved for the margin cases; the 20% rework threshold the
 dispatch report warns on comes from coding-agent routing practice
 ([Augment](https://www.augmentcode.com/guides/ai-model-routing-guide)) -
 if a routed-down tier needs rework more than ~1 time in 5, the price edge
-is gone and that task type should route up.
+is gone and that task type should route up. Benchmark numbers are a
+snapshot (mid-2026) and shift with every release; the principle - a small
+tier gap on ordinary work, a decisive one on hard work - has held across
+generations.
 
 ## Recommended settings
 
@@ -235,7 +253,7 @@ good lazy default:
 
 Every Agent dispatch is logged by a PostToolUse hook (agent name + model,
 nothing else) to `<config>/model-routing/dispatches.jsonl`, self-pruned to
-7 days. Stats show how much work routing actually kept off your session
+30 days. Stats show how much work routing actually kept off your session
 model - real counts, not invented dollar savings:
 
 ```text
@@ -243,6 +261,14 @@ model - real counts, not invented dollar savings:
 # in-chat report: per-agent dispatch breakdown + real token volume per model
 # also flags "tier leaks" - unpinned dispatches that inherited a strong
 # session model bare; warns past the 20% rework threshold
+
+/model-routing:stats --days 1
+# today's slice; --days N sizes the window (default 7)
+
+/model-routing:stats --days 7 --ago 7
+# the week before last week's end - before/after comparison when you
+# tune routing (dispatch history reaches 30 days back; token history as
+# far as Claude Code keeps transcripts)
 ```
 
 ```text
@@ -258,6 +284,8 @@ node "<plugin>/hooks/dispatch-counter.mjs" tokens
 Embed the one-liner in your status line by appending the command's output
 to whatever your `statusLine.command` already prints. Delete the `.jsonl`
 any time to reset; a missing file just means zero.
+
+Smoke tests for the counter: `node --test hooks/dispatch-counter.test.mjs`.
 
 ## Zero config
 

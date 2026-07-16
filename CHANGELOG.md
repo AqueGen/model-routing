@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.7.0 - 2026-07-16
+
+Release hardening: the plugin now degrades honestly on setups unlike the
+author's instead of printing nothing.
+
+- Stats never emit silent emptiness: report/stats/tokens explain in words
+  why there is no data (no log yet, no transcripts, wrong config dir), and
+  `/model-routing:stats` falls back to a loud error line when node is
+  missing - plus an instruction to re-run via a working shell tool when
+  the embedded shell run itself fails.
+- Unknown-tier guard: `tierOf` no longer ranks unrecognized model families
+  as 0. A future model cannot silently corrupt routed-down math or leak
+  detection; such rows are marked `?` in the report and counted separately
+  in tokens mode.
+- Smoke tests: 5 `node:test` cases drive the counter CLI end-to-end
+  (`node --test hooks/dispatch-counter.test.mjs`), zero dependencies.
+- README: Requirements section (node 18+ is stats-only), honest
+  validated-on status, dated benchmark snapshots (mid-2026), stale
+  implementer row fixed (sonnet since 0.6.0).
+- Window flags: `--days N` (size, default 7) and `--ago M` (shift back)
+  on stats/report/tokens; `/model-routing:stats --days 1` is today's
+  slice, `--days 7 --ago 7` the week before - for before/after
+  comparisons when tuning routing. Dispatch retention raised 7d -> 30d
+  to make past windows real.
+- Readable report: grouped sections (ran cheaper / at session tier /
+  unrecognized) with a plain-language summary line instead of per-row
+  v/- markers; tokens mode leads with its summary.
+
 ## 0.6.0 - 2026-07-13
 
 - Research-tuned tiers. `implementer` now pins **sonnet** (was opus):
