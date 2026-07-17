@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.1 - 2026-07-17
+
+- Pin-aware dispatch classification: a bare dispatch (no `model` param) to a
+  bundled agent now resolves through the agent's frontmatter pin
+  (`PINNED_MODELS` table) before tier comparison. Bare `implementer`
+  dispatches (pin=sonnet since 0.6.0) were miscounted as session-tier work -
+  on live data the routed-down share corrected from 72% to 80%. Bare pinned
+  rows are annotated `(pin=<model>)` in the report.
+- Caveat: the pin table reflects current frontmatter, so pre-0.6.0 log
+  entries (when implementer pinned opus) are judged by today's pin until
+  they age out of the 30d retention.
+
 ## 0.7.0 - 2026-07-16
 
 Release hardening: the plugin now degrades honestly on setups unlike the

@@ -38,16 +38,20 @@ function windowFromArgs(argv) {
   const end = Date.now() - ago * DAY_MS;
   return { start: end - days * DAY_MS, end, days, ago };
 }
-// Bundled agents pinned below the typical strongest session model. implementer
-// and reviewer pin opus and are deliberately absent - dispatching to them does
-// not keep work off the strongest tier when the session runs opus.
-const CHEAP_AGENTS = new Set([
-  "model-routing:scout",
-  "model-routing:test-runner",
-  "model-routing:e2e-runner",
-  "model-routing:verifier",
-  "Explore",
-]);
+// Frontmatter pins of the bundled agents. A bare dispatch (no model param)
+// still runs on the pinned model, so classification must resolve through
+// this table or bare implementer dispatches (pin=sonnet since 0.6.0) get
+// miscounted as session-tier work. Keep in sync with agents/*.md.
+const PINNED_MODELS = {
+  "model-routing:scout": "sonnet",
+  "model-routing:test-runner": "haiku",
+  "model-routing:e2e-runner": "sonnet",
+  "model-routing:verifier": "haiku",
+  "model-routing:implementer": "sonnet",
+  "model-routing:reviewer": "opus",
+};
+// Unpinned agent types that are inherently cheap dispatch targets.
+const CHEAP_AGENTS = new Set(["Explore"]);
 const CHEAP_MODELS = new Set(["haiku", "sonnet"]);
 
 function dataFile() {
@@ -89,17 +93,23 @@ function firstModelIn(file, bytes) {
   } catch { return null; }
 }
 
+// The model a dispatch actually ran on: explicit model param, else the
+// agent's frontmatter pin, else unknown (session-model inheritance).
+const effectiveModel = (e) => e.model ?? PINNED_MODELS[e.agent] ?? null;
+
 function isRoutedDown(e) {
   // With the session model recorded (0.5.3+ entries), judge by tier: an
-  // explicit model below the session tier is routed down even for agents
-  // outside the static cheap list (e.g. implementer on sonnet in a fable
-  // session). Unknown tiers (null) and entries without both fields fall
-  // back to the heuristic instead of comparing against a made-up rank.
-  if (e.model && e.session) {
-    const tm = tierOf(e.model), ts = tierOf(e.session);
+  // effective model (explicit param or frontmatter pin) below the session
+  // tier is routed down - so a bare implementer dispatch from an opus
+  // session counts, because its pin ran it on sonnet. Unknown tiers (null)
+  // and entries without both fields fall back to the heuristic instead of
+  // comparing against a made-up rank.
+  const model = effectiveModel(e);
+  if (model && e.session) {
+    const tm = tierOf(model), ts = tierOf(e.session);
     if (tm != null && ts != null) return tm < ts;
   }
-  return CHEAP_AGENTS.has(e.agent) || CHEAP_MODELS.has(e.model);
+  return CHEAP_AGENTS.has(e.agent) || CHEAP_MODELS.has(model);
 }
 
 if (process.argv[2] === "stats" || process.argv[2] === "report") {
@@ -125,7 +135,9 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   // report: per-agent breakdown over 7d, routed-down agents marked with a check.
   const byAgent = new Map();
   for (const e of entries) {
-    const key = e.model ? `${e.agent} (model=${e.model})` : e.agent;
+    const key = e.model ? `${e.agent} (model=${e.model})`
+      : PINNED_MODELS[e.agent] ? `${e.agent} (pin=${PINNED_MODELS[e.agent]})`
+      : e.agent;
     byAgent.set(key, (byAgent.get(key) ?? 0) + 1);
   }
   const rows = [...byAgent.entries()].sort((a, b) => b[1] - a[1]);
@@ -162,9 +174,12 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   // need a legend to see what ran cheap and what ran at the session tier.
   const groups = { down: [], top: [], unknown: [] };
   for (const [agent, n] of rows) {
-    const probe = { agent: agent.split(" (model=")[0], model: agent.match(/model=(\w+)/)?.[1] ?? null };
+    // The pin= suffix is display-only; effectiveModel re-resolves it from
+    // the agent name, so the probe only carries an explicit model param.
+    const probe = { agent: agent.split(" (")[0], model: agent.match(/model=(\w+)/)?.[1] ?? null };
     const row = `${String(n).padStart(4)}  ${agent}`;
-    if (probe.model && tierOf(probe.model) == null) groups.unknown.push(row);
+    const eff = effectiveModel(probe);
+    if (eff && tierOf(eff) == null) groups.unknown.push(row);
     else if (isRoutedDown(probe)) groups.down.push(row);
     else groups.top.push(row);
   }

@@ -67,6 +67,24 @@ test("report groups by tier and never ranks unknown models", () => {
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
+test("bare pinned agents classify by their frontmatter pin", () => {
+  const cfg = freshConfigDir();
+  const now = Date.now();
+  writeLog(cfg, [
+    // implementer pins sonnet: a bare dispatch from an opus session ran
+    // sonnet, so it is routed down even without an explicit model param.
+    { ts: now, agent: "model-routing:implementer", model: null, session: "claude-opus-4-8" },
+    // reviewer pins opus: bare on an opus session stays at the session tier.
+    { ts: now, agent: "model-routing:reviewer", model: null, session: "claude-opus-4-8" },
+  ]);
+  try {
+    const out = run(["report"], cfg);
+    assert.match(out, /1 of 2 dispatches \(50%\) ran on a cheaper model/);
+    assert.match(out, /Ran cheaper[\s\S]*implementer \(pin=sonnet\)/);
+    assert.match(out, /Ran at the session tier[\s\S]*reviewer \(pin=opus\)/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
 test("--days and --ago window the report", () => {
   const cfg = freshConfigDir();
   const now = Date.now();
