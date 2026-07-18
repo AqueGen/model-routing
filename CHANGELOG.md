@@ -12,6 +12,10 @@
   costliest place to forget the conscious-tier rule. Observed live: a
   77-agent review workflow ran 10% of its volume on the session tier
   through exactly this omission.
+- README "Overriding pins": the three existing override paths (per-
+  dispatch `model` param, frontmatter edits guarded by the CI sync test,
+  git-checkout reset) documented in place of a config subsystem - the
+  agent files are the config.
 
 ## 0.7.1 - 2026-07-18
 
