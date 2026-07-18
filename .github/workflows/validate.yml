@@ -8,6 +8,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Run counter smoke tests
+        run: node --test hooks/dispatch-counter.test.mjs
+
       - name: Validate JSON manifests
         run: |
           jq empty .claude-plugin/plugin.json

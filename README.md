@@ -301,6 +301,28 @@ The anchor text lives in `hooks/routing-anchor.md`; the full logic is in
 the `model-routing` skill. If you had pasted a routing snippet into your
 `CLAUDE.md` before, remove it - the hook replaces it.
 
+## Overriding pins
+
+There is deliberately no config subsystem - three override paths cover it:
+
+- **Per dispatch**: the Agent tool's `model` param overrides any
+  frontmatter pin (pins-are-ceilings works through exactly this);
+  Workflow `agent()` takes `model` and `effort` opts per call. Plain
+  Agent dispatches have no effort param - they inherit the session
+  effort.
+- **Permanent**: edit the `model:` / `effort:` frontmatter in
+  `agents/*.md`. A directory-source install picks the change up next
+  session. Keep `PINNED_MODELS` in `hooks/dispatch-counter.mjs` in step -
+  the CI sync test fails the build when the two drift, because that drift
+  silently corrupts the stats (it happened once; see 0.7.1).
+- **Reset**: `git checkout -- agents` in the plugin checkout, or
+  reinstall from the marketplace.
+
+A runtime config file was considered and rejected: the harness reads
+model pins from agent frontmatter directly, so a config file could only
+be advisory prose asking Claude to pass overrides - more surface, weaker
+guarantee. The agent files are the config.
+
 ## Why not a router proxy?
 
 [claude-code-router](https://github.com/musistudio/claude-code-router) and
