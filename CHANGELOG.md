@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.3 - 2026-07-18
+
+- README "What that looks like in tokens": three GitHub-native mermaid
+  visuals - without-vs-with bar of volume billed at the session tier,
+  measured per-model pie of where subagent volume actually ran (7d live
+  snapshot, dated), and a task->tier flowchart. Real measured numbers,
+  no invented dollars; the deliberate opus slice is called out as a
+  decision, not a leak.
+
 ## 0.7.2 - 2026-07-18
 
 - CI runs the counter smoke tests (`node --test`) on every push/PR - the

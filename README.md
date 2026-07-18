@@ -68,6 +68,50 @@ Main session (strong model, plans and coordinates):
 The file reads, diffs, and raw test logs stayed inside the subagents.
 Your expensive main-session context grew by two short reports.
 
+## What that looks like in tokens
+
+Real numbers from the author's live workload (7-day window, July 2026,
+measured by the bundled `tokens` report - your split depends on your task
+mix). Without routing, every subagent inherits the session model, so the
+entire volume runs at top-tier prices; with routing, the grind drops to
+the tier each task actually needs:
+
+```mermaid
+xychart-beta
+    title "Subagent token volume billed at the expensive session tier (7d)"
+    x-axis ["without routing (inherits session model)", "with model-routing"]
+    y-axis "billions of tokens" 0 --> 3
+    bar [2.63, 1.04]
+```
+
+Where that volume actually ran with routing active - 61% of it on tiers
+below the session model:
+
+```mermaid
+pie showData title Subagent volume by model (7d, measured)
+    "sonnet - implementation, exploration, E2E" : 1.47
+    "opus - review + hard implementation (deliberate)" : 1.09
+    "haiku - test runs, diff verification" : 0.035
+    "fable - inherited session tier" : 0.035
+```
+
+The opus slice is not a leak - review and multi-file implementation are
+dispatched there deliberately, because a missed bug costs more than the
+review. The plugin's job is making every slice a decision instead of an
+accident (accidental inheritance measured at 1% of unpinned dispatches).
+
+Which task lands on which tier:
+
+```mermaid
+flowchart LR
+    A["'Run the unit tests'"] --> TR["test-runner<br/>haiku / low"]
+    B["'Where is the webhook retry logic?'"] --> SC["scout<br/>sonnet / low"]
+    C["'Implement tasks 1-3 from the plan'"] --> IM["implementer<br/>sonnet / medium"]
+    D["'Refactor the payment pipeline'"] --> IMO["implementer<br/>model=opus / medium-high"]
+    E["'Review the diff'"] --> RV["reviewer<br/>opus / high"]
+    F["'Design the architecture'"] --> MS["main session<br/>your strongest model"]
+```
+
 ## Install
 
 ```text
