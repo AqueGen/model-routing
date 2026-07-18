@@ -70,35 +70,39 @@ Your expensive main-session context grew by two short reports.
 
 ## What that looks like in tokens
 
-Real numbers from the author's live workload (7-day window, July 2026,
-measured by the bundled `tokens` report - your split depends on your task
-mix). Without routing, every subagent inherits the session model, so the
-entire volume runs at top-tier prices; with routing, the grind drops to
-the tier each task actually needs:
+Real numbers from the author's live workload: sessions running on the
+strongest tier (Fable) as the default model, 7-day window, July 2026,
+measured by the bundled `tokens --session fable` report - your split
+depends on your task mix. Without routing, every subagent inherits the
+session model, so the entire volume runs at top-tier prices; with
+routing, 100% of dispatches and 89% of token volume dropped below it:
 
 ```mermaid
 xychart-beta
-    title "Subagent token volume billed at the expensive session tier (7d)"
+    title "Subagent tokens billed at the top (Fable) tier - 7d of fable-default sessions"
     x-axis ["without routing (inherits session model)", "with model-routing"]
-    y-axis "billions of tokens" 0 --> 3
-    bar [2.63, 1.04]
+    y-axis "millions of tokens" 0 --> 200
+    bar [185, 20]
 ```
 
-Where that volume actually ran with routing active - 61% of it on tiers
-below the session model:
+Where that volume actually ran with routing active:
 
 ```mermaid
-pie showData title Subagent volume by model (7d, measured)
-    "sonnet - implementation, exploration, E2E" : 1.47
-    "opus - review + hard implementation (deliberate)" : 1.09
-    "haiku - test runs, diff verification" : 0.035
-    "fable - inherited session tier" : 0.035
+pie showData title Subagent volume by model (7d, fable-default sessions, in millions)
+    "opus - review + hard implementation (deliberate)" : 93.9
+    "sonnet - implementation, exploration, tests" : 63.3
+    "fable - inherited session tier" : 19.6
+    "haiku - test runs, diff verification" : 8.5
 ```
 
-The opus slice is not a leak - review and multi-file implementation are
-dispatched there deliberately, because a missed bug costs more than the
-review. The plugin's job is making every slice a decision instead of an
-accident (accidental inheritance measured at 1% of unpinned dispatches).
+The opus slice is not a leak - on a Fable session even opus is a cheaper
+tier, and review plus multi-file implementation are dispatched there
+deliberately, because a missed bug costs more than the review. The small
+fable slice is the honest remainder: Workflow agents dispatched without
+an explicit `model` opt (the exact accidental-inheritance case the
+routing rules exist to shrink - 0.7.2 added the rule after this very
+measurement). The plugin's job is making every slice a decision instead
+of an accident.
 
 Which task lands on which tier:
 
