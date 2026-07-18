@@ -313,6 +313,11 @@ model - real counts, not invented dollar savings:
 # the week before last week's end - before/after comparison when you
 # tune routing (dispatch history reaches 30 days back; token history as
 # far as Claude Code keeps transcripts)
+
+/model-routing:stats --session fable
+# only sessions that ran on your default model - useful when a
+# fallbackModel ladder or manual /model switches mix tiers into one
+# window and you want the numbers for your normal setup
 ```
 
 ```text

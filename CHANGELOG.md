@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.4 - 2026-07-18
+
+- `--session <family>` flag on stats/report/tokens: scope the numbers to
+  sessions whose model matches (e.g. `--session fable`). A fallbackModel
+  ladder or manual /model switches mix session tiers inside one window;
+  the filter answers "how does routing do on my normal setup" - live
+  data: fable-only sessions show 100% dispatches routed down vs 78%
+  across the mixed window. Entries with no recorded session are excluded
+  when the filter is active.
+
 ## 0.7.3 - 2026-07-18
 
 - README "What that looks like in tokens": three GitHub-native mermaid

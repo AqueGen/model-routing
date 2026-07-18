@@ -9,8 +9,10 @@
 //
 // Window flags (stats/report/tokens): --days N sizes the window (default 7),
 // --ago M shifts it back M days (--days 7 --ago 7 = the week before last
-// week's end). Dispatch history is retained 30 days; tokens reach as far
-// back as Claude Code keeps transcripts (cleanupPeriodDays).
+// week's end); --session <family> scopes to sessions whose model matches
+// (e.g. "fable" when a fallback ladder mixes tiers into one window).
+// Dispatch history is retained 30 days; tokens reach as far back as
+// Claude Code keeps transcripts (cleanupPeriodDays).
 //
 // "Routed down" = the dispatch's effective model (explicit model param, else
 // the agent's frontmatter pin) ranks below the recorded session model. Entries
@@ -38,6 +40,15 @@ function windowFromArgs(argv) {
   const ago = flag("--ago") ?? 0;
   const end = Date.now() - ago * DAY_MS;
   return { start: end - days * DAY_MS, end, days, ago };
+}
+
+// --session <family> scopes a report to sessions whose model matches the
+// substring (e.g. "fable", "opus") - useful when a fallbackModel ladder or
+// manual /model switches mix session tiers inside one window and you only
+// want the situation that matches your default. Case-insensitive.
+function sessionFilterFromArgs(argv) {
+  const i = argv.indexOf("--session");
+  return i >= 0 && argv[i + 1] ? String(argv[i + 1]).toLowerCase() : null;
 }
 // Frontmatter pins of the bundled agents. A bare dispatch (no model param)
 // still runs on the pinned model, so classification must resolve through
@@ -125,9 +136,13 @@ function isRoutedDown(e) {
 
 if (process.argv[2] === "stats" || process.argv[2] === "report") {
   const win = windowFromArgs(process.argv);
-  const winLabel = win.ago ? `${win.days}d ending ${win.ago}d ago` : `${win.days}d`;
+  const sf = sessionFilterFromArgs(process.argv);
+  const winLabel = (win.ago ? `${win.days}d ending ${win.ago}d ago` : `${win.days}d`)
+    + (sf ? `, ${sf} sessions` : "");
   const dayStart = new Date().setHours(0, 0, 0, 0);
-  const entries = readEntries(dataFile()).filter((e) => e.ts >= win.start && e.ts < win.end);
+  const entries = readEntries(dataFile())
+    .filter((e) => e.ts >= win.start && e.ts < win.end)
+    .filter((e) => !sf || (e.session && shortModel(e.session).toLowerCase().includes(sf)));
   if (!entries.length) {
     // Say WHY there is nothing rather than printing nothing - an empty
     // report is indistinguishable from a broken node/shell run.
@@ -232,7 +247,9 @@ if (process.argv[2] === "tokens") {
   // last-write time (mtime) - a good proxy, not per-turn accounting.
   const { readdirSync, statSync } = await import("node:fs");
   const win = windowFromArgs(process.argv);
-  const winLabel = win.ago ? `${win.days}d ending ${win.ago}d ago` : `${win.days}d`;
+  const sf = sessionFilterFromArgs(process.argv);
+  const winLabel = (win.ago ? `${win.days}d ending ${win.ago}d ago` : `${win.days}d`)
+    + (sf ? `, ${sf} sessions` : "");
   const projRoot = (() => {
     const cfg = process.env.CLAUDE_CONFIG_DIR?.trim()
       ? resolve(process.env.CLAUDE_CONFIG_DIR)
@@ -275,6 +292,7 @@ if (process.argv[2] === "tokens") {
         sessionModelCache.set(sessionJsonl, firstModelIn(sessionJsonl, 262144));
       }
       const sessionModel = sessionJsonl ? sessionModelCache.get(sessionJsonl) : null;
+      if (sf && !(sessionModel && shortModel(sessionModel).toLowerCase().includes(sf))) continue;
       const tm = tierOf(model), tsess = tierOf(sessionModel);
       if (tm == null) { unknownAgents++; unknownVol += inT + cr + cw; }
       // Unknown tier on either side = not comparable; count as not-down
