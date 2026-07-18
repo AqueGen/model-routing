@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.6 - 2026-07-18
+
+- README sources completed: SWE-bench Verified now links to the
+  leaderboard the numbers are read from; new paragraph credits the
+  orchestrator-workers pattern (Anthropic, "Building Effective Agents")
+  and the native Claude Code subagents mechanism the plugin builds on.
+  RouteLLM and the Augment rework-threshold guide were already linked.
+
 ## 0.7.5 - 2026-07-18
 
 - README visuals rebased onto fable-default sessions only (via the new
