@@ -347,6 +347,9 @@ test("unknown SESSION family is excluded, not guessed by the heuristic", () => {
     assert.match(out, /0 of 0 comparable dispatches \(0%\)/);
     assert.match(out, /1 not tier-comparable excluded/);
     assert.match(out, /Not tier-comparable[\s\S]*scout \(pin=sonnet\)/);
+    // The by-session row must not disagree with the headline: the zephyr
+    // entry is excluded from its denominator too, and flagged.
+    assert.match(out, /zephyr-9: 0 of 0 routed down \(0%\) - 1 not comparable/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
@@ -360,6 +363,8 @@ test("tokens excludes volume whose session tier is unknown", () => {
     const out = run(["tokens"], cfg);
     assert.match(out, /1 agents not tier-comparable/);
     assert.match(out, /\(0%\) processed on a cheaper model/);
+    // Session row: no fake "0% below session tier" over incomparable volume.
+    assert.match(out, /zephyr-9: [\s\S]* - not tier-comparable/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
@@ -399,6 +404,13 @@ test("CLAUDE_CODE_SUBAGENT_MODEL override is recorded and outranks the pin", () 
     assert.match(out, /1 of 1 dispatches \(100%\)/);
     assert.match(out, /Ran cheaper[\s\S]*reviewer \(env=sonnet\)/);
   } finally { rmSync(cfg2, { recursive: true, force: true }); }
+  // A bare general-purpose dispatch under an env override did NOT inherit
+  // the session model - it must not count as a tier leak.
+  const cfg3 = freshConfigDir();
+  writeLog(cfg3, [{ ts: Date.now(), agent: "general-purpose", model: null, env: "sonnet", session: "claude-opus-4-8" }]);
+  try {
+    assert.match(run(["report"], cfg3), /Tier leaks: 0 of 1 unpinned dispatches/);
+  } finally { rmSync(cfg3, { recursive: true, force: true }); }
 });
 
 test("--session scopes the report to matching session models", () => {

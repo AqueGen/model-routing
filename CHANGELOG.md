@@ -20,8 +20,14 @@ prior findings confirmed fixed, four residual items - all four addressed).
   dispatch against the pin table; report rows show `(env=<model>)`.
 - implementer's escalation text aligned with the conditional SendMessage
   wording (harness may not offer it; packaged-state re-dispatch fallback).
-- Tests 22 -> 26: unknown session family (dispatch + tokens), resumed
-  transcript in an --ago window, env-override capture and precedence.
+- Review round 2 on the PR itself: the comparable-only denominator now
+  also holds inside the per-session breakdowns (dispatch "By session
+  model" rows and the tokens session rows show "not comparable" instead
+  of a fake 0%), and an env-overridden bare dispatch no longer counts as
+  a tier leak (it did not inherit the session model).
+- Tests 22 -> 26: unknown session family (dispatch + tokens, including
+  the per-session rows), resumed transcript in an --ago window,
+  env-override capture, precedence, and leak exemption.
 
 ## 0.8.0 - 2026-07-18
 

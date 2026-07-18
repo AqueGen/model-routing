@@ -225,8 +225,13 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   const bySession = new Map();
   for (const e of entries) {
     const key = e.session ? shortModel(e.session) : "(session not recorded)";
-    const s = bySession.get(key) ?? { n: 0, down: 0 };
-    s.n++; if (verdictOf(e) === "down") s.down++;
+    const s = bySession.get(key) ?? { n: 0, cmp: 0, down: 0 };
+    s.n++;
+    const v = verdictOf(e);
+    // Same comparable-only denominator as the headline - a session row
+    // must not quietly disagree with it.
+    if (v !== "unknown") s.cmp++;
+    if (v === "down") s.down++;
     bySession.set(key, s);
   }
   const sessionRows = [...bySession.entries()].sort((a, b) => b[1].n - a[1].n);
@@ -241,7 +246,9 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   // is the same signal that the tier assignment is not holding.
   const BUNDLED = new Set([...Object.keys(PINNED_MODELS), ...CHEAP_AGENTS]);
   const capable = entries.filter((e) => !BUNDLED.has(e.agent));
-  const leaks = capable.filter((e) => !e.model && e.session && (tierOf(e.session) ?? 0) > 2);
+  // An env override means the dispatch did NOT inherit the session model,
+  // no matter that the call itself was bare - not a leak.
+  const leaks = capable.filter((e) => !e.env && !e.model && e.session && (tierOf(e.session) ?? 0) > 2);
   const LEAK_WARN = 0.20;
   const leakLines = [];
   if (capable.length) {
@@ -281,7 +288,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     ...section("Not tier-comparable (unrecognized model or unknown session family - extend TIER_PATTERNS):", groups.unknown),
     "",
     "By session model:",
-    ...sessionRows.map(([m, s]) => `  ${m}: ${s.down} of ${s.n} routed down (${Math.round((s.down / s.n) * 100)}%)`),
+    ...sessionRows.map(([m, s]) => `  ${m}: ${s.down} of ${s.cmp} routed down (${s.cmp ? Math.round((s.down / s.cmp) * 100) : 0}%)${s.n > s.cmp ? ` - ${s.n - s.cmp} not comparable` : ""}`),
     ...leakLines,
     "",
     `Log: ${dataFile()} - history kept 30 days.`,
@@ -378,8 +385,11 @@ if (process.argv[2] === "tokens") {
         s.agents++; s.in += v.in; s.out += v.out; s.cr += v.cr; s.cw += v.cw;
         if (down) { s.downVol += vol; s.downAgents++; }
         perModel.set(model, s);
-        const ss = perSession.get(sessKey) ?? { agents: 0, vol: 0, downVol: 0 };
+        const ss = perSession.get(sessKey) ?? { agents: 0, vol: 0, cmpVol: 0, downVol: 0 };
         ss.agents++; ss.vol += vol;
+        // Per-session rows use the same comparable-only denominator as the
+        // headline; non-comparable volume is shown, never percented.
+        if (tm != null && tsess != null) ss.cmpVol += vol;
         if (down) ss.downVol += vol;
         perSession.set(sessKey, ss);
       }
@@ -409,7 +419,7 @@ if (process.argv[2] === "tokens") {
     ...rows.map((r) => `${shortModel(r.m).padEnd(16)} ${bar(r.vol).padEnd(25)} ${fmtN(r.vol).padStart(7)} (${Math.round((r.vol / total) * 100)}%)  ${r.agents} agents, out ${fmtN(r.out)}`),
     "",
     "By session model:",
-    ...sessionRows.map(([m, s]) => `  ${m}: ${fmtN(s.vol)} across ${s.agents} agents - ${s.vol ? Math.round((s.downVol / s.vol) * 100) : 0}% below session tier`),
+    ...sessionRows.map(([m, s]) => `  ${m}: ${fmtN(s.vol)} across ${s.agents} agents - ${s.cmpVol ? `${Math.round((s.downVol / s.cmpVol) * 100)}% below session tier` : "not tier-comparable"}${s.cmpVol && s.vol > s.cmpVol ? ` (${fmtN(s.vol - s.cmpVol)} not comparable)` : ""}`),
     ...(unknownAgents ? ["", `${unknownAgents} agents not tier-comparable (${fmtN(unknownVol)}) - unrecognized agent model or unknown session tier, excluded from routed-down math; extend TIER_PATTERNS in dispatch-counter.mjs.`] : []),
     "",
     "Volume = tokens the subagent processed; cache reads are billed at the subagent's model rate, which is where routing saves.",
