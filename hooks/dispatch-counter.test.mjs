@@ -59,7 +59,10 @@ test("report groups by tier and never ranks unknown models", () => {
   ]);
   try {
     const out = run(["report"], cfg);
-    assert.match(out, /1 of 3 dispatches \(33%\) ran on a cheaper model/);
+    // Unknown-tier entries are excluded from the denominator - one exotic
+    // model must not drag the routed-down share down.
+    assert.match(out, /1 of 2 comparable dispatches \(50%\) ran on a cheaper model/);
+    assert.match(out, /1 on unrecognized models excluded/);
     // Unknown-model rows land in their own section - honest unknown,
     // not silently counted as routed down or at-tier.
     assert.match(out, /Unrecognized models[\s\S]*general-purpose \(model=zephyr-1\)/);
@@ -275,6 +278,58 @@ test("legacy entries without a session fall back to the tier heuristic", () => {
   ]);
   try {
     assert.match(run(["report"], cfg), /2 of 3 dispatches \(67%\)/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("uncapped pins surface in the above-tier section, not as at-tier work", () => {
+  const cfg = freshConfigDir();
+  // Bare reviewer (pin=opus) from a SONNET session: the pin is above the
+  // session and nobody passed model=sonnet - the ceilings rule was missed.
+  writeLog(cfg, [{ ts: Date.now(), agent: "model-routing:reviewer", session: "claude-sonnet-5" }]);
+  try {
+    const out = run(["report"], cfg);
+    assert.match(out, /0 of 1 dispatches \(0%\)/);
+    assert.match(out, /1 ran ABOVE the session tier/);
+    assert.match(out, /Ran ABOVE the session tier[\s\S]*reviewer \(pin=opus\)/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("hook records the LAST model in the transcript, not the first", () => {
+  const cfg = freshConfigDir();
+  const sess = join(cfg, "switched-session.jsonl");
+  // opusplan shape: planning on opus, execution switched to sonnet - the
+  // dispatch must be judged against sonnet, the model in effect NOW.
+  writeFileSync(sess, '{"model":"claude-opus-4-8"}\n{"model":"claude-sonnet-5"}\n');
+  try {
+    run([], cfg, JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: "x" }, transcript_path: sess }));
+    const log = readFileSync(join(cfg, "model-routing", "dispatches.jsonl"), "utf-8").trim().split("\n").map((l) => JSON.parse(l));
+    assert.equal(log[0].session, "claude-sonnet-5");
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("tokens attributes usage per line-model and windows by line timestamp", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-fable-5"}\n');
+  const now = new Date().toISOString();
+  const stale = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
+  // One transcript, three usage lines: sonnet now, opus now (mid-run
+  // fallback), sonnet 31 days ago (resumed old transcript - fresh mtime,
+  // stale line). The stale line must not leak into the 7d window.
+  writeFileSync(join(dir, "agent-a.jsonl"), [
+    JSON.stringify({ timestamp: now, message: { model: "claude-sonnet-5", usage: { input_tokens: 1000, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }),
+    JSON.stringify({ timestamp: now, message: { model: "claude-opus-4-8", usage: { input_tokens: 2000, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }),
+    JSON.stringify({ timestamp: stale, message: { model: "claude-sonnet-5", usage: { input_tokens: 999999, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }),
+  ].join("\n") + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    // Both models get their own row (no last-model-wins), stale volume absent.
+    assert.match(out, /sonnet-5 [\s\S#]* 1k /);
+    assert.match(out, /opus-4-8 [\s\S#]* 2k /);
+    assert.ok(!out.includes("1000k") && !out.includes("1.0M"));
+    // Both tiers sit below the fable session: 3000 of 3000 routed down.
+    assert.match(out, /fable-5: [\s\S]*100% below session tier/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 

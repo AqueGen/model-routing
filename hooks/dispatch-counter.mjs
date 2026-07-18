@@ -20,7 +20,7 @@
 // dispatches, not tokens - honest bookkeeping, no dollar fiction.
 // Log lives in <config>/model-routing/dispatches.jsonl and self-prunes to 30d.
 
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { homedir } from "node:os";
 
@@ -95,22 +95,41 @@ const tierOf = (m) => {
 };
 const shortModel = (m) => m ? m.replace(/^claude-/, "").replace(/-\d{8}$/, "") : m;
 
-function firstModelIn(file, bytes) {
-  // Cheap sample: first chunk of the main-session jsonl names the session
-  // model; mid-session /model switches are rare enough to ignore. Bounded
-  // fd read, NOT readFileSync - this runs inside the PostToolUse hook and
-  // session transcripts can be hundreds of MB. The optional vendor prefix
-  // accepts Bedrock/Vertex ids (us.anthropic.claude-..., anthropic.claude-...)
-  // while capturing from "claude-" so tierOf/shortModel see the same shape.
+// Bounded fd reads, NOT readFileSync - these run inside the PostToolUse
+// hook and session transcripts can be hundreds of MB. The optional vendor
+// prefix accepts Bedrock/Vertex ids (us.anthropic.claude-...) while
+// capturing from "claude-" so tierOf/shortModel see the same shape.
+const MODEL_RE = /"model":"(?:[a-z0-9-]+\.)*(claude-[a-z0-9.-]+)"/g;
+function readSlice(file, bytes, fromEnd) {
   let fd;
   try {
     fd = openSync(file, "r");
-    const buf = Buffer.alloc(bytes);
-    const n = readSync(fd, buf, 0, bytes, 0);
-    const head = buf.toString("utf-8", 0, n);
-    return head.match(/"model":"(?:[a-z0-9-]+\.)*(claude-[a-z0-9.-]+)"/)?.[1] ?? null;
-  } catch { return null; }
+    const size = fstatSync(fd).size;
+    const len = Math.min(bytes, size);
+    if (!len) return "";
+    const buf = Buffer.alloc(len);
+    const n = readSync(fd, buf, 0, len, fromEnd ? size - len : 0);
+    return buf.toString("utf-8", 0, n);
+  } catch { return ""; }
   finally { if (fd !== undefined) try { closeSync(fd); } catch {} }
+}
+
+function firstModelIn(file, bytes) {
+  // Session-START model: the head of the session jsonl. Used by the tokens
+  // report, which says so in its footer - a /model switch or fallback later
+  // in the session is attributed to the start model.
+  const m = readSlice(file, bytes, false).match(/"model":"(?:[a-z0-9-]+\.)*(claude-[a-z0-9.-]+)"/);
+  return m?.[1] ?? null;
+}
+
+function lastModelIn(file, bytes) {
+  // Model in effect NOW: the last model named in the transcript tail. The
+  // dispatch hook uses this so /model switches, opusplan's plan->execute
+  // handoff, and quota fallbacks judge each dispatch against the model the
+  // session was actually on at dispatch time, not at session start.
+  let last = null;
+  for (const m of readSlice(file, bytes, true).matchAll(MODEL_RE)) last = m[1];
+  return last;
 }
 
 // The model a dispatch actually ran on: explicit model param, else the
@@ -151,7 +170,22 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
       : `No dispatches logged in the window (${winLabel}).\nLog: ${dataFile()} - history kept 30 days.\nEntries appear after the first Agent dispatch once the plugin's PostToolUse hook is active (plugin enabled + session restarted).`);
     process.exit(0);
   }
-  const down = entries.filter(isRoutedDown);
+  // Per-entry verdict: down / at / up / unknown. "up" = the effective model
+  // ranks ABOVE the session tier: a pin above the session model that nobody
+  // capped with model=<session> - the miss the pins-are-ceilings rule warns
+  // about, made visible instead of lumped in with deliberate at-tier work.
+  const verdictOf = (e) => {
+    const eff = effectiveModel(e);
+    if (eff && tierOf(eff) == null) return "unknown";
+    if (eff && e.session) {
+      const tm = tierOf(eff), ts = tierOf(e.session);
+      if (tm != null && ts != null) return tm < ts ? "down" : tm > ts ? "up" : "at";
+    }
+    return isRoutedDown(e) ? "down" : "at";
+  };
+  const down = entries.filter((e) => verdictOf(e) === "down");
+  const upCount = entries.filter((e) => verdictOf(e) === "up").length;
+  const unknownCount = entries.filter((e) => verdictOf(e) === "unknown").length;
   // "today" only makes sense for a window that includes today.
   const todayPart = win.ago ? "" : `${down.filter((e) => e.ts >= dayStart).length} today · `;
   if (process.argv[2] === "stats") {
@@ -163,16 +197,17 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   // row key - a key can aggregate dispatches from sessions on different
   // tiers, and a key-level re-judgement contradicted the headline (a bare
   // pin=sonnet implementer from a sonnet session is NOT routed down).
-  const byAgent = new Map(); // key -> { n, down, unknown }
+  const byAgent = new Map(); // key -> { n, down, up, unknown }
   for (const e of entries) {
     const key = e.model ? `${e.agent} (model=${e.model})`
       : PINNED_MODELS[e.agent] ? `${e.agent} (pin=${PINNED_MODELS[e.agent]})`
       : e.agent;
-    const s = byAgent.get(key) ?? { n: 0, down: 0, unknown: 0 };
+    const s = byAgent.get(key) ?? { n: 0, down: 0, up: 0, unknown: 0 };
     s.n++;
-    const eff = effectiveModel(e);
-    if (eff && tierOf(eff) == null) s.unknown++;
-    else if (isRoutedDown(e)) s.down++;
+    const v = verdictOf(e);
+    if (v === "unknown") s.unknown++;
+    else if (v === "down") s.down++;
+    else if (v === "up") s.up++;
     byAgent.set(key, s);
   }
   const rows = [...byAgent.entries()].sort((a, b) => b[1].n - a[1].n);
@@ -182,7 +217,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   for (const e of entries) {
     const key = e.session ? shortModel(e.session) : "(session not recorded)";
     const s = bySession.get(key) ?? { n: 0, down: 0 };
-    s.n++; if (isRoutedDown(e)) s.down++;
+    s.n++; if (verdictOf(e) === "down") s.down++;
     bySession.set(key, s);
   }
   const sessionRows = [...bySession.entries()].sort((a, b) => b[1].n - a[1].n);
@@ -207,26 +242,33 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   }
   // Grouped sections instead of per-row v/- markers: the reader should not
   // need a legend to see what ran cheap and what ran at the session tier.
-  const groups = { down: [], top: [], unknown: [] };
+  const groups = { down: [], top: [], up: [], unknown: [] };
   for (const [agent, s] of rows) {
     const judged = s.n - s.unknown;
+    const at = judged - s.down - s.up;
     // Mixed rows (same key dispatched from sessions on different tiers) go
     // to the majority side, annotated so a row never silently contradicts
     // the headline count.
-    const mixed = s.down > 0 && s.down < judged ? ` [${s.down} of ${s.n} down]` : "";
+    const mixed = s.up > 0
+      ? (s.up < judged ? ` [${s.down} down / ${at} at / ${s.up} above]` : "")
+      : (s.down > 0 && s.down < judged ? ` [${s.down} of ${s.n} down]` : "");
     const row = `${String(s.n).padStart(4)}  ${agent}${mixed}`;
     if (s.unknown === s.n) groups.unknown.push(row);
-    else if (s.down * 2 >= judged) groups.down.push(row);
+    else if (s.up >= s.down && s.up > at) groups.up.push(row);
+    else if (s.down >= at) groups.down.push(row);
     else groups.top.push(row);
   }
-  const pct = Math.round((down.length / entries.length) * 100);
+  const comparable = entries.length - unknownCount;
+  const pct = comparable ? Math.round((down.length / comparable) * 100) : 0;
   const section = (title, rows2) => rows2.length ? ["", title, ...rows2] : [];
   const lines = [
     `Model routing report - ${winLabel}`,
     "",
-    `${down.length} of ${entries.length} dispatches (${pct}%) ran on a cheaper model than the session${todayPart ? ` (${todayPart.replace(" · ", "")})` : ""}.`,
+    `${down.length} of ${comparable}${unknownCount ? " comparable" : ""} dispatches (${pct}%) ran on a cheaper model than the session${unknownCount ? ` - ${unknownCount} on unrecognized models excluded` : ""}${todayPart ? ` (${todayPart.replace(" · ", "")})` : ""}.`,
+    ...(upCount ? [`${upCount} ran ABOVE the session tier - a pin above the session model, uncapped; pins are ceilings only when the dispatch passes model=<session>.`] : []),
     ...section("Ran cheaper (routed down):", groups.down),
     ...section("Ran at the session tier (deliberate top-tier work or inheritance):", groups.top),
+    ...section("Ran ABOVE the session tier (uncapped pin - pass model=<session> to enforce the ceiling):", groups.up),
     ...section("Unrecognized models (tier unknown - extend TIER_PATTERNS):", groups.unknown),
     "",
     "By session model:",
@@ -271,18 +313,29 @@ if (process.argv[2] === "tokens") {
       if (!e.name.startsWith("agent-") || !e.name.endsWith(".jsonl")) continue;
       let st; try { st = statSync(p); } catch { continue; }
       if (st.mtimeMs < win.start || st.mtimeMs >= win.end) continue;
-      let model = null, inT = 0, outT = 0, cr = 0, cw = 0;
+      // Per-line attribution: usage accumulates onto the model named on that
+      // line, so a mid-run fallback splits the transcript across both models
+      // instead of crediting everything to the last one seen. Lines carrying
+      // their own timestamp are windowed individually - a resumed transcript
+      // has a fresh mtime but old lines; lines without one fall back to the
+      // file mtime, which already passed the window check above.
+      const fileVols = new Map(); // model -> { in, out, cr, cw }
       for (const line of readFileSync(p, "utf-8").split("\n")) {
         if (!line.includes('"usage"')) continue;
         try {
-          const m = (JSON.parse(line)).message ?? {};
+          const obj = JSON.parse(line);
+          const m = obj.message ?? {};
           const u = m.usage; if (!u) continue;
-          if (m.model) model = m.model;
-          inT += u.input_tokens ?? 0; outT += u.output_tokens ?? 0;
-          cr += u.cache_read_input_tokens ?? 0; cw += u.cache_creation_input_tokens ?? 0;
+          if (!m.model || m.model.startsWith("<")) continue;
+          const lts = obj.timestamp ? Date.parse(obj.timestamp) : NaN;
+          if (Number.isFinite(lts) && (lts < win.start || lts >= win.end)) continue;
+          const v = fileVols.get(m.model) ?? { in: 0, out: 0, cr: 0, cw: 0 };
+          v.in += u.input_tokens ?? 0; v.out += u.output_tokens ?? 0;
+          v.cr += u.cache_read_input_tokens ?? 0; v.cw += u.cache_creation_input_tokens ?? 0;
+          fileVols.set(m.model, v);
         } catch {}
       }
-      if (!model || model.startsWith("<")) continue;
+      if (!fileVols.size) continue;
       // The parent session transcript is <session-id>.jsonl, sibling of the
       // first "subagents" dir on the path - one level up for plain Agent
       // dispatches, further up for Workflow agents nested in workflows/<wf>/.
@@ -293,20 +346,24 @@ if (process.argv[2] === "tokens") {
       }
       const sessionModel = sessionJsonl ? sessionModelCache.get(sessionJsonl) : null;
       if (sf && !(sessionModel && shortModel(sessionModel).toLowerCase().includes(sf))) continue;
-      const tm = tierOf(model), tsess = tierOf(sessionModel);
-      if (tm == null) { unknownAgents++; unknownVol += inT + cr + cw; }
-      // Unknown tier on either side = not comparable; count as not-down
-      // rather than inventing a rank.
-      const down = tm != null && tsess != null && tm < tsess;
-      const s = perModel.get(model) ?? { agents: 0, in: 0, out: 0, cr: 0, cw: 0, downVol: 0, downAgents: 0 };
-      s.agents++; s.in += inT; s.out += outT; s.cr += cr; s.cw += cw;
-      if (down) { s.downVol += inT + cr + cw; s.downAgents++; }
-      perModel.set(model, s);
+      const tsess = tierOf(sessionModel);
       const sessKey = sessionModel ? shortModel(sessionModel) : "(session unknown)";
-      const ss = perSession.get(sessKey) ?? { agents: 0, vol: 0, downVol: 0 };
-      ss.agents++; ss.vol += inT + cr + cw;
-      if (down) ss.downVol += inT + cr + cw;
-      perSession.set(sessKey, ss);
+      for (const [model, v] of fileVols) {
+        const vol = v.in + v.cr + v.cw;
+        const tm = tierOf(model);
+        if (tm == null) { unknownAgents++; unknownVol += vol; }
+        // Unknown tier on either side = not comparable; count as not-down
+        // rather than inventing a rank.
+        const down = tm != null && tsess != null && tm < tsess;
+        const s = perModel.get(model) ?? { agents: 0, in: 0, out: 0, cr: 0, cw: 0, downVol: 0, downAgents: 0 };
+        s.agents++; s.in += v.in; s.out += v.out; s.cr += v.cr; s.cw += v.cw;
+        if (down) { s.downVol += vol; s.downAgents++; }
+        perModel.set(model, s);
+        const ss = perSession.get(sessKey) ?? { agents: 0, vol: 0, downVol: 0 };
+        ss.agents++; ss.vol += vol;
+        if (down) ss.downVol += vol;
+        perSession.set(sessKey, ss);
+      }
     }
   };
   walk(projRoot, 0);
@@ -319,12 +376,16 @@ if (process.argv[2] === "tokens") {
     .sort((a, b) => b.vol - a.vol);
   const total = rows.reduce((a, r) => a + r.vol, 0) || 1;
   const downTotal = rows.reduce((a, r) => a + r.downVol, 0);
+  // Unknown-tier volume is excluded from the routed-down denominator - one
+  // unrecognized model must not drag the percentage down (it is reported on
+  // its own line instead).
+  const comparableVol = Math.max(1, total - unknownVol);
   const bar = (v) => "#".repeat(Math.max(1, Math.round((v / total) * 24)));
   const sessionRows = [...perSession.entries()].sort((a, b) => b[1].vol - a[1].vol);
   const out = [
     `Subagent token volume - ${winLabel} (input + cache):`,
     "",
-    `${fmtN(downTotal)} of ${fmtN(total)} tokens (${Math.round((downTotal / total) * 100)}%) processed on a cheaper model than their session - judged per session (fable/opus days both count fairly).`,
+    `${fmtN(downTotal)} of ${fmtN(total - unknownVol)} ${unknownVol ? "comparable " : ""}tokens (${Math.round((downTotal / comparableVol) * 100)}%) processed on a cheaper model than their session - judged per session (fable/opus days both count fairly).`,
     "",
     ...rows.map((r) => `${shortModel(r.m).padEnd(16)} ${bar(r.vol).padEnd(25)} ${fmtN(r.vol).padStart(7)} (${Math.round((r.vol / total) * 100)}%)  ${r.agents} agents, out ${fmtN(r.out)}`),
     "",
@@ -333,6 +394,7 @@ if (process.argv[2] === "tokens") {
     ...(unknownAgents ? ["", `${unknownAgents} agents on unrecognized models (${fmtN(unknownVol)}) - tier unknown, excluded from routed-down math; extend TIER_PATTERNS in dispatch-counter.mjs.`] : []),
     "",
     "Volume = tokens the subagent processed; cache reads are billed at the subagent's model rate, which is where routing saves.",
+    "Session model is sampled at session START - a mid-session /model switch or fallback attributes later subagents to the start model (the dispatch report does not have this limit).",
   ];
   process.stdout.write(out.join("\n"));
   process.exit(0);
@@ -353,9 +415,10 @@ try {
     ts: Date.now(),
     agent: input.subagent_type ?? "general-purpose",
     model: input.model ?? null,
-    // Which main model this dispatch was routed FROM - sampled from the head
-    // of the session transcript the hook event points at.
-    session: event.transcript_path ? firstModelIn(event.transcript_path, 262144) : null,
+    // Which main model this dispatch was routed FROM - the last model named
+    // in the session transcript, i.e. the one in effect at dispatch time
+    // (survives /model switches, opusplan handoffs, and quota fallbacks).
+    session: event.transcript_path ? lastModelIn(event.transcript_path, 262144) : null,
   };
   const file = dataFile();
   appendFileSync(file, JSON.stringify(entry) + "\n");

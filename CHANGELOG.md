@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.8.0 - 2026-07-18
+
+Honesty release, driven by an external (Codex) review: several soft
+routing rules were described as if they were technical guarantees, and
+three stats blind spots could misattribute work. All six findings
+addressed.
+
+- Session model at dispatch time: the hook now records the LAST model
+  named in the session transcript (bounded tail read), so `/model`
+  switches, opusplan plan->execute handoffs, and quota fallbacks judge
+  each dispatch against the model actually in effect - not the session's
+  first model. The tokens report still samples the session START model
+  (per-dispatch linkage does not exist in transcripts) and now says so in
+  its footer.
+- Above-tier visibility: a new per-entry verdict (down/at/up/unknown)
+  surfaces uncapped pins - a bare opus-pinned dispatch from a sonnet
+  session now lands in a dedicated "Ran ABOVE the session tier" section
+  with a headline callout, instead of hiding among deliberate at-tier
+  work. Pins-are-ceilings wording in README/skill/anchor now states
+  plainly that the cap is behavioral (the `model` param enforces it, the
+  pin alone does not).
+- Unknown tiers leave the denominator: routed-down percentages are now
+  over comparable entries/volume only, with unrecognized-model counts
+  reported separately - one exotic model no longer drags the share down.
+- Per-line token attribution: usage accumulates onto the model named on
+  each transcript line (a mid-run fallback splits the volume instead of
+  crediting the last model seen), and lines carrying timestamps are
+  windowed individually - a resumed old transcript with a fresh mtime no
+  longer leaks stale volume into the window.
+- Read-only hardening: reviewer, verifier and test-runner now block
+  `Edit`/`Write`/`NotebookEdit` via `disallowedTools` (scout already
+  did). README states the honest boundary: Bash/MCP remain available and
+  are governed by prompt rules, not a sandbox; scout keeps its denylist
+  so code-graph MCP servers stay usable.
+- SendMessage continuation is conditional: "continue the same agent"
+  applies when the harness offers SendMessage; otherwise re-dispatch
+  with the packaged state. Requirements section notes neither path is a
+  hard dependency.
+- Tests 19 -> 22: above-tier section, last-model sampling, per-line
+  attribution + timestamp windowing, comparable-denominator headline.
+
 ## 0.7.6 - 2026-07-18
 
 - README sources completed: SWE-bench Verified now links to the
