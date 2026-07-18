@@ -178,6 +178,13 @@ implementation default with opus reserved for the margin cases.
   a strong session model precisely so the hard dispatches could use it.
   The failure mode this rule kills is *accidental* inheritance, not
   top-tier usage.
+- The same rule applies inside Workflow scripts, where it is easiest to
+  forget: every `agent()` call without explicit `model`/`effort` opts
+  inherits the session model at session effort, multiplied by the fan-out.
+  Set both per call - finder/mechanical stages cheap and low, verify/judge
+  stages a tier up only when the stage earns it. A 50-agent workflow with
+  one forgotten `model` opt costs more than every other routing decision
+  in the session combined.
 - If an entire session is one phase (pure implementation), suggest the
   user switch /model instead of delegating everything - a session on the
   right model beats a swarm of subagents.

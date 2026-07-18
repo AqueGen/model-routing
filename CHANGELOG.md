@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7.2 - 2026-07-18
+
+- CI runs the counter smoke tests (`node --test`) on every push/PR - the
+  PINNED_MODELS-vs-frontmatter sync test now enforces in CI, so a pin
+  change that forgets the stats table fails the build instead of rotting
+  silently until the next audit.
+- Workflow-dispatch routing rule in the skill and session anchor: every
+  Workflow `agent()` call without explicit `model`/`effort` opts inherits
+  the session model at session effort, multiplied by the fan-out - the
+  costliest place to forget the conscious-tier rule. Observed live: a
+  77-agent review workflow ran 10% of its volume on the session tier
+  through exactly this omission.
+
 ## 0.7.1 - 2026-07-18
 
 - Pin-aware dispatch classification: a bare dispatch (no `model` param) to a
