@@ -244,15 +244,25 @@ task, not set together.
 
 Research backing: task-type routing beats complexity-score routing
 ([RouteLLM, ICLR 2025](https://arxiv.org/pdf/2406.18665)); the sonnet-vs-top-tier
-SWE-bench Verified margin is what makes sonnet the implementation default
-with opus reserved for the margin cases; the 20% rework threshold the
-dispatch report warns on comes from coding-agent routing practice
+[SWE-bench Verified](https://www.swebench.com) margin is what makes sonnet
+the implementation default with opus reserved for the margin cases; the
+20% rework threshold the dispatch report warns on comes from coding-agent
+routing practice
 ([Augment](https://www.augmentcode.com/guides/ai-model-routing-guide)) -
 if a routed-down tier needs rework more than ~1 time in 5, the price edge
 is gone and that task type should route up. Benchmark numbers are a
 snapshot (mid-2026) and shift with every release; the principle - a small
 tier gap on ordinary work, a decisive one on hard work - has held across
 generations.
+
+The overall shape - one strong orchestrator delegating scoped tasks to
+cheaper workers and consuming their compact reports - is the
+orchestrator-workers pattern from Anthropic's
+[Building Effective Agents](https://www.anthropic.com/engineering/building-effective-agents),
+implemented on Claude Code's native
+[subagents](https://code.claude.com/docs/en/sub-agents) (frontmatter
+`model`/`effort` pins, per-dispatch `model` override) rather than any
+external machinery.
 
 ## Recommended settings
 
