@@ -278,6 +278,24 @@ test("legacy entries without a session fall back to the tier heuristic", () => {
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
+test("--session scopes the report to matching session models", () => {
+  const cfg = freshConfigDir();
+  const now = Date.now();
+  writeLog(cfg, [
+    { ts: now, agent: "model-routing:scout", session: "claude-fable-5" },
+    { ts: now, agent: "model-routing:scout", session: "claude-opus-4-8" },
+    { ts: now, agent: "model-routing:scout" }, // no session - excluded by filter
+  ]);
+  try {
+    const out = run(["report", "--session", "fable"], cfg);
+    assert.match(out, /1 of 1 dispatches \(100%\)/);
+    assert.match(out, /7d, fable sessions/);
+    assert.ok(!out.includes("opus-4-8"));
+    // Unfiltered still sees all three.
+    assert.match(run(["report"], cfg), /of 3 dispatches/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
 const usageLine = (model, input, cacheRead = 0) =>
   JSON.stringify({ message: { model, usage: { input_tokens: input, output_tokens: 10, cache_read_input_tokens: cacheRead, cache_creation_input_tokens: 0 } } });
 
@@ -310,5 +328,7 @@ test("tokens reaches Workflow-spawned agents nested under subagents/workflows/",
     // session (opus), so its sonnet volume counts as routed down.
     assert.match(out, /sonnet-5/);
     assert.match(out, /opus-4-8: [\s\S]*100% below session tier/);
+    // --session filter drops the whole session's agents.
+    assert.match(run(["tokens", "--session", "fable"], cfg), /No subagent transcripts found[\s\S]*fable sessions/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });

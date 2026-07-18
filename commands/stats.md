@@ -1,6 +1,6 @@
 ---
-description: Show model-routing stats - dispatches and real token volume kept off the session model. Args - --days N (window size, default 7), --ago M (shift window M days back)
-argument-hint: [--days N] [--ago M]
+description: Show model-routing stats - dispatches and real token volume kept off the session model. Args - --days N (window size, default 7), --ago M (shift window M days back), --session <family> (only sessions on that model, e.g. fable)
+argument-hint: [--days N] [--ago M] [--session fable]
 allowed-tools: Bash
 ---
 
