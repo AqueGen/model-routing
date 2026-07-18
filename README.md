@@ -149,6 +149,17 @@ For local development: clone the repo and
   `tokens` mode parses Claude Code transcript files, whose format may
   evolve - if it breaks, stats degrade to an explanatory message, not
   wrong numbers. Issues welcome.
+- Continuing a stuck agent uses `SendMessage` when the harness provides
+  it; where it is absent the skill falls back to re-dispatching with the
+  packaged state. Neither path is a hard requirement.
+- What "read-only" means here: scout, reviewer, verifier and test-runner
+  block the file-edit tools (`Edit`, `Write`, `NotebookEdit`) at the tool
+  level via `disallowedTools`. `Bash` (needed to run tests and inspect
+  repos) and MCP tools remain available and could in principle mutate
+  state - that boundary is behavioral (prompt rules), not a sandbox.
+  Scout deliberately uses a denylist rather than a tool allowlist so a
+  connected code-graph MCP server stays usable (an allowlist silently
+  hides every MCP tool).
 
 ## Getting started
 
@@ -191,8 +202,12 @@ Works with any plan-driven workflow (superpowers or similar):
 Switch the session down: `/model opus` or `/model opusplan`. Tiers are
 relative - "strongest" simply means your session model. Agent pins are
 ceilings, not floors: when a pin sits above your session model, the
-routing rules cap the dispatch at the session model - on a `sonnet`
-session, `implementer` and `reviewer` run on sonnet automatically.
+routing rules instruct Claude to cap the dispatch at the session model
+(Agent `model` param) - on a `sonnet` session, `implementer` and
+`reviewer` run on sonnet. Honesty note: the cap is a routing rule, not a
+harness guarantee - a bare dispatch runs the frontmatter pin as-is. The
+dispatch report has a dedicated "Ran ABOVE the session tier" section, so
+a missed cap shows up as a number instead of hiding.
 High-risk review still belongs in the main session.
 
 ## Usage

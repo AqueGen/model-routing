@@ -145,9 +145,12 @@ implementation default with opus reserved for the margin cases.
   each attempt failed, the candidate directions it sees - and hand it back
   for a main-session decision. A strong model advising a stuck subagent is
   cheaper than that subagent thrashing at the wrong approach. After
-  deciding, continue the SAME agent (SendMessage) with the direction - a
-  fresh dispatch pays the full file re-read the batching rule exists to
-  avoid.
+  deciding, continue the SAME agent (SendMessage, when the harness offers
+  it) with the direction - a fresh dispatch pays the full file re-read the
+  batching rule exists to avoid. When SendMessage is not available,
+  re-dispatch with the packaged state (what was tried, why it failed, the
+  chosen direction) so the new agent starts from the decision, not from
+  zero.
 - When the user re-asks the same question or calls the answer shallow,
   redo it one step up - a higher tier or higher effort - never at the
   same level that just failed.
@@ -167,7 +170,11 @@ implementation default with opus reserved for the margin cases.
   more than X"; the session model says what the user is willing to pay.
   When a pin sits above the session model, cap the dispatch at the
   session model via the Agent `model` param - on a sonnet session,
-  implementer and reviewer run on sonnet.
+  implementer and reviewer run on sonnet. This cap is behavioral, not
+  mechanical: the harness applies frontmatter pins regardless of session
+  tier, so a bare dispatch of an opus-pinned agent on a sonnet session
+  RUNS opus. Passing the param is what enforces the ceiling; the dispatch
+  report's above-tier section shows every time it was missed.
 - Unpinned agents silently inherit the session model. The bundled agents
   pin their tier in frontmatter, but general-purpose, Explore-style, and
   custom agent types have no pin - dispatched bare on a strong session,

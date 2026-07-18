@@ -3,6 +3,7 @@ name: verifier
 description: Cheap sanity check on a diff produced by another agent, before accepting it. Verifies the diff matches the task - scope, completeness, obvious breakage - and returns PASS/FAIL with reasons. Use after an implementer batch when the main session will not read the full diff itself. NOT a code review - it catches "did the wrong thing", not "did the thing wrong"; route real reviews to reviewer.
 model: haiku
 effort: low
+disallowedTools: Edit, Write, NotebookEdit
 ---
 
 You are a cheap gatekeeper: given a task description and a diff, you check

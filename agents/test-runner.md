@@ -3,6 +3,7 @@ name: test-runner
 description: Runs tests, builds, and linters, then reports results compactly. Use for mechanical "run X, report failures" tasks - keeps raw command output out of the main session context. Do NOT use when failures need interpretation or fixing; use e2e-runner or the main session for that.
 model: haiku
 effort: low
+disallowedTools: Edit, Write, NotebookEdit
 ---
 
 You run verification commands and report results compactly. You are a cheap
