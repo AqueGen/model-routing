@@ -12,9 +12,11 @@ import { fileURLToPath } from "node:url";
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "dispatch-counter.mjs");
 
-function run(args, configDir, stdin) {
+function run(args, configDir, stdin, extraEnv) {
   return execFileSync(process.execPath, [SCRIPT, ...args].filter(Boolean), {
-    env: { ...process.env, CLAUDE_CONFIG_DIR: configDir },
+    // CLAUDE_CODE_SUBAGENT_MODEL is blanked by default so a developer's own
+    // override cannot leak into the hermetic tests; set via extraEnv to test.
+    env: { ...process.env, CLAUDE_CONFIG_DIR: configDir, CLAUDE_CODE_SUBAGENT_MODEL: "", ...(extraEnv ?? {}) },
     input: stdin ?? "",
     encoding: "utf-8",
   });
@@ -62,10 +64,10 @@ test("report groups by tier and never ranks unknown models", () => {
     // Unknown-tier entries are excluded from the denominator - one exotic
     // model must not drag the routed-down share down.
     assert.match(out, /1 of 2 comparable dispatches \(50%\) ran on a cheaper model/);
-    assert.match(out, /1 on unrecognized models excluded/);
+    assert.match(out, /1 not tier-comparable excluded/);
     // Unknown-model rows land in their own section - honest unknown,
     // not silently counted as routed down or at-tier.
-    assert.match(out, /Unrecognized models[\s\S]*general-purpose \(model=zephyr-1\)/);
+    assert.match(out, /Not tier-comparable[\s\S]*general-purpose \(model=zephyr-1\)/);
     assert.match(out, /Ran at the session tier[\s\S]*implementer \(model=opus\)/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
@@ -333,6 +335,84 @@ test("tokens attributes usage per line-model and windows by line timestamp", () 
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
+test("unknown SESSION family is excluded, not guessed by the heuristic", () => {
+  const cfg = freshConfigDir();
+  writeLog(cfg, [
+    // Future session family: the sonnet pin is known but the pair is not
+    // comparable - must be excluded, not counted routed-down via heuristic.
+    { ts: Date.now(), agent: "model-routing:scout", session: "claude-zephyr-9" },
+  ]);
+  try {
+    const out = run(["report"], cfg);
+    assert.match(out, /0 of 0 comparable dispatches \(0%\)/);
+    assert.match(out, /1 not tier-comparable excluded/);
+    assert.match(out, /Not tier-comparable[\s\S]*scout \(pin=sonnet\)/);
+    // The by-session row must not disagree with the headline: the zephyr
+    // entry is excluded from its denominator too, and flagged.
+    assert.match(out, /zephyr-9: 0 of 0 routed down \(0%\) - 1 not comparable/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("tokens excludes volume whose session tier is unknown", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-zephyr-9"}\n');
+  writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-haiku-4-5", 1000) + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /1 agents not tier-comparable/);
+    assert.match(out, /\(0%\) processed on a cheaper model/);
+    // Session row: no fake "0% below session tier" over incomparable volume.
+    assert.match(out, /zephyr-9: [\s\S]* - not tier-comparable/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("--ago windows see timestamped lines inside resumed transcripts", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-opus-4-8"}\n');
+  const DAY = 24 * 60 * 60 * 1000;
+  const old = new Date(Date.now() - 10 * DAY).toISOString();
+  // The file is written NOW (fresh mtime), but its line belongs to the
+  // window 7-14 days back - a resumed transcript must not vanish from
+  // historical windows just because it was touched today.
+  writeFileSync(join(dir, "agent-a.jsonl"),
+    JSON.stringify({ timestamp: old, message: { model: "claude-sonnet-5", usage: { input_tokens: 1234, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }) + "\n");
+  try {
+    const out = run(["tokens", "--days", "7", "--ago", "7"], cfg);
+    assert.match(out, /sonnet-5/);
+    assert.match(out, /1 agents/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("CLAUDE_CODE_SUBAGENT_MODEL override is recorded and outranks the pin", () => {
+  const cfg = freshConfigDir();
+  const event = JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: "model-routing:reviewer" } });
+  try {
+    run([], cfg, event, { CLAUDE_CODE_SUBAGENT_MODEL: "sonnet" });
+    const log = readFileSync(join(cfg, "model-routing", "dispatches.jsonl"), "utf-8").trim().split("\n").map((l) => JSON.parse(l));
+    assert.equal(log[0].env, "sonnet");
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+  // In the report the env override wins over the opus pin: from an opus
+  // session this reviewer dispatch actually ran sonnet = routed down.
+  const cfg2 = freshConfigDir();
+  writeLog(cfg2, [{ ts: Date.now(), agent: "model-routing:reviewer", model: null, env: "sonnet", session: "claude-opus-4-8" }]);
+  try {
+    const out = run(["report"], cfg2);
+    assert.match(out, /1 of 1 dispatches \(100%\)/);
+    assert.match(out, /Ran cheaper[\s\S]*reviewer \(env=sonnet\)/);
+  } finally { rmSync(cfg2, { recursive: true, force: true }); }
+  // A bare general-purpose dispatch under an env override did NOT inherit
+  // the session model - it must not count as a tier leak.
+  const cfg3 = freshConfigDir();
+  writeLog(cfg3, [{ ts: Date.now(), agent: "general-purpose", model: null, env: "sonnet", session: "claude-opus-4-8" }]);
+  try {
+    assert.match(run(["report"], cfg3), /Tier leaks: 0 of 1 unpinned dispatches/);
+  } finally { rmSync(cfg3, { recursive: true, force: true }); }
+});
+
 test("--session scopes the report to matching session models", () => {
   const cfg = freshConfigDir();
   const now = Date.now();
@@ -367,7 +447,7 @@ test("tokens happy path: volume rows, session breakdown, unknown-model note", ()
     assert.match(out, /haiku-4-5/);
     assert.match(out, /processed on a cheaper model than their session/);
     assert.match(out, /By session model:[\s\S]*opus-4-8: [\s\S]*below session tier/);
-    assert.match(out, /1 agents on unrecognized models/);
+    assert.match(out, /1 agents not tier-comparable/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 

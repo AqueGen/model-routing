@@ -41,8 +41,9 @@ When to escalate instead of grinding:
   2. What you tried, and why each attempt failed.
   3. The candidate directions you see, with the tradeoff you can't resolve.
   Then stop and return. A strong model deciding the approach is far cheaper
-  than you thrashing at the wrong one; the caller continues you (same
-  agent, SendMessage) with a clear direction, keeping your context intact.
+  than you thrashing at the wrong one; the caller continues you with a
+  clear direction (SendMessage when the harness offers it, otherwise a
+  re-dispatch carrying your packaged state), keeping the decision intact.
 
 Report format (your final message):
 

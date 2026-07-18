@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.8.1 - 2026-07-18
+
+Second-pass review follow-ups (external Codex re-review of 0.8.0: six
+prior findings confirmed fixed, four residual items - all four addressed).
+
+- Unknown SESSION family excludes the entry/volume from routed-down math,
+  same as an unknown agent model - a sonnet dispatch from a future
+  `claude-zephyr-*` session is no longer guessed routed-down by the
+  heuristic (dispatch report) or counted comparable (tokens). Labels
+  broadened from "unrecognized models" to "not tier-comparable".
+- Historical `--ago` windows no longer lose resumed transcripts: the file
+  mtime is only a lower-bound early skip; timestamped lines decide their
+  own window membership, and untimestamped lines count only when the
+  mtime itself is in-window.
+- `CLAUDE_CODE_SUBAGENT_MODEL` is recorded by the hook (`env` field) and
+  outranks both the model param and the frontmatter pin in effective-model
+  resolution - a global override no longer silently miscounts every
+  dispatch against the pin table; report rows show `(env=<model>)`.
+- implementer's escalation text aligned with the conditional SendMessage
+  wording (harness may not offer it; packaged-state re-dispatch fallback).
+- Review round 2 on the PR itself: the comparable-only denominator now
+  also holds inside the per-session breakdowns (dispatch "By session
+  model" rows and the tokens session rows show "not comparable" instead
+  of a fake 0%), and an env-overridden bare dispatch no longer counts as
+  a tier leak (it did not inherit the session model).
+- Tests 22 -> 26: unknown session family (dispatch + tokens, including
+  the per-session rows), resumed transcript in an --ago window,
+  env-override capture, precedence, and leak exemption.
+
 ## 0.8.0 - 2026-07-18
 
 Honesty release, driven by an external (Codex) review: several soft
