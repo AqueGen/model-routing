@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.5 - 2026-07-18
+
+- README visuals rebased onto fable-default sessions only (via the new
+  `--session fable` filter): the mixed-tier window understated routing on
+  the normal setup. Fable-only, 7d: 100% of dispatches and 89% of volume
+  below the session tier; the remaining fable slice is explicitly labeled
+  as the accidental-inheritance case the 0.7.2 Workflow rule targets.
+
 ## 0.7.4 - 2026-07-18
 
 - `--session <family>` flag on stats/report/tokens: scope the numbers to
