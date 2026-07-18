@@ -248,7 +248,9 @@ if (process.argv[2] === "tokens") {
     try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
     for (const e of entries) {
       const p = join(dir, e.name);
-      if (e.isDirectory()) { if (depth < 3) walk(p, depth + 1); continue; }
+      // Depth 6 reaches Workflow-spawned agents too:
+      // projects/<proj>/<session>/subagents/workflows/<wf-id>/agent-*.jsonl
+      if (e.isDirectory()) { if (depth < 6) walk(p, depth + 1); continue; }
       if (!e.name.startsWith("agent-") || !e.name.endsWith(".jsonl")) continue;
       let st; try { st = statSync(p); } catch { continue; }
       if (st.mtimeMs < win.start || st.mtimeMs >= win.end) continue;
@@ -264,13 +266,15 @@ if (process.argv[2] === "tokens") {
         } catch {}
       }
       if (!model || model.startsWith("<")) continue;
-      // subagents dir sits under <session-id>/subagents - the sibling
-      // <session-id>.jsonl is the parent session.
-      const sessionJsonl = dir.replace(/[\\/]subagents$/, "") + ".jsonl";
-      if (!sessionModelCache.has(sessionJsonl)) {
+      // The parent session transcript is <session-id>.jsonl, sibling of the
+      // first "subagents" dir on the path - one level up for plain Agent
+      // dispatches, further up for Workflow agents nested in workflows/<wf>/.
+      const anchored = p.match(/^(.*?)[\\/]subagents[\\/]/);
+      const sessionJsonl = anchored ? anchored[1] + ".jsonl" : null;
+      if (sessionJsonl && !sessionModelCache.has(sessionJsonl)) {
         sessionModelCache.set(sessionJsonl, firstModelIn(sessionJsonl, 262144));
       }
-      const sessionModel = sessionModelCache.get(sessionJsonl);
+      const sessionModel = sessionJsonl ? sessionModelCache.get(sessionJsonl) : null;
       const tm = tierOf(model), tsess = tierOf(sessionModel);
       if (tm == null) { unknownAgents++; unknownVol += inT + cr + cw; }
       // Unknown tier on either side = not comparable; count as not-down

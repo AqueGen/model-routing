@@ -22,11 +22,17 @@
   (Bedrock/Vertex) model ids; the 30d prune can no longer be blocked forever
   by a missing/NaN head-entry timestamp; the tier-leak `BUNDLED` set derives
   from `PINNED_MODELS` instead of duplicating it.
+- tokens mode: Workflow-spawned agents are now counted. Their transcripts
+  nest under `subagents/workflows/<wf-id>/`, below the old walk depth
+  limit, so entire workflow runs were invisible to the volume report; the
+  walk now reaches them and attributes each agent to its parent session.
+  (Dispatch counts remain Agent-tool-only by design - the hook has no
+  per-agent model data for Workflow runs; README documents the split.)
 - tokens mode: the empty-window message reports the actual window
   (`--days`/`--ago`) instead of a hardcoded "last 7 days".
 - plugin.json description matches the current pins (sonnet implementer since
   0.6.0; scout and verifier listed).
-- Test suite 7 -> 17 cases, including a PINNED_MODELS-vs-agents-frontmatter
+- Test suite 7 -> 18 cases, including a PINNED_MODELS-vs-agents-frontmatter
   sync test (the exact drift class this release fixes), hook-mode Task +
   session capture, the 30d prune path, populated stats/tier-leak/by-session
   output, and a tokens happy path over synthetic transcripts.

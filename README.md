@@ -281,6 +281,12 @@ node "<plugin>/hooks/dispatch-counter.mjs" tokens
 # each judged against their own baseline
 ```
 
+Coverage note: dispatch counts see Agent-tool dispatches only (the hook
+matches `Agent|Task`); Workflow-spawned agents never pass through that
+tool, so they are invisible to the dispatch report - but `tokens` reads
+their transcripts (nested under `subagents/workflows/`) and counts their
+volume against the parent session like any other subagent.
+
 Embed the one-liner in your status line by appending the command's output
 to whatever your `statusLine.command` already prints. Delete the `.jsonl`
 any time to reset; a missing file just means zero.

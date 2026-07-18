@@ -297,3 +297,18 @@ test("tokens happy path: volume rows, session breakdown, unknown-model note", ()
     assert.match(out, /1 agents on unrecognized models/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
+
+test("tokens reaches Workflow-spawned agents nested under subagents/workflows/", () => {
+  const cfg = freshConfigDir();
+  const wfDir = join(cfg, "projects", "proj", "sess-1", "subagents", "workflows", "wf_abc123");
+  mkdirSync(wfDir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-opus-4-8"}\n');
+  writeFileSync(join(wfDir, "agent-1.jsonl"), usageLine("claude-sonnet-5", 3000) + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    // The workflow agent is found (deep walk) AND attributed to its parent
+    // session (opus), so its sonnet volume counts as routed down.
+    assert.match(out, /sonnet-5/);
+    assert.match(out, /opus-4-8: [\s\S]*100% below session tier/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
