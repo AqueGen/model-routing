@@ -132,9 +132,11 @@ function lastModelIn(file, bytes) {
   return last;
 }
 
-// The model a dispatch actually ran on: explicit model param, else the
-// agent's frontmatter pin, else unknown (session-model inheritance).
-const effectiveModel = (e) => e.model ?? PINNED_MODELS[e.agent] ?? null;
+// The model a dispatch actually ran on, in harness priority order: the
+// CLAUDE_CODE_SUBAGENT_MODEL env override (recorded by the hook as e.env),
+// else the explicit model param, else the agent's frontmatter pin, else
+// unknown (session-model inheritance).
+const effectiveModel = (e) => e.env ?? e.model ?? PINNED_MODELS[e.agent] ?? null;
 
 function isRoutedDown(e) {
   // With the session model recorded (0.5.3+ entries), judge by tier: an
@@ -179,8 +181,14 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     if (eff && tierOf(eff) == null) return "unknown";
     if (eff && e.session) {
       const tm = tierOf(eff), ts = tierOf(e.session);
+      // A recorded session on an unrecognized family is just as
+      // non-comparable as an unrecognized agent model - exclude it rather
+      // than letting the heuristic guess a verdict for half the pair.
+      if (tm != null && ts == null) return "unknown";
       if (tm != null && ts != null) return tm < ts ? "down" : tm > ts ? "up" : "at";
     }
+    // No session recorded at all (pre-0.5.3 entries): the documented
+    // cheap-tier heuristic.
     return isRoutedDown(e) ? "down" : "at";
   };
   const down = entries.filter((e) => verdictOf(e) === "down");
@@ -199,7 +207,8 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   // pin=sonnet implementer from a sonnet session is NOT routed down).
   const byAgent = new Map(); // key -> { n, down, up, unknown }
   for (const e of entries) {
-    const key = e.model ? `${e.agent} (model=${e.model})`
+    const key = e.env ? `${e.agent} (env=${e.env})`
+      : e.model ? `${e.agent} (model=${e.model})`
       : PINNED_MODELS[e.agent] ? `${e.agent} (pin=${PINNED_MODELS[e.agent]})`
       : e.agent;
     const s = byAgent.get(key) ?? { n: 0, down: 0, up: 0, unknown: 0 };
@@ -264,12 +273,12 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   const lines = [
     `Model routing report - ${winLabel}`,
     "",
-    `${down.length} of ${comparable}${unknownCount ? " comparable" : ""} dispatches (${pct}%) ran on a cheaper model than the session${unknownCount ? ` - ${unknownCount} on unrecognized models excluded` : ""}${todayPart ? ` (${todayPart.replace(" · ", "")})` : ""}.`,
+    `${down.length} of ${comparable}${unknownCount ? " comparable" : ""} dispatches (${pct}%) ran on a cheaper model than the session${unknownCount ? ` - ${unknownCount} not tier-comparable excluded` : ""}${todayPart ? ` (${todayPart.replace(" · ", "")})` : ""}.`,
     ...(upCount ? [`${upCount} ran ABOVE the session tier - a pin above the session model, uncapped; pins are ceilings only when the dispatch passes model=<session>.`] : []),
     ...section("Ran cheaper (routed down):", groups.down),
     ...section("Ran at the session tier (deliberate top-tier work or inheritance):", groups.top),
     ...section("Ran ABOVE the session tier (uncapped pin - pass model=<session> to enforce the ceiling):", groups.up),
-    ...section("Unrecognized models (tier unknown - extend TIER_PATTERNS):", groups.unknown),
+    ...section("Not tier-comparable (unrecognized model or unknown session family - extend TIER_PATTERNS):", groups.unknown),
     "",
     "By session model:",
     ...sessionRows.map(([m, s]) => `  ${m}: ${s.down} of ${s.n} routed down (${Math.round((s.down / s.n) * 100)}%)`),
@@ -312,7 +321,14 @@ if (process.argv[2] === "tokens") {
       if (e.isDirectory()) { if (depth < 6) walk(p, depth + 1); continue; }
       if (!e.name.startsWith("agent-") || !e.name.endsWith(".jsonl")) continue;
       let st; try { st = statSync(p); } catch { continue; }
-      if (st.mtimeMs < win.start || st.mtimeMs >= win.end) continue;
+      // mtime below the window start = nothing inside can be newer; safe
+      // early skip. The UPPER bound is deliberately NOT applied per file: a
+      // resumed transcript carries a fresh mtime but may hold lines from a
+      // historical --ago window - timestamped lines decide individually,
+      // and lines without a timestamp count only when the mtime itself
+      // falls inside the window.
+      if (st.mtimeMs < win.start) continue;
+      const mtimeInWindow = st.mtimeMs < win.end;
       // Per-line attribution: usage accumulates onto the model named on that
       // line, so a mid-run fallback splits the transcript across both models
       // instead of crediting everything to the last one seen. Lines carrying
@@ -328,7 +344,9 @@ if (process.argv[2] === "tokens") {
           const u = m.usage; if (!u) continue;
           if (!m.model || m.model.startsWith("<")) continue;
           const lts = obj.timestamp ? Date.parse(obj.timestamp) : NaN;
-          if (Number.isFinite(lts) && (lts < win.start || lts >= win.end)) continue;
+          if (Number.isFinite(lts)) {
+            if (lts < win.start || lts >= win.end) continue;
+          } else if (!mtimeInWindow) continue;
           const v = fileVols.get(m.model) ?? { in: 0, out: 0, cr: 0, cw: 0 };
           v.in += u.input_tokens ?? 0; v.out += u.output_tokens ?? 0;
           v.cr += u.cache_read_input_tokens ?? 0; v.cw += u.cache_creation_input_tokens ?? 0;
@@ -351,9 +369,10 @@ if (process.argv[2] === "tokens") {
       for (const [model, v] of fileVols) {
         const vol = v.in + v.cr + v.cw;
         const tm = tierOf(model);
-        if (tm == null) { unknownAgents++; unknownVol += vol; }
-        // Unknown tier on either side = not comparable; count as not-down
-        // rather than inventing a rank.
+        // Unknown tier on EITHER side = not comparable: excluded from the
+        // routed-down denominator, reported on its own line - an exotic
+        // agent model or a future-family session must not drag the share.
+        if (tm == null || tsess == null) { unknownAgents++; unknownVol += vol; }
         const down = tm != null && tsess != null && tm < tsess;
         const s = perModel.get(model) ?? { agents: 0, in: 0, out: 0, cr: 0, cw: 0, downVol: 0, downAgents: 0 };
         s.agents++; s.in += v.in; s.out += v.out; s.cr += v.cr; s.cw += v.cw;
@@ -391,7 +410,7 @@ if (process.argv[2] === "tokens") {
     "",
     "By session model:",
     ...sessionRows.map(([m, s]) => `  ${m}: ${fmtN(s.vol)} across ${s.agents} agents - ${s.vol ? Math.round((s.downVol / s.vol) * 100) : 0}% below session tier`),
-    ...(unknownAgents ? ["", `${unknownAgents} agents on unrecognized models (${fmtN(unknownVol)}) - tier unknown, excluded from routed-down math; extend TIER_PATTERNS in dispatch-counter.mjs.`] : []),
+    ...(unknownAgents ? ["", `${unknownAgents} agents not tier-comparable (${fmtN(unknownVol)}) - unrecognized agent model or unknown session tier, excluded from routed-down math; extend TIER_PATTERNS in dispatch-counter.mjs.`] : []),
     "",
     "Volume = tokens the subagent processed; cache reads are billed at the subagent's model rate, which is where routing saves.",
     "Session model is sampled at session START - a mid-session /model switch or fallback attributes later subagents to the start model (the dispatch report does not have this limit).",
@@ -415,6 +434,10 @@ try {
     ts: Date.now(),
     agent: input.subagent_type ?? "general-purpose",
     model: input.model ?? null,
+    // CLAUDE_CODE_SUBAGENT_MODEL outranks both the model param and the
+    // frontmatter pin - when set, it is the model every subagent actually
+    // ran on, so record it rather than guessing from pins.
+    ...(process.env.CLAUDE_CODE_SUBAGENT_MODEL ? { env: process.env.CLAUDE_CODE_SUBAGENT_MODEL } : {}),
     // Which main model this dispatch was routed FROM - the last model named
     // in the session transcript, i.e. the one in effect at dispatch time
     // (survives /model switches, opusplan handoffs, and quota fallbacks).
