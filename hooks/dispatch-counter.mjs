@@ -12,12 +12,13 @@
 // week's end). Dispatch history is retained 30 days; tokens reach as far
 // back as Claude Code keeps transcripts (cleanupPeriodDays).
 //
-// "Kept off the strongest model" = dispatches to the plugin's sub-strongest
-// agents or any Agent call with an explicit haiku/sonnet model param. Counts
+// "Routed down" = the dispatch's effective model (explicit model param, else
+// the agent's frontmatter pin) ranks below the recorded session model. Entries
+// missing either side fall back to a cheap-agent/cheap-tier heuristic. Counts
 // dispatches, not tokens - honest bookkeeping, no dollar fiction.
 // Log lives in <config>/model-routing/dispatches.jsonl and self-prunes to 30d.
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { homedir } from "node:os";
 
@@ -38,17 +39,20 @@ function windowFromArgs(argv) {
   const end = Date.now() - ago * DAY_MS;
   return { start: end - days * DAY_MS, end, days, ago };
 }
-// Bundled agents pinned below the typical strongest session model. implementer
-// and reviewer pin opus and are deliberately absent - dispatching to them does
-// not keep work off the strongest tier when the session runs opus.
-const CHEAP_AGENTS = new Set([
-  "model-routing:scout",
-  "model-routing:test-runner",
-  "model-routing:e2e-runner",
-  "model-routing:verifier",
-  "Explore",
-]);
-const CHEAP_MODELS = new Set(["haiku", "sonnet"]);
+// Frontmatter pins of the bundled agents. A bare dispatch (no model param)
+// still runs on the pinned model, so classification must resolve through
+// this table or bare implementer dispatches (pin=sonnet since 0.6.0) get
+// miscounted as session-tier work. Keep in sync with agents/*.md.
+const PINNED_MODELS = {
+  "model-routing:scout": "sonnet",
+  "model-routing:test-runner": "haiku",
+  "model-routing:e2e-runner": "sonnet",
+  "model-routing:verifier": "haiku",
+  "model-routing:implementer": "sonnet",
+  "model-routing:reviewer": "opus",
+};
+// Unpinned agent types that are inherently cheap dispatch targets.
+const CHEAP_AGENTS = new Set(["Explore"]);
 
 function dataFile() {
   const cfg = process.env.CLAUDE_CONFIG_DIR?.trim()
@@ -82,24 +86,41 @@ const shortModel = (m) => m ? m.replace(/^claude-/, "").replace(/-\d{8}$/, "") :
 
 function firstModelIn(file, bytes) {
   // Cheap sample: first chunk of the main-session jsonl names the session
-  // model; mid-session /model switches are rare enough to ignore.
+  // model; mid-session /model switches are rare enough to ignore. Bounded
+  // fd read, NOT readFileSync - this runs inside the PostToolUse hook and
+  // session transcripts can be hundreds of MB. The optional vendor prefix
+  // accepts Bedrock/Vertex ids (us.anthropic.claude-..., anthropic.claude-...)
+  // while capturing from "claude-" so tierOf/shortModel see the same shape.
+  let fd;
   try {
-    const head = readFileSync(file, { encoding: "utf-8", flag: "r" }).slice(0, bytes);
-    return head.match(/"model":"(claude-[a-z0-9.-]+)"/)?.[1] ?? null;
+    fd = openSync(file, "r");
+    const buf = Buffer.alloc(bytes);
+    const n = readSync(fd, buf, 0, bytes, 0);
+    const head = buf.toString("utf-8", 0, n);
+    return head.match(/"model":"(?:[a-z0-9-]+\.)*(claude-[a-z0-9.-]+)"/)?.[1] ?? null;
   } catch { return null; }
+  finally { if (fd !== undefined) try { closeSync(fd); } catch {} }
 }
+
+// The model a dispatch actually ran on: explicit model param, else the
+// agent's frontmatter pin, else unknown (session-model inheritance).
+const effectiveModel = (e) => e.model ?? PINNED_MODELS[e.agent] ?? null;
 
 function isRoutedDown(e) {
   // With the session model recorded (0.5.3+ entries), judge by tier: an
-  // explicit model below the session tier is routed down even for agents
-  // outside the static cheap list (e.g. implementer on sonnet in a fable
-  // session). Unknown tiers (null) and entries without both fields fall
-  // back to the heuristic instead of comparing against a made-up rank.
-  if (e.model && e.session) {
-    const tm = tierOf(e.model), ts = tierOf(e.session);
+  // effective model (explicit param or frontmatter pin) below the session
+  // tier is routed down - so a bare implementer dispatch from an opus
+  // session counts, because its pin ran it on sonnet. Unknown tiers (null)
+  // and entries without both fields fall back to the heuristic instead of
+  // comparing against a made-up rank.
+  const model = effectiveModel(e);
+  if (model && e.session) {
+    const tm = tierOf(model), ts = tierOf(e.session);
     if (tm != null && ts != null) return tm < ts;
   }
-  return CHEAP_AGENTS.has(e.agent) || CHEAP_MODELS.has(e.model);
+  // Heuristic: cheap = sonnet tier or below, ranked via tierOf so dashed
+  // full ids ("claude-sonnet-5...") classify the same as short names.
+  return CHEAP_AGENTS.has(e.agent) || (tierOf(model) ?? 99) <= 2;
 }
 
 if (process.argv[2] === "stats" || process.argv[2] === "report") {
@@ -122,13 +143,24 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     process.stdout.write(`routed-down: ${todayPart}${down.length} ${winLabel}`);
     process.exit(0);
   }
-  // report: per-agent breakdown over 7d, routed-down agents marked with a check.
-  const byAgent = new Map();
+  // report: per-agent breakdown over the window. Classification happens per
+  // ENTRY (session included) while aggregating, never re-derived from the
+  // row key - a key can aggregate dispatches from sessions on different
+  // tiers, and a key-level re-judgement contradicted the headline (a bare
+  // pin=sonnet implementer from a sonnet session is NOT routed down).
+  const byAgent = new Map(); // key -> { n, down, unknown }
   for (const e of entries) {
-    const key = e.model ? `${e.agent} (model=${e.model})` : e.agent;
-    byAgent.set(key, (byAgent.get(key) ?? 0) + 1);
+    const key = e.model ? `${e.agent} (model=${e.model})`
+      : PINNED_MODELS[e.agent] ? `${e.agent} (pin=${PINNED_MODELS[e.agent]})`
+      : e.agent;
+    const s = byAgent.get(key) ?? { n: 0, down: 0, unknown: 0 };
+    s.n++;
+    const eff = effectiveModel(e);
+    if (eff && tierOf(eff) == null) s.unknown++;
+    else if (isRoutedDown(e)) s.down++;
+    byAgent.set(key, s);
   }
-  const rows = [...byAgent.entries()].sort((a, b) => b[1] - a[1]);
+  const rows = [...byAgent.entries()].sort((a, b) => b[1].n - a[1].n);
   // Session-model breakdown: which main model the dispatch was routed FROM.
   // Entries older than 0.5.3 lack the field and are grouped as unrecorded.
   const bySession = new Map();
@@ -148,7 +180,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   // routed-down tier would need rework >~20% of the time the price edge
   // is gone - here inverted, >20% of cheap-capable dispatches leaking UP
   // is the same signal that the tier assignment is not holding.
-  const BUNDLED = new Set(["model-routing:scout", "model-routing:test-runner", "model-routing:e2e-runner", "model-routing:reviewer", "model-routing:implementer", "model-routing:verifier", "Explore"]);
+  const BUNDLED = new Set([...Object.keys(PINNED_MODELS), ...CHEAP_AGENTS]);
   const capable = entries.filter((e) => !BUNDLED.has(e.agent));
   const leaks = capable.filter((e) => !e.model && e.session && (tierOf(e.session) ?? 0) > 2);
   const LEAK_WARN = 0.20;
@@ -161,11 +193,15 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   // Grouped sections instead of per-row v/- markers: the reader should not
   // need a legend to see what ran cheap and what ran at the session tier.
   const groups = { down: [], top: [], unknown: [] };
-  for (const [agent, n] of rows) {
-    const probe = { agent: agent.split(" (model=")[0], model: agent.match(/model=(\w+)/)?.[1] ?? null };
-    const row = `${String(n).padStart(4)}  ${agent}`;
-    if (probe.model && tierOf(probe.model) == null) groups.unknown.push(row);
-    else if (isRoutedDown(probe)) groups.down.push(row);
+  for (const [agent, s] of rows) {
+    const judged = s.n - s.unknown;
+    // Mixed rows (same key dispatched from sessions on different tiers) go
+    // to the majority side, annotated so a row never silently contradicts
+    // the headline count.
+    const mixed = s.down > 0 && s.down < judged ? ` [${s.down} of ${s.n} down]` : "";
+    const row = `${String(s.n).padStart(4)}  ${agent}${mixed}`;
+    if (s.unknown === s.n) groups.unknown.push(row);
+    else if (s.down * 2 >= judged) groups.down.push(row);
     else groups.top.push(row);
   }
   const pct = Math.round((down.length / entries.length) * 100);
@@ -253,7 +289,7 @@ if (process.argv[2] === "tokens") {
   };
   walk(projRoot, 0);
   if (!perModel.size) {
-    process.stdout.write(`No subagent transcripts found under ${projRoot} (last 7 days).\nToken stats read Claude Code agent-*.jsonl transcript files; they appear after subagent dispatches. If your config lives elsewhere, set CLAUDE_CONFIG_DIR.`);
+    process.stdout.write(`No subagent transcripts found under ${projRoot} (${winLabel}).\nToken stats read Claude Code agent-*.jsonl transcript files; they appear after subagent dispatches. If your config lives elsewhere, set CLAUDE_CONFIG_DIR.`);
     process.exit(0);
   }
   const fmtN = (n) => n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(0) + "k" : String(n);
@@ -302,10 +338,12 @@ try {
   const file = dataFile();
   appendFileSync(file, JSON.stringify(entry) + "\n");
   // Self-prune once the log ages: rewrite without entries past retention
-  // (30d - long enough for --ago comparisons, still trivially small).
+  // (30d - long enough for --ago comparisons, still trivially small). The
+  // negated >= form also fires when the head entry's ts is missing or NaN,
+  // so a junk head line can never block pruning forever.
   const entries = readEntries(file);
   const cutoff = Date.now() - RETENTION_MS;
-  if (entries.length && entries[0].ts < cutoff) {
+  if (entries.length && !(entries[0].ts >= cutoff)) {
     writeFileSync(file, entries.filter((e) => e.ts >= cutoff).map((e) => JSON.stringify(e)).join("\n") + "\n");
   }
 } catch {

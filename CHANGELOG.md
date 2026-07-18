@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.7.1 - 2026-07-18
+
+- Pin-aware dispatch classification: a bare dispatch (no `model` param) to a
+  bundled agent now resolves through the agent's frontmatter pin
+  (`PINNED_MODELS` table) before tier comparison. Bare `implementer`
+  dispatches (pin=sonnet since 0.6.0) were miscounted as session-tier work -
+  on live data the routed-down share corrected from 72% to 80%. Bare pinned
+  rows are annotated `(pin=<model>)` in the report.
+- Report rows classify per entry (session included) while aggregating,
+  instead of re-judging the reconstructed row key without a session - a bare
+  pin=sonnet implementer from a sonnet session no longer prints under "Ran
+  cheaper" while the headline says 0%. Rows aggregating sessions on
+  different tiers go to the majority side annotated `[k of n down]`. The
+  key-reparsing probe is gone, so dashed model ids can no longer land in
+  the Unrecognized section by regex truncation.
+- Robustness: the heuristic fallback ranks cheapness via the tier ladder
+  (dashed full ids like `claude-sonnet-5` now classify like short names);
+  `firstModelIn` does a bounded 256KB fd read instead of slurping the whole
+  session transcript inside the PostToolUse hook, and accepts vendor-prefixed
+  (Bedrock/Vertex) model ids; the 30d prune can no longer be blocked forever
+  by a missing/NaN head-entry timestamp; the tier-leak `BUNDLED` set derives
+  from `PINNED_MODELS` instead of duplicating it.
+- tokens mode: the empty-window message reports the actual window
+  (`--days`/`--ago`) instead of a hardcoded "last 7 days".
+- plugin.json description matches the current pins (sonnet implementer since
+  0.6.0; scout and verifier listed).
+- Test suite 7 -> 17 cases, including a PINNED_MODELS-vs-agents-frontmatter
+  sync test (the exact drift class this release fixes), hook-mode Task +
+  session capture, the 30d prune path, populated stats/tier-leak/by-session
+  output, and a tokens happy path over synthetic transcripts.
+- Caveat: the pin table reflects current frontmatter, so pre-0.6.0 log
+  entries (when implementer pinned opus) are judged by today's pin until
+  they age out of the 30d retention.
+- CHANGELOG correction: 0.7.0 shipped 6 smoke tests, not 5.
+
 ## 0.7.0 - 2026-07-16
 
 Release hardening: the plugin now degrades honestly on setups unlike the
@@ -14,7 +49,7 @@ author's instead of printing nothing.
   as 0. A future model cannot silently corrupt routed-down math or leak
   detection; such rows are marked `?` in the report and counted separately
   in tokens mode.
-- Smoke tests: 5 `node:test` cases drive the counter CLI end-to-end
+- Smoke tests: 6 `node:test` cases drive the counter CLI end-to-end
   (`node --test hooks/dispatch-counter.test.mjs`), zero dependencies.
 - README: Requirements section (node 18+ is stats-only), honest
   validated-on status, dated benchmark snapshots (mid-2026), stale
