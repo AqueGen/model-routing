@@ -75,7 +75,8 @@ strongest tier (Fable) as the default model, 7-day window, July 2026,
 measured by the bundled `tokens --session fable` report - your split
 depends on your task mix. Without routing, every subagent inherits the
 session model, so the entire volume runs at top-tier prices; with
-routing, 100% of dispatches and 89% of token volume dropped below it:
+routing, 100% of comparable dispatches and 89% of token volume dropped
+below it:
 
 ```mermaid
 xychart-beta
@@ -144,7 +145,7 @@ For local development: clone the repo and
   else, and the stats command says so instead of printing nothing.
 - The tier ladder recognizes the current Claude families
   (fable/opus/sonnet/haiku). A future model family shows up in stats as
-  tier-unknown (`?`) rather than silently skewing the numbers.
+  not tier-comparable rather than silently skewing the numbers.
 - Status: validated in daily use (Windows, opus/fable sessions). The
   `tokens` mode parses Claude Code transcript files, whose format may
   evolve - if it breaks, stats degrade to an explanatory message, not
