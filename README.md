@@ -22,6 +22,11 @@ instead of thrashing.
 Everything stays inside Anthropic models. No proxy, no third-party
 gateway, no ToS gray zones.
 
+**Quick links:** [Overview](#whats-inside) | [Example](#example) |
+[Install](#install) | [Getting started](#getting-started) |
+[Usage](#usage) | [Settings](#recommended-settings) |
+[Stats](#dispatch-counter) | [Pin overrides](#overriding-pins)
+
 ## What's inside
 
 | Component | Model | Effort | Purpose |
