@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.2 - 2026-07-20
+
+- README charts are now a dated, versioned snapshot ("2026-07-20,
+  measured with v0.8.1") instead of implicitly-current figures: a rolling
+  7d window moves daily and 0.8.1 changed how the numbers are computed
+  (per-line attribution, comparable-only denominators), so the old values
+  no longer matched what the tool prints. Values refreshed from the
+  current run and the commands to re-measure are named in the text.
+
 ## 0.8.1 - 2026-07-18
 
 Second-pass review follow-ups (external Codex re-review of 0.8.0: six
