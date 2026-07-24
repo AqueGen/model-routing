@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.9.1 - 2026-07-25
+
+Effort-model correctness pass (docs only, no pin changes), verified
+against the official effort documentation:
+
+- Removed the invented `medium-high` / `low-medium` effort levels; the
+  documented ladder is now the real one: low, medium, high, xhigh, max.
+- Documented actual dispatch behavior: `implementer` with `model=opus`
+  changes the model only - the Agent tool has no effort param, so the
+  agent's pinned medium effort still applies.
+- Separated Claude's product default (unset effort = high; Anthropic's
+  quality-first guidance starts Opus-class coding work at xhigh) from
+  this plugin's cost-first recommendations - a medium session and
+  below-default pins are a deliberate step down, not "the default".
+- Sonnet-to-opus escalation criteria made concrete: multi-file or
+  cross-layer work, security/money/migrations/concurrency/protocols/public
+  contracts, retry after a weak sonnet result, hard E2E/visual
+  interpretation. Ambiguity is explicitly NOT a trigger - implementer
+  rejects ambiguous tasks by contract, so an unclear task or root cause
+  is clarified in the main session (or scouted) first (Codex review
+  finding).
+- Default-high and xhigh availability qualified as model-dependent -
+  xhigh is absent on some models that support max (e.g. the 4.6
+  generation) - instead of stated as universal (Codex review finding).
+- README gained a "Model tiers and effort ladder" section: per-family
+  roles with relative cost anchors and all five effort levels with
+  where each is used.
+- Dropped the unmeasured "max/xhigh buys little for review" claim.
+  Reviewer stays opus/high; medium is noted as a future eval candidate,
+  the pin does not move until measured.
+
 ## 0.9.0 - 2026-07-24
 
 Opus 5 research pass. No pin changes - and that is the point: pins name

@@ -14,7 +14,7 @@ Routing tunes two knobs, not one: **which model** handles a task and **how
 hard it thinks** (reasoning effort). A strong model at low effort often
 beats a weaker model straining at high effort, for a fraction of the cost -
 so cheap, well-scoped work runs at low effort and only genuinely hard
-reasoning gets high/max. Each bundled agent pins its effort in frontmatter,
+reasoning gets high or above. Each bundled agent pins its effort in frontmatter,
 overriding the session setting. When a subagent gets stuck on the approach rather
 than a missing fact, it escalates back to the main session for a decision
 instead of thrashing.
@@ -24,8 +24,9 @@ gateway, no ToS gray zones.
 
 **Quick links:** [Overview](#whats-inside) | [Example](#example) |
 [Install](#install) | [Getting started](#getting-started) |
-[Usage](#usage) | [Settings](#recommended-settings) |
-[Stats](#dispatch-counter) | [Pin overrides](#overriding-pins)
+[Usage](#usage) | [Tiers](#model-tiers-and-effort-ladder) |
+[Settings](#recommended-settings) | [Stats](#dispatch-counter) |
+[Pin overrides](#overriding-pins)
 
 ## What's inside
 
@@ -121,7 +122,7 @@ flowchart LR
     A["'Run the unit tests'"] --> TR["test-runner<br/>haiku / low"]
     B["'Where is the webhook retry logic?'"] --> SC["scout<br/>sonnet / low"]
     C["'Implement tasks 1-3 from the plan'"] --> IM["implementer<br/>sonnet / medium"]
-    D["'Refactor the payment pipeline'"] --> IMO["implementer<br/>model=opus / medium-high"]
+    D["'Refactor the payment pipeline'"] --> IMO["implementer<br/>model=opus / medium"]
     E["'Review the diff'"] --> RV["reviewer<br/>opus / high"]
     F["'Design the architecture'"] --> MS["main session<br/>your strongest model"]
 ```
@@ -178,8 +179,10 @@ For local development: clone the repo and
 1. Pick your session model with `/model` (opus, fable, whatever your
    plan offers). The plugin never changes it - the main session is where
    planning and decisions happen, so give it the strongest tier you are
-   willing to pay for. Session effort: leave the default (medium); the
-   bundled agents pin their own.
+   willing to pay for. Session effort: Claude's own default is high
+   (unset = high); dropping the session to medium is the cost-conscious
+   pick when the main session mostly coordinates - the bundled agents pin
+   their own either way.
 2. Work normally. Mechanical work routes down automatically:
 
    | You ask | Who runs it | Model / effort |
@@ -260,8 +263,8 @@ task, not set together.
 | --------- | ----- | ------ | -------------- | --------------- |
 | Exploration (`scout`) | sonnet | low | Finding and tracing code is retrieval, not reasoning - a cheap tier reports as well as a costly one, and the file volume stays in the subagent regardless. | The work is mechanical lookup; extra thinking buys nothing. |
 | Ordinary implementation (`implementer`) | sonnet | medium | Sonnet is near-opus quality on single-file, clear-shape coding at a fraction of the price (intro pricing through 2026-08-31 makes it ~2.5x cheaper than opus) - for work whose approach the plan already decided, the margin never changes the outcome. | The plan already decided the approach; the agent executes real logic, not design. |
-| Complex implementation (`implementer` `model=opus`) | opus | medium-high | Multi-file refactors, concurrency, and security are where a wrong approach is expensive - and Opus 5 stepped the tier up at UNCHANGED price, so escalate when in doubt; the escalation buys strictly more per dollar than when this table was first tuned. | Higher because the approach itself is part of the problem, not just the code. |
-| Code review (`reviewer`) | opus | high | Review is an asymmetric bet - one pass guards against a bug that costs far more if it ships, so it is the one place to prefer the top tier by default. Opus 5 review is high-precision AND high-recall and stays accurate at lower effort. | High: subtle correctness bugs hide from shallow reading; max/xhigh buys little here. |
+| Complex implementation (`implementer` `model=opus`) | opus | medium (pinned) | Multi-file or cross-layer changes, security/money/migrations/concurrency/public contracts, or a retry after a weak sonnet result - a wrong approach is expensive, and Opus 5 stepped the tier up at UNCHANGED price, so escalate when in doubt. (Ambiguous tasks are not an escalation case: implementer stops on ambiguity by contract - clarify first.) | The `model=opus` dispatch changes the model only - the Agent tool has no effort param, so the pinned medium stays; the escalation buys the tier, not extra thinking. |
+| Code review (`reviewer`) | opus | high | Review is an asymmetric bet - one pass guards against a bug that costs far more if it ships, so it is the one place to prefer the top tier by default. | High: subtle correctness bugs hide from shallow reading. Anthropic reports Opus 5 review holds at lower effort - medium is a future eval candidate; the pin stays high until measured. |
 | Tests / builds (`test-runner`) | haiku | low | Running a command and summarizing output is mechanical; the value is keeping raw logs out of the main context, not the model doing it. | Low: no reasoning, just report. |
 | Diff sanity gate (`verifier`) | haiku | low | Checking a diff matches its task (scope, completeness, obvious breakage) is a cheap spot-check, not a quality judgment. | Low: pattern-matching against the task, not deep analysis. |
 | E2E / failure interpretation (`e2e-runner`) | sonnet | medium | Driving a browser and telling a product bug from a flake needs some judgment, but not top-tier reasoning. | Medium: real interpretation, clear method. |
@@ -293,6 +296,46 @@ implemented on Claude Code's native
 `model`/`effort` pins, per-dispatch `model` override) rather than any
 external machinery.
 
+## Model tiers and effort ladder
+
+What each family is for in this routing scheme. Names are family
+aliases, not versions (see
+[Recommended settings](#recommended-settings) on generation jumps), and
+cost is anchored relative to opus - ratios drift less than list prices;
+exact numbers live on
+[Anthropic's pricing page](https://platform.claude.com/docs/en/about-claude/pricing):
+
+| Family | Cost vs opus | Role in this plugin |
+| ------ | ------------ | ------------------- |
+| fable | ~2x | Frontier reasoning. A main-session choice for all-hard-reasoning days (architecture, subtle debugging hunts) - never a routing target. |
+| opus | 1x | The escalation tier: code review, multi-file/cross-layer implementation, security/money/concurrency-sensitive changes. Opus 5 made this tier a step stronger at the same price. |
+| sonnet | ~0.6x (~0.4x intro through 2026-08-31) | The workhorse: ordinary implementation from an approved plan, exploration, E2E driving. Near-opus on clear-shape coding. |
+| haiku | ~0.2x | Mechanical grind: test/build runs, diff sanity checks, trivial sweeps. |
+
+Generation notes (as of the Opus 5 launch, July 2026 - these rot
+fastest, re-verify against Anthropic's model overview): per Anthropic's
+launch figures Opus 5 lands near the fable-class tier on coding at half
+its price, which is what lowered the escalation bar in 0.9.0; Sonnet 5 at medium is
+comparable to Sonnet 4.6 at high (per Anthropic's effort guidance),
+which is why the medium pins survived the generation jump unchanged;
+the fable-class tier is built for long-horizon frontier work - a
+session-model choice, not a dispatch target.
+
+The effort ladder - the second knob. Unset effort means `high` on
+current models (not medium), and `xhigh` is absent on some models that
+support `max` (e.g. the 4.6 generation). Anthropic's own quality-first
+guidance starts Opus-class coding at `xhigh` - the pins below are this
+plugin's cost-first counterweight, stepping up on evidence instead of
+starting high:
+
+| Effort | What it buys | Where the plugin uses it |
+| ------ | ------------ | ------------------------ |
+| low | Most efficient: significant token savings with some capability reduction. On the Opus 5 generation low/medium punch well above their weight. | Pins: `scout`, `test-runner`, `verifier`. |
+| medium | Balanced: real logic whose approach is already decided, at moderate savings. | Pins: `implementer`, `e2e-runner`. Recommended session setting. |
+| high | Full capability - the product default. Complex reasoning, subtle debugging, high-risk review. | Pin: `reviewer`. Main-session planning and final review. |
+| xhigh | Extended capability for long-horizon agentic/coding runs (multi-hour, token budgets in the millions). | Session-level or Workflow `effort` opt only - never an agent pin. |
+| max | Unconstrained token spend for frontier-grade problems; Anthropic notes diminishing returns and overthinking risk on routine work. | Not used by any pin - reach for it deliberately or not at all. |
+
 ## Recommended settings
 
 **Session model + effort (the weighted price/quality pick).** The session
@@ -308,11 +351,13 @@ coordination, and final review. That makes the balanced default:
   hard reasoning - a thorny architecture day or a subtle debugging hunt -
   where the whole session sits in the seat that tier is worth. Drop to a
   **Sonnet** session for pure-implementation days with no hard decisions.
-- **Effort: medium** as the everyday default; **high** for sessions built
-  around architecture or subtle debugging. Session effort mainly governs
-  main-session work - the bundled agents pin their own - so raise it when
-  the thinking you keep in the main seat is genuinely hard, not across the
-  board.
+- **Effort: medium** as the everyday session setting - a deliberate step
+  DOWN from Claude's product default of high (unset effort = high; the
+  full ladder is low/medium/high/xhigh/max). Use **high** for sessions
+  built around architecture or subtle debugging. Session effort mainly
+  governs main-session work - the bundled agents pin their own - so raise
+  it when the thinking you keep in the main seat is genuinely hard, not
+  across the board.
 
 Rule of thumb: pick the session tier for the *hardest thing you keep in
 the main session*, not for the average task - the average task gets routed
@@ -409,8 +454,8 @@ There is deliberately no config subsystem - three override paths cover it:
 - **Per dispatch**: the Agent tool's `model` param overrides any
   frontmatter pin (pins-are-ceilings works through exactly this);
   Workflow `agent()` takes `model` and `effort` opts per call. Plain
-  Agent dispatches have no effort param - they inherit the session
-  effort.
+  Agent dispatches have no effort param - effort comes from the agent's
+  frontmatter pin when present, else from the session level.
 - **Permanent**: edit the `model:` / `effort:` frontmatter in
   `agents/*.md`. A directory-source install picks the change up next
   session. Keep `PINNED_MODELS` in `hooks/dispatch-counter.mjs` in step -
