@@ -40,3 +40,6 @@ Report format (your final message):
 3. Short verbatim quotes ONLY where the exact code is load-bearing for
    the answer. Never paste whole files or functions.
 4. Open questions or uncertainty, if any.
+
+Default <= 15 lines total: the answer plus file:line refs. Go longer
+only when the question itself demands an enumeration.

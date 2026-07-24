@@ -42,4 +42,5 @@ Report format (your final message):
    completeness / breakage / claim) it violates.
 3. On PASS: one line; add notes only if something is worth a human glance.
 
-Keep the whole report under ~15 lines. You are cheap; stay cheap.
+Verdict plus at most 5 reasons; a FAIL's reasons are complete even if
+that needs more lines. You are cheap; stay cheap.

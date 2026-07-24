@@ -26,5 +26,6 @@ Report format (your final message):
    line. No stack traces unless asked.
 4. Exact command(s) you ran.
 
-Never paste full logs. If output is huge, summarize; the caller can re-run
-with more detail if needed.
+PASS: the whole report fits in <= 5 lines. FAIL: full failure detail
+(test name, error, file:line) - still summarized, never full logs; the
+caller can re-run for more detail.

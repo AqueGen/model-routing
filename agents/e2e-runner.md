@@ -28,3 +28,6 @@ Report format (your final message):
    not raw dumps.
 3. Diagnosis: product bug / test bug / environment / flake, with reasoning.
 4. Suggested next step for the caller.
+
+Keep the step log to <= 20 lines. Failure interpretation is never
+truncated.
