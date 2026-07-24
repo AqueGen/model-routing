@@ -105,10 +105,9 @@ actually earns its cost:
   the plan already decided, that margin does not change the outcome, so
   sonnet stays the value default. Medium effort because the agent
   executes, it does not design.
-- **Complex implementation -> opus, still at the agent's pinned medium.**
-  The `model=opus` dispatch changes the MODEL only - the Agent tool has
-  no effort param, so implementer's frontmatter medium still applies; the
-  escalation buys the tier, not extra thinking. Escalate from sonnet when
+- **Complex implementation -> opus, still at the agent's pinned medium**
+  (the dispatch changes the model only - see the effort section).
+  Escalate from sonnet when
   any of these hold: the change is multi-file or cross-layer; it touches
   security, money, data migrations, concurrency, protocols, or public
   contracts; a sonnet attempt came back weak; or an E2E/visual result
@@ -130,16 +129,12 @@ actually earns its cost:
   summarizing output, or checking a diff matches its task, is mechanical.
   The cheapest tier at low effort suffices; the value is keeping raw
   output out of the main context, not the model doing it.
-- **Effort tracks task shape, not tier.** Low when the work is mechanical
-  or the shape is known; medium when there is real logic but the approach
-  is clear; high and above only when a wrong approach is expensive to
-  unwind (architecture, subtle debugging, high-risk review). A strong model at
-  low effort beats a weak model at high effort for a fraction of the cost,
-  so effort is a real cost lever, not a formality. On the Opus 5
-  generation this is amplified: low/medium effort punches well above its
-  weight, so when a dispatch feels too expensive, step the EFFORT down
-  before stepping the tier down - and when a result is too shallow, step
-  effort up before tier up.
+- **Effort tracks task shape, not tier** (levels: the ladder above). A
+  strong model at low effort beats a weak model at high effort for a
+  fraction of the cost. On the Opus 5 generation this is amplified:
+  low/medium punch well above their weight - when a dispatch feels too
+  expensive, step the EFFORT down before the tier; when a result is too
+  shallow, step effort up before tier up.
 
 Research backing: task-type routing outperforms complexity-score routing
 (RouteLLM, ICLR 2025); benchmark tier gaps confirm sonnet as the

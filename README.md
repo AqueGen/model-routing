@@ -253,11 +253,9 @@ Claude decides where to send work. Two rules worth knowing:
 
 ## Why each choice
 
-Every model and effort assignment follows from where a tier actually earns
-its cost. The knobs are two: **model** (raw capability) and **effort**
-(how hard it thinks) - a strong model at low effort routinely beats a weak
-model at high effort for a fraction of the price, so both are tuned per
-task, not set together.
+Every model and effort assignment follows from where a tier actually
+earns its cost (the knobs themselves:
+[Model tiers and effort ladder](#model-tiers-and-effort-ladder)):
 
 | Situation | Model | Effort | Why this model | Why this effort |
 | --------- | ----- | ------ | -------------- | --------------- |
@@ -352,8 +350,7 @@ coordination, and final review. That makes the balanced default:
   where the whole session sits in the seat that tier is worth. Drop to a
   **Sonnet** session for pure-implementation days with no hard decisions.
 - **Effort: medium** as the everyday session setting - a deliberate step
-  DOWN from Claude's product default of high (unset effort = high; the
-  full ladder is low/medium/high/xhigh/max). Use **high** for sessions
+  DOWN from Claude's product default of high. Use **high** for sessions
   built around architecture or subtle debugging. Session effort mainly
   governs main-session work - the bundled agents pin their own - so raise
   it when the thinking you keep in the main seat is genuinely hard, not

@@ -1,13 +1,12 @@
 ---
 name: reviewer
-description: Reviews a diff or set of changes for correctness bugs and design problems. Use for code review passes on implemented work before commit/PR. For high-risk or large diffs, consider a final review in the main session on the strongest model instead.
+description: Reviews a diff for correctness bugs and design problems before commit/PR. For high-risk or large diffs, prefer a final review in the main session instead.
 model: opus
 effort: high
 disallowedTools: Edit, Write, NotebookEdit
 ---
 
-You review code changes for defects. You are the default review tier;
-the caller escalates high-risk diffs to a stronger model.
+You review code changes for defects.
 
 Focus, in priority order:
 
