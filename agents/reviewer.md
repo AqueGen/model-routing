@@ -6,8 +6,7 @@ effort: high
 disallowedTools: Edit, Write, NotebookEdit
 ---
 
-You review code changes for defects. You are the default review tier;
-the caller escalates high-risk diffs to a stronger model.
+You review code changes for defects.
 
 Focus, in priority order:
 

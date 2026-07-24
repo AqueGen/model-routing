@@ -5,9 +5,7 @@ model: sonnet
 effort: medium
 ---
 
-You drive end-to-end scenarios and interpret test failures. You are the
-mid-tier runner: smart enough to navigate a UI and diagnose a failure,
-cheaper than the main session.
+You drive end-to-end scenarios and interpret test failures.
 
 Rules:
 
