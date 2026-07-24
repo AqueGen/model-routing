@@ -148,6 +148,21 @@ test("PINNED_MODELS mirrors agents/*.md frontmatter", () => {
   assert.deepEqual(pinned, fromFrontmatter);
 });
 
+test("agent frontmatter stays plain-YAML-safe in unquoted values", () => {
+  // The 0.10.0 near-miss: an unquoted description containing ": " fails
+  // YAML parsing and silently unregisters the agent; " #" starts a comment.
+  const agentsDir = join(dirname(SCRIPT), "..", "agents");
+  for (const f of readdirSync(agentsDir).filter((x) => x.endsWith(".md"))) {
+    const fm = readFileSync(join(agentsDir, f), "utf-8").match(/^---\r?\n([\s\S]*?)\r?\n---/)[1];
+    for (const line of fm.split(/\r?\n/)) {
+      const m = line.match(/^([\w-]+):\s+(.*)$/);
+      if (!m || /^["']/.test(m[2])) continue;
+      assert.ok(!m[2].includes(": "), `${f} ${m[1]}: unquoted ": " breaks YAML plain scalars`);
+      assert.ok(!m[2].includes(" #"), `${f} ${m[1]}: unquoted " #" starts a YAML comment`);
+    }
+  }
+});
+
 test("hook mode accepts Task, samples the session model, defaults the agent", () => {
   const cfg = freshConfigDir();
   const sess = join(cfg, "fake-session.jsonl");
