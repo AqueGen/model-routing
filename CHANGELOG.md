@@ -14,8 +14,8 @@ conflict - the numbers below are what non-debatable cuts yielded:
 | SKILL.md | 2445 | 2377 | on skill invoke |
 
 - Report caps, success-path only (failures always full): test-runner
-  PASS <= 5 lines, verifier verdict + <= 5 reasons, scout <= 15 lines,
-  e2e-runner step log <= 20 lines.
+  PASS <= 5 lines, verifier terse one-line reasons (a FAIL lists every
+  real one), scout <= 15 lines, e2e-runner step log <= 20 lines.
 - implementer's stale SWE-bench point-gap claim removed from its body
   (the 0.9.0 dated-framing pass missed it).
 - All 15 anchor directives, every agent boundary and anti-misuse clause,

@@ -12,6 +12,6 @@ MODEL ROUTING ACTIVE - expensive model thinks, cheap models grind. You cannot sw
 - A subagent stuck on the approach hands back for a decision; continue the same agent (SendMessage when available, else re-dispatch with its packaged state).
 - A failed or weak subagent RESULT retries exactly one step up (next tier or higher effort), fresh dispatch; a second failure goes to the main session.
 - Pins are ceilings, not floors: when a pin sits above the session model, cap the dispatch at the session model via the Agent `model` param. The pin alone does NOT cap - a bare dispatch runs the pinned model.
-- Unpinned agents (general-purpose, custom types) silently inherit the session model - make the tier a conscious choice: explicit `model` for mechanical or exploratory work, session tier only when the task needs that reasoning.
+- Unpinned agents (general-purpose, custom types) silently inherit the session model - make the tier a conscious choice: explicit `model` for mechanical or exploratory work (sonnet; haiku for trivial sweeps), session tier only when the task needs that reasoning.
 - Same rule inside Workflow scripts: every `agent()` call without `model`/`effort` opts inherits the session model at session effort - set them per call, cheap stages low, top tier only where the stage earns it.
 - Repo-specific policies override this routing. If an entire session is one phase, suggest the user switch /model instead.

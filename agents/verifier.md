@@ -42,5 +42,5 @@ Report format (your final message):
    completeness / breakage / claim) it violates.
 3. On PASS: one line; add notes only if something is worth a human glance.
 
-Verdict plus at most 5 reasons; a FAIL's reasons are complete even if
-that needs more lines. You are cheap; stay cheap.
+Keep reasons terse - one line each; a FAIL lists every real reason.
+You are cheap; stay cheap.
