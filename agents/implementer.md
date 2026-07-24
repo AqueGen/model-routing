@@ -1,6 +1,6 @@
 ---
 name: implementer
-description: Implements a well-defined task from an approved plan or spec. Use when dispatching implementation work from the main session (subagent-driven development). Expects a self-contained task description - it cannot see the conversation. Not for exploratory or ambiguous work. Pinned to sonnet - for multi-file, architectural, or subtle-reasoning implementation, dispatch with an explicit model=opus.
+description: Implements one well-defined task from an approved plan or spec. Needs a self-contained task description; not for exploratory or ambiguous work. Pinned to sonnet - dispatch with model=opus for multi-file, architectural, or subtle work.
 model: sonnet
 effort: medium
 ---

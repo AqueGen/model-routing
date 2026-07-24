@@ -1,6 +1,6 @@
 ---
 name: e2e-runner
-description: Drives browser/E2E scenarios (Playwright etc.) and interprets test failures. Use for UI walkthroughs, E2E runs, flaky-test analysis, and "why did this test fail" questions. Costlier than test-runner - use test-runner for plain "run and report" tasks.
+description: Drives browser/E2E scenarios and interprets test failures (product bug vs test bug vs flake). Costlier than test-runner - use test-runner for plain run-and-report.
 model: sonnet
 effort: medium
 ---
