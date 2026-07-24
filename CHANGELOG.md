@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.10.0 - 2026-07-25
+
+Token diet: the plugin's own overhead cut with zero rule loss, plus
+success-path report caps. Budgets were soft and meaning won every
+conflict - the numbers below are what non-debatable cuts yielded:
+
+| Surface | Words before | after | Paid when |
+| ------- | ------------ | ----- | --------- |
+| routing anchor | 501 | 428 | every session start + every compact |
+| agent descriptions (6) | 278 | 173 | every session (agent list) |
+| agent files (6, incl. bodies) | 1870 | 1674 | per dispatch |
+| SKILL.md | 2445 | 2377 | on skill invoke |
+
+- Report caps, success-path only (failures always full): test-runner
+  PASS <= 5 lines, verifier verdict + <= 5 reasons, scout <= 15 lines,
+  e2e-runner step log <= 20 lines.
+- implementer's stale SWE-bench point-gap claim removed from its body
+  (the 0.9.0 dated-framing pass missed it).
+- All 15 anchor directives, every agent boundary and anti-misuse clause,
+  and every skill rule survived - the PR carries the rule-survival
+  matrix. No pin, config, or stats changes.
+
 ## 0.9.1 - 2026-07-25
 
 Effort-model correctness pass (docs only, no pin changes), verified
