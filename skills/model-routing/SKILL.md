@@ -28,36 +28,57 @@ of `max` and still clear a task that was never hard - a strong model
 thinking lightly often beats a weaker model thinking hard. Pick both:
 which model, and how hard it thinks.
 
+The full ladder is `low / medium / high / xhigh / max`. On current
+models the API default is `high` - an unset effort IS high effort, not
+medium - and Anthropic's quality-first guidance for Opus-class models
+starts coding and agentic work at `xhigh`. Both are model-dependent:
+`xhigh` is the newest level and absent on some models that support `max`
+(e.g. the 4.6 generation), and a future model may ship a different
+default - check the model's own docs when in doubt. This plugin tunes
+for cost instead: pins sit at the lowest level the task shape allows
+and step up on evidence (a weak result retries one step up). That
+deliberate step below the product default, wherever the task allows
+one, is where the effort savings come from.
+
 - **low** - mechanical or well-scoped work: exploration, renames, running
   tests, reading a diff for a known-shape change.
-- **medium** - normal implementation and review: real logic, but the
-  approach is already clear.
-- **high / max** - genuinely hard reasoning: architecture, subtle
-  debugging, high-risk final review, anything where a wrong approach is
-  expensive to unwind.
+- **medium** - normal implementation: real logic, but the approach is
+  already clear.
+- **high** - genuinely hard reasoning: architecture, subtle debugging,
+  high-risk final review, anything where a wrong approach is expensive
+  to unwind.
+- **xhigh** - long-horizon agentic or coding work (multi-hour runs, token
+  budgets in the millions) that genuinely earns the extra reasoning. In
+  this plugin that is a session-level or Workflow `effort` choice, never
+  an agent pin.
+- **max** - exceptional frontier-grade problems only, not a routine level
+  anywhere in this table.
 
-Match effort to task difficulty, not to tier. Reserve `high`/`max` for the
-few tasks that actually need it - most work is a `low`/`medium` task in
-disguise. Where effort is set: the bundled agents pin theirs in frontmatter
-(`effort:` field - overrides the session level for that agent); Workflow
-scripts take an `effort` option per `agent()` call; any other Agent
-dispatch inherits the session effort.
+Match effort to task difficulty, not to tier - most work is a
+`low`/`medium` task in disguise. Where effort is set: the bundled agents
+pin theirs in frontmatter (`effort:` field - overrides the session level
+for that agent); Workflow scripts take an `effort` option per `agent()`
+call; any other Agent dispatch inherits the session effort. The Agent
+tool has NO effort param, so dispatching a pinned agent with `model=opus`
+changes the model, not the effort - the frontmatter pin still applies.
 
 ## Routing table
 
 Each row carries a default effort - the second knob, tuned to the task,
 not the tier. For the bundled agents the effort is pinned in their
-frontmatter; the column documents it rather than asking the caller to set
-it:
+frontmatter; the column documents it rather than asking the caller to
+set it. For unpinned rows it is the target level, reached via the
+session effort or a Workflow `effort` opt - a plain Agent dispatch
+carries no effort param:
 
 | Task | Where | Agent / model | Effort |
 |------|-------|---------------|--------|
 | Planning, brainstorming, specs, docs, architecture | main session | strongest (user's /model choice) | high |
 | Codebase exploration ("where is X", "how does Y work") | subagent | `scout` (sonnet) | low |
 | Implementing an approved plan/spec (ordinary: single-file, clear shape) | subagent | `implementer` (sonnet) | medium |
-| Complex implementation: multi-file refactor, subtle concurrency/security | subagent | `implementer` with `model=opus` | medium-high |
+| Complex implementation: multi-file refactor, subtle concurrency/security | subagent | `implementer` with `model=opus` | medium (pinned) |
 | Trivial mechanical tasks: renames, boilerplate, mirrored constants | subagent | sonnet | low |
-| Small interactive edits, quick fixes | main session | strongest | low-medium |
+| Small interactive edits, quick fixes | main session | strongest | low |
 | Code review of implemented work | subagent | `reviewer` (opus) | high |
 | Final review of high-risk or large diffs | main session | strongest | high |
 | Run tests/builds/linters, report failures | subagent | `test-runner` (haiku) | low |
@@ -84,26 +105,35 @@ actually earns its cost:
   the plan already decided, that margin does not change the outcome, so
   sonnet stays the value default. Medium effort because the agent
   executes, it does not design.
-- **Complex implementation -> opus/medium-high, and escalate more readily
-  than before.** Opus 5 was a step-change over Opus 4.8 at UNCHANGED
+- **Complex implementation -> opus, still at the agent's pinned medium.**
+  The `model=opus` dispatch changes the MODEL only - the Agent tool has
+  no effort param, so implementer's frontmatter medium still applies; the
+  escalation buys the tier, not extra thinking. Escalate from sonnet when
+  any of these hold: the change is multi-file or cross-layer; it touches
+  security, money, data migrations, concurrency, protocols, or public
+  contracts; a sonnet attempt came back weak; or an E2E/visual result
+  needs hard interpretation. Ambiguity is NOT an escalation trigger but a
+  stop sign: implementer rejects ambiguous tasks by contract, so an
+  unclear task or root cause gets clarified in the main session (or
+  investigated via scout) first - then the well-defined task dispatches.
+  Opus 5 was a step-change over Opus 4.8 at UNCHANGED
   price ($5/$25), so the opus tier now buys strictly more per dollar than
-  when this table was tuned. Multi-file refactors, concurrency, and
-  security changes are where a wrong approach is expensive - when in
-  doubt between sonnet and opus for implementation, take opus.
+  when this table was tuned - when in doubt between sonnet and opus for
+  implementation, take opus.
 - **Review -> opus/high.** Review is one cheap pass guarding against
   expensive misses - an asymmetric bet where the strongest reasoning at
   high effort is worth it, because a bug that ships costs far more than
-  the review. Opus 5 review is both high-precision and high-recall and
-  stays accurate at lower effort, so high (not max/xhigh) remains the
-  sweet spot.
+  the review. Anthropic reports Opus 5 review quality holds at lower
+  effort, which makes medium a candidate for a future eval - the pin
+  stays at high until that is measured.
 - **Tests / verification -> haiku/low.** Running a command and
   summarizing output, or checking a diff matches its task, is mechanical.
   The cheapest tier at low effort suffices; the value is keeping raw
   output out of the main context, not the model doing it.
 - **Effort tracks task shape, not tier.** Low when the work is mechanical
   or the shape is known; medium when there is real logic but the approach
-  is clear; high/max only when a wrong approach is expensive to unwind
-  (architecture, subtle debugging, high-risk review). A strong model at
+  is clear; high and above only when a wrong approach is expensive to
+  unwind (architecture, subtle debugging, high-risk review). A strong model at
   low effort beats a weak model at high effort for a fraction of the cost,
   so effort is a real cost lever, not a formality. On the Opus 5
   generation this is amplified: low/medium effort punches well above its
