@@ -77,21 +77,25 @@ actually earns its cost:
   path is retrieval, not reasoning. A cheap model at low effort reads and
   reports as well as an expensive one; the cost is in the file volume,
   which stays in the subagent regardless of tier.
-- **Ordinary implementation -> sonnet/medium.** On SWE-bench Verified the
-  strongest tier leads sonnet by ~1-2 points (as of mid-2026: 80.8% vs
-  79.6%) while costing several times more. For single-file, clear-shape work that
-  margin does not change the outcome, so sonnet is the value default.
-  Medium effort because the approach is already decided by the plan - the
-  agent executes, it does not design.
-- **Complex implementation -> opus/medium-high.** Multi-file refactors,
-  concurrency, and security changes are exactly the cases where the 1-2
-  point SWE-bench gap becomes a wrong-approach-is-expensive gap. Here the
-  stronger tier's reasoning pays for itself; spend it deliberately, not by
-  default.
+- **Ordinary implementation -> sonnet/medium.** Sonnet is near-opus
+  quality on single-file, clear-shape coding at a fraction of the price
+  (as of the Opus 5 launch, July 2026: sonnet runs at intro pricing
+  through 2026-08-31, ~2.5x cheaper than opus). For work whose approach
+  the plan already decided, that margin does not change the outcome, so
+  sonnet stays the value default. Medium effort because the agent
+  executes, it does not design.
+- **Complex implementation -> opus/medium-high, and escalate more readily
+  than before.** Opus 5 was a step-change over Opus 4.8 at UNCHANGED
+  price ($5/$25), so the opus tier now buys strictly more per dollar than
+  when this table was tuned. Multi-file refactors, concurrency, and
+  security changes are where a wrong approach is expensive - when in
+  doubt between sonnet and opus for implementation, take opus.
 - **Review -> opus/high.** Review is one cheap pass guarding against
   expensive misses - an asymmetric bet where the strongest reasoning at
   high effort is worth it, because a bug that ships costs far more than
-  the review. This is the one place to prefer the top tier by default.
+  the review. Opus 5 review is both high-precision and high-recall and
+  stays accurate at lower effort, so high (not max/xhigh) remains the
+  sweet spot.
 - **Tests / verification -> haiku/low.** Running a command and
   summarizing output, or checking a diff matches its task, is mechanical.
   The cheapest tier at low effort suffices; the value is keeping raw
@@ -101,11 +105,23 @@ actually earns its cost:
   is clear; high/max only when a wrong approach is expensive to unwind
   (architecture, subtle debugging, high-risk review). A strong model at
   low effort beats a weak model at high effort for a fraction of the cost,
-  so effort is a real cost lever, not a formality.
+  so effort is a real cost lever, not a formality. On the Opus 5
+  generation this is amplified: low/medium effort punches well above its
+  weight, so when a dispatch feels too expensive, step the EFFORT down
+  before stepping the tier down - and when a result is too shallow, step
+  effort up before tier up.
 
 Research backing: task-type routing outperforms complexity-score routing
-(RouteLLM, ICLR 2025); SWE-bench Verified tier gaps confirm sonnet as the
-implementation default with opus reserved for the margin cases.
+(RouteLLM, ICLR 2025); benchmark tier gaps confirm sonnet as the
+implementation default with opus reserved for the margin cases - a margin
+the Opus 5 launch widened at unchanged opus pricing, which is why the
+escalation bar above sits lower than benchmarks alone would suggest.
+
+Model names in agent pins are FAMILY aliases (opus, sonnet, haiku), not
+versions - the harness resolves them to the current model of each family,
+so a generation jump (Opus 4.8 -> Opus 5) upgrades reviewer and every
+`model=opus` escalation automatically, with no plugin change. Verify what
+actually ran with `/model-routing:stats`.
 
 ## Rules
 
