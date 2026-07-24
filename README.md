@@ -259,26 +259,30 @@ task, not set together.
 | Situation | Model | Effort | Why this model | Why this effort |
 | --------- | ----- | ------ | -------------- | --------------- |
 | Exploration (`scout`) | sonnet | low | Finding and tracing code is retrieval, not reasoning - a cheap tier reports as well as a costly one, and the file volume stays in the subagent regardless. | The work is mechanical lookup; extra thinking buys nothing. |
-| Ordinary implementation (`implementer`) | sonnet | medium | SWE-bench Verified puts the top tier only ~1-2 points over sonnet (as of mid-2026: 80.8% vs 79.6%) at several times the cost - for single-file, clear-shape work that margin never changes the outcome. | The plan already decided the approach; the agent executes real logic, not design. |
-| Complex implementation (`implementer` `model=opus`) | opus | medium-high | Multi-file refactors, concurrency, and security are exactly where the 1-2 point gap turns into a wrong-approach-is-expensive gap; the stronger reasoning pays for itself. | Higher because the approach itself is part of the problem, not just the code. |
-| Code review (`reviewer`) | opus | high | Review is an asymmetric bet - one pass guards against a bug that costs far more if it ships, so it is the one place to prefer the top tier by default. | High: subtle correctness bugs hide from shallow reading. |
+| Ordinary implementation (`implementer`) | sonnet | medium | Sonnet is near-opus quality on single-file, clear-shape coding at a fraction of the price (intro pricing through 2026-08-31 makes it ~2.5x cheaper than opus) - for work whose approach the plan already decided, the margin never changes the outcome. | The plan already decided the approach; the agent executes real logic, not design. |
+| Complex implementation (`implementer` `model=opus`) | opus | medium-high | Multi-file refactors, concurrency, and security are where a wrong approach is expensive - and Opus 5 stepped the tier up at UNCHANGED price, so escalate when in doubt; the escalation buys strictly more per dollar than when this table was first tuned. | Higher because the approach itself is part of the problem, not just the code. |
+| Code review (`reviewer`) | opus | high | Review is an asymmetric bet - one pass guards against a bug that costs far more if it ships, so it is the one place to prefer the top tier by default. Opus 5 review is high-precision AND high-recall and stays accurate at lower effort. | High: subtle correctness bugs hide from shallow reading; max/xhigh buys little here. |
 | Tests / builds (`test-runner`) | haiku | low | Running a command and summarizing output is mechanical; the value is keeping raw logs out of the main context, not the model doing it. | Low: no reasoning, just report. |
 | Diff sanity gate (`verifier`) | haiku | low | Checking a diff matches its task (scope, completeness, obvious breakage) is a cheap spot-check, not a quality judgment. | Low: pattern-matching against the task, not deep analysis. |
 | E2E / failure interpretation (`e2e-runner`) | sonnet | medium | Driving a browser and telling a product bug from a flake needs some judgment, but not top-tier reasoning. | Medium: real interpretation, clear method. |
 | Planning, architecture, high-risk final review | main session (strongest) | high | These set the direction everything else follows - the one place raw capability changes the outcome most. | High: a wrong call here is the most expensive kind to unwind. |
 
 Research backing: task-type routing beats complexity-score routing
-([RouteLLM, ICLR 2025](https://arxiv.org/pdf/2406.18665)); the sonnet-vs-top-tier
-[SWE-bench Verified](https://www.swebench.com) margin is what makes sonnet
+([RouteLLM, ICLR 2025](https://arxiv.org/pdf/2406.18665)); the
+sonnet-vs-opus tier gap on benchmarks such as
+[SWE-bench Verified](https://www.swebench.com) is what makes sonnet
 the implementation default with opus reserved for the margin cases; the
 20% rework threshold the dispatch report warns on comes from coding-agent
 routing practice
 ([Augment](https://www.augmentcode.com/guides/ai-model-routing-guide)) -
 if a routed-down tier needs rework more than ~1 time in 5, the price edge
 is gone and that task type should route up. Benchmark numbers are a
-snapshot (mid-2026) and shift with every release; the principle - a small
-tier gap on ordinary work, a decisive one on hard work - has held across
-generations.
+snapshot (last reviewed July 2026, at the
+[Opus 5 launch](https://www.anthropic.com/news/claude-opus-5)) and shift
+with every release; the principle - a small tier gap on ordinary work, a
+decisive one on hard work - has held across generations, with one
+refinement per generation: when a new top-of-family ships at unchanged
+price (Opus 5 did), the escalation bar drops, not the default tier.
 
 The overall shape - one strong orchestrator delegating scoped tasks to
 cheaper workers and consuming their compact reports - is the
@@ -313,6 +317,15 @@ coordination, and final review. That makes the balanced default:
 Rule of thumb: pick the session tier for the *hardest thing you keep in
 the main session*, not for the average task - the average task gets routed
 down anyway.
+
+Generation jumps are free: agent pins name model FAMILIES (opus, sonnet,
+haiku), so when a new family member ships (Opus 4.8 -> Opus 5 at the same
+price), reviewer and every `model=opus` escalation upgrade automatically -
+no plugin update, no config change. `/model-routing:stats` shows which
+models actually ran. One behavioral note for Opus 5 sessions: the model
+delegates to subagents more readily than its predecessors, which makes
+the conscious-tier rule (explicit `model=` on unpinned dispatches) more
+load-bearing, not less - watch the tier-leak line in the report.
 
 Fallback down the tier ladder when your primary model hits its quota
 (`~/.claude/settings.json`):

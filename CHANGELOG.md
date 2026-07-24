@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.9.0 - 2026-07-24
+
+Opus 5 research pass. No pin changes - and that is the point: pins name
+model FAMILIES, so reviewer and every `model=opus` escalation already
+resolve to Opus 5 automatically, and the tier ladder in the dispatch
+counter already ranks it (family regex). What changed is the guidance:
+
+- Escalation bar lowered: Opus 5 is a step-change over Opus 4.8 at
+  UNCHANGED price ($5/$25), so "when in doubt between sonnet and opus for
+  implementation, take opus" replaces the old strictly-marginal framing.
+  Sonnet stays the ordinary-implementation default (near-opus on
+  clear-shape coding; intro pricing ~2.5x cheaper through 2026-08-31).
+- Effort guidance: on the Opus 5 generation low/medium punch above their
+  weight - step EFFORT down before stepping tier down when a dispatch
+  feels expensive, effort up before tier up when a result is shallow.
+  Reviewer stays opus/high (Opus 5 review is precise AND high-recall and
+  stays accurate at lower effort; max/xhigh buys little).
+- Stale benchmark snapshot (mid-2026 SWE-bench point-gap numbers) replaced
+  with dated Opus-5-launch framing; family-alias auto-upgrade documented
+  in README and skill.
+- Opus 5 sessions delegate to subagents more readily - README notes the
+  conscious-tier rule and tier-leak line matter more, not less.
+
 ## 0.8.2 - 2026-07-20
 
 - README charts are now a dated, versioned snapshot ("2026-07-20,
