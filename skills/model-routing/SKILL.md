@@ -268,17 +268,22 @@ what changes cost there.
   the `CLAUDE_CODE_SUBAGENT_MODEL` env var overrides both the script
   opt and the session model.
 - **Granularity is saved progress.** On resume, completed agents return
-  cached results, but an agent still running when the run stopped is not
-  persisted and starts over. Many small agents survive a pause better
-  than one long one. Resume works only within the same Claude Code
-  session - quit and the run starts from scratch.
+  cached results - but replay follows start order: caching stops at the
+  first agent that did not finish, and every agent that started after it
+  runs again even if it completed. Stopping mid fan-out is therefore
+  expensive, and many small agents survive a pause better than one long
+  one. Resume works only within the same Claude Code session - quit and
+  the run starts from scratch.
 - **Size guideline first.** The Dynamic workflow size setting in
-  `/config` defaults to `unrestricted`. Setting it (`small` <5 agents,
-  `medium` <15, `large` <50) targets a fan-out before a run starts - it
-  is a guideline, so a prompt that genuinely needs more scale still
-  overrides it. Cheapest lever available, but pick the direction
-  deliberately: `small` and `medium` also tighten the `Large workflow`
-  warning, while `large` loosens it to 50.
+  `/config` defaults to `medium` (under 15 agents) as of Claude Code
+  2.1.219; older versions defaulted to `unrestricted`. Choosing a value
+  (`small` <5, `medium` <15, `large` <50) targets a fan-out before a run
+  starts - it is advice, not a cap, so a prompt that calls for a
+  different scale still overrides it. Cheapest lever available, but pick
+  the direction deliberately: choosing a value also moves the `Large
+  workflow` warning to that agent count, so `small` warns earlier and
+  `large` warns later, at 50. Leaving the default in place keeps the
+  warning at 25.
 - **Thresholds and limits.** A run is flagged `Large workflow` above 25
   agents or a projected 1.5M tokens; a configured size guideline
   replaces the 25-agent threshold, and ultracode sessions suppress the

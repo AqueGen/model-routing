@@ -24,15 +24,16 @@ hook, or stats changes.
 - New `## Workflows` chapter in the skill: the breadth-vs-chain boundary,
   per-stage routing with `CLAUDE_CODE_SUBAGENT_MODEL` precedence,
   granularity as saved progress on resume, the `/config` size guideline
-  (default `unrestricted`), the 25-agent / 1.5M-token warning and the
-  16-concurrent / 1000-total runtime caps, and the `acceptEdits`
-  permission note for workflow subagents. The `## Rules` bullet that
-  restated part of this is now a pointer at the chapter.
+  (default `medium` since Claude Code 2.1.219), the 25-agent /
+  1.5M-token warning and the 16-concurrent / 1000-total runtime caps,
+  and the `acceptEdits` permission note for workflow subagents. The
+  `## Rules` bullet that restated part of this is now a pointer at
+  the chapter.
 - README: workflow cost settings and the ultracode stance in Recommended
   settings; the 0.10.0 report caps now cite the 1,000-2,000 token
   subagent-summary shape; the old "Workflow use" section is renamed
   "Superpowers flow" so the word "workflow" means one thing.
-- SKILL.md grew 2377 -> 2904 words. Deliberate: the skill is charged per
+- SKILL.md grew 2377 -> 2959 words. Deliberate: the skill is charged per
   invoke, and the routing anchor - charged every session - was not
   touched.
 

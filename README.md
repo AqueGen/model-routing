@@ -402,14 +402,17 @@ good lazy default:
 A workflow run spawns subagents per stage, so its cost scales with
 fan-out rather than with your session. Two settings decide most of it:
 
-- **Dynamic workflow size** in `/config` defaults to `unrestricted`.
-  Set it - `small` targets under 5 agents, `medium` under 15, `large`
-  under 50. It caps the fan-out before a run starts, needs no plugin,
-  and a prompt that genuinely needs more scale still overrides it. A
-  configured guideline also replaces the built-in 25-agent threshold for
-  the `Large workflow` warning (the other trigger, a projected 1.5M
-  tokens, stays) - which cuts both ways: `small` and `medium` warn
-  earlier than the default, `large` warns later, at 50.
+- **Dynamic workflow size** in `/config` defaults to `medium` (under 15
+  agents) on Claude Code 2.1.219 and later; older versions defaulted to
+  `unrestricted`. The values are `small` under 5, `medium` under 15,
+  `large` under 50. It steers the fan-out before a run starts and needs
+  no plugin - but it is advice, not a cap: a prompt that calls for a
+  different scale still overrides it, and the runtime caps (16
+  concurrent, 1000 per run) are the only hard limits. Choosing a value
+  yourself also moves the `Large workflow` warning to that agent count
+  (the other trigger, a projected 1.5M tokens, stays), which cuts both
+  ways: `small` warns earlier, `large` warns later, at 50. Leaving the
+  default in place keeps the warning at 25.
 - **Ultracode** (`/effort ultracode`) is the deliberate opposite:
   `xhigh` effort plus automatic workflow planning for every substantial
   task, and it suppresses the large-run warning because switching it on
