@@ -242,15 +242,52 @@ actually ran with `/model-routing:stats`.
   The failure mode this rule kills is *accidental* inheritance, not
   top-tier usage.
 - The same rule applies inside Workflow scripts, where it is easiest to
-  forget: every `agent()` call without explicit `model`/`effort` opts
-  inherits the session model at session effort, multiplied by the fan-out.
-  Set both per call - finder/mechanical stages cheap and low, verify/judge
-  stages a tier up only when the stage earns it. A 50-agent workflow with
+  forget and where the fan-out multiplies it - a 50-agent workflow with
   one forgotten `model` opt costs more than every other routing decision
-  in the session combined.
+  in the session combined. See **Workflows** below for the full set.
 - If an entire session is one phase (pure implementation), suggest the
   user switch /model instead of delegating everything - a session on the
   right model beats a swarm of subagents.
+
+## Workflows
+
+Dynamic workflows are the other place routing happens: a script the
+runtime executes, spawning subagents per stage. The rules below are
+what changes cost there.
+
+- **Boundary.** Workflows are for breadth - auditing many files for one
+  issue, a migration across hundreds of files, cross-checking research,
+  looping until a check passes. An ordinary multi-step task stays a
+  dispatch chain: a workflow run can cost substantially more than
+  working the same task in conversation.
+- **Per-stage routing.** Every `agent()` call without `model`/`effort`
+  opts inherits the session model at session effort, multiplied by the
+  fan-out. Mechanical finder stages get an explicit cheap model and
+  `effort: low`; a tier up only where the stage earns it. Precedence:
+  the `CLAUDE_CODE_SUBAGENT_MODEL` env var overrides both the script
+  opt and the session model.
+- **Granularity is saved progress.** On resume, completed agents return
+  cached results, but an agent still running when the run stopped is not
+  persisted and starts over. Many small agents survive a pause better
+  than one long one. Resume works only within the same Claude Code
+  session - quit and the run starts from scratch.
+- **Size guideline first.** The Dynamic workflow size setting in
+  `/config` defaults to `unrestricted`. Setting it (`small` <5 agents,
+  `medium` <15, `large` <50) caps fan-out before a run starts. It is the
+  cheapest lever available and costs nothing to use.
+- **Thresholds and limits.** A run is flagged `Large workflow` above 25
+  agents or a projected 1.5M tokens; a configured size guideline
+  replaces the 25-agent threshold, and ultracode sessions suppress the
+  warning entirely. The runtime caps a run at 16 concurrent agents and
+  1000 agents total.
+- **Permissions.** Workflow subagents always run in `acceptEdits` and
+  inherit the allowlist regardless of the session's permission mode -
+  file edits are auto-approved. A broad allowlist therefore applies to
+  every agent in the fan-out, not just the one you would have watched.
+
+Under ultracode (`/effort ultracode` - `xhigh` effort plus automatic
+workflow planning), these rules still apply: fan-out is already
+consented to, so the savings come from making each node cheap.
 
 ## Complementary settings
 
