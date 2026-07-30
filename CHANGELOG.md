@@ -10,7 +10,7 @@ hook, or stats changes.
   work at `xhigh`. That is the Opus 4.7/4.8 recommendation. Opus 5 is told
   to start at `high`, step up to `xhigh` for demanding coding and agentic
   work, and use `low`/`medium` liberally as the primary cost control - the
-  generation this plugin has targeted since 0.9.1. The text now names which
+  generation this plugin has targeted since 0.9.0. The text now names which
   generation each recommendation belongs to and says to re-sweep effort
   after a model change.
 - Effort is documented as shaping all response tokens, tool calls
@@ -33,7 +33,7 @@ hook, or stats changes.
   settings; the 0.10.0 report caps now cite the 1,000-2,000 token
   subagent-summary shape; the old "Workflow use" section is renamed
   "Superpowers flow" so the word "workflow" means one thing.
-- SKILL.md grew 2377 -> 2959 words. Deliberate: the skill is charged per
+- SKILL.md grew 2377 -> 2973 words. Deliberate: the skill is charged per
   invoke, and the routing anchor - charged every session - was not
   touched.
 

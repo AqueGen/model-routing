@@ -280,10 +280,11 @@ what changes cost there.
   (`small` <5, `medium` <15, `large` <50) targets a fan-out before a run
   starts - it is advice, not a cap, so a prompt that calls for a
   different scale still overrides it. Cheapest lever available, but pick
-  the direction deliberately: choosing a value also moves the `Large
-  workflow` warning to that agent count, so `small` warns earlier and
-  `large` warns later, at 50. Leaving the default in place keeps the
-  warning at 25.
+  the direction deliberately: actively choosing a value also moves the
+  `Large workflow` warning to that agent count, so `small` warns earlier
+  and `large` warns later, at 50. The warning tracks the choice, not the
+  value - an untouched setting keeps the warning at 25 even though its
+  value is `medium`.
 - **Thresholds and limits.** A run is flagged `Large workflow` above 25
   agents or a projected 1.5M tokens; a configured size guideline
   replaces the 25-agent threshold, and ultracode sessions suppress the

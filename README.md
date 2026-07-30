@@ -268,10 +268,12 @@ earns its cost (the knobs themselves:
 | E2E / failure interpretation (`e2e-runner`) | sonnet | medium | Driving a browser and telling a product bug from a flake needs some judgment, but not top-tier reasoning. | Medium: real interpretation, clear method. |
 | Planning, architecture, high-risk final review | main session (strongest) | high | These set the direction everything else follows - the one place raw capability changes the outcome most. | High: a wrong call here is the most expensive kind to unwind. |
 
-The 0.10.0 report caps follow the same accounting. Anthropic's own
-context-engineering guidance describes the shape a subagent should have:
-it may spend tens of thousands of tokens exploring and return a distilled
-summary of roughly 1,000-2,000 tokens. The caps (test-runner PASS <= 5
+The 0.10.0 report caps follow the same accounting. [Anthropic's own
+context-engineering
+guidance](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+describes the shape a subagent should have: it may spend tens of
+thousands of tokens exploring and return a distilled summary of
+roughly 1,000-2,000 tokens. The caps (test-runner PASS <= 5
 lines, scout <= 15, e2e step log <= 20) are that principle applied to a
 success path - failures are never truncated, because a failure IS the
 high-signal content.
@@ -330,11 +332,13 @@ session-model choice, not a dispatch target.
 The effort ladder - the second knob. Unset effort means `high` on
 current models (not medium), and `xhigh` is absent on some models that
 support `max` (e.g. the 4.6 generation). The vendor recommendation is
-per-generation: Opus 4.7 and 4.8 start coding and agentic work at
-`xhigh`, while Opus 5 starts at `high`, steps up to `xhigh` for
-demanding coding and agentic work, and treats `low` and `medium` as the
-primary cost control. The pins below are this plugin's cost-first
-reading of that: start low, step up on evidence.
+per-generation ([effort
+reference](https://platform.claude.com/docs/en/build-with-claude/effort)):
+Opus 4.7 and 4.8 start coding and agentic work at `xhigh`, while Opus 5
+starts at `high`, steps up to `xhigh` for demanding coding and agentic
+work, and treats `low` and `medium` as the primary cost control. The
+pins below are this plugin's cost-first reading of that: start low,
+step up on evidence.
 
 | Effort | What it buys | Where the plugin uses it |
 | ------ | ------------ | ------------------------ |
@@ -400,7 +404,8 @@ good lazy default:
 ### Dynamic workflows
 
 A workflow run spawns subagents per stage, so its cost scales with
-fan-out rather than with your session. Two settings decide most of it:
+fan-out rather than with your session. Two settings decide most of it
+([dynamic workflows](https://code.claude.com/docs/en/workflows)):
 
 - **Dynamic workflow size** in `/config` defaults to `medium` (under 15
   agents) on Claude Code 2.1.219 and later; older versions defaulted to
@@ -411,8 +416,9 @@ fan-out rather than with your session. Two settings decide most of it:
   concurrent, 1000 per run) are the only hard limits. Choosing a value
   yourself also moves the `Large workflow` warning to that agent count
   (the other trigger, a projected 1.5M tokens, stays), which cuts both
-  ways: `small` warns earlier, `large` warns later, at 50. Leaving the
-  default in place keeps the warning at 25.
+  ways: `small` warns earlier, `large` warns later, at 50. The warning
+  tracks the choice, not the value: leave the setting untouched and it
+  stays at 25, even though the default value is `medium`.
 - **Ultracode** (`/effort ultracode`) is the deliberate opposite:
   `xhigh` effort plus automatic workflow planning for every substantial
   task, and it suppresses the large-run warning because switching it on
