@@ -25,8 +25,8 @@ gateway, no ToS gray zones.
 **Quick links:** [Overview](#whats-inside) | [Example](#example) |
 [Install](#install) | [Getting started](#getting-started) |
 [Usage](#usage) | [Tiers](#model-tiers-and-effort-ladder) |
-[Settings](#recommended-settings) | [Stats](#dispatch-counter) |
-[Pin overrides](#overriding-pins)
+[Settings](#recommended-settings) | [Workflows](#dynamic-workflows) |
+[Stats](#dispatch-counter) | [Pin overrides](#overriding-pins)
 
 ## What's inside
 
@@ -196,7 +196,7 @@ For local development: clone the repo and
    The main session spends tokens only on planning, decisions, final
    review of high-risk diffs, and reading the agents' short reports.
 
-### Workflow use (brainstorm - plan - execute)
+### Superpowers flow (brainstorm - plan - execute)
 
 Works with any plan-driven workflow (superpowers or similar):
 
@@ -267,6 +267,14 @@ earns its cost (the knobs themselves:
 | Diff sanity gate (`verifier`) | haiku | low | Checking a diff matches its task (scope, completeness, obvious breakage) is a cheap spot-check, not a quality judgment. | Low: pattern-matching against the task, not deep analysis. |
 | E2E / failure interpretation (`e2e-runner`) | sonnet | medium | Driving a browser and telling a product bug from a flake needs some judgment, but not top-tier reasoning. | Medium: real interpretation, clear method. |
 | Planning, architecture, high-risk final review | main session (strongest) | high | These set the direction everything else follows - the one place raw capability changes the outcome most. | High: a wrong call here is the most expensive kind to unwind. |
+
+The 0.10.0 report caps follow the same accounting. Anthropic's own
+context-engineering guidance describes the shape a subagent should have:
+it may spend tens of thousands of tokens exploring and return a distilled
+summary of roughly 1,000-2,000 tokens. The caps (test-runner PASS <= 5
+lines, scout <= 15, e2e step log <= 20) are that principle applied to a
+success path - failures are never truncated, because a failure IS the
+high-signal content.
 
 Research backing: task-type routing beats complexity-score routing
 ([RouteLLM, ICLR 2025](https://arxiv.org/pdf/2406.18665)); the
@@ -386,6 +394,30 @@ good lazy default:
 ```
 
 (Opus plans, Sonnet executes - no plugin needed.)
+
+### Dynamic workflows
+
+A workflow run spawns subagents per stage, so its cost scales with
+fan-out rather than with your session. Two settings decide most of it:
+
+- **Dynamic workflow size** in `/config` defaults to `unrestricted`.
+  Set it - `small` targets under 5 agents, `medium` under 15, `large`
+  under 50. It caps the fan-out before a run starts, needs no plugin,
+  and a prompt that genuinely needs more scale still overrides it. A
+  configured guideline also replaces the built-in 25-agent threshold for
+  the `Large workflow` warning (the other trigger, a projected 1.5M
+  tokens, stays).
+- **Ultracode** (`/effort ultracode`) is the deliberate opposite:
+  `xhigh` effort plus automatic workflow planning for every substantial
+  task, and it suppresses the large-run warning because switching it on
+  already consents to large runs. This plugin does not fight it. What
+  changes is where the savings come from: with fan-out consented to,
+  set `model`/`effort` per `agent()` call so each node is cheap, instead
+  of trying to keep the fan-out small.
+
+Inside a script, every `agent()` call without `model`/`effort` opts
+inherits the session model at session effort - see the skill's Workflows
+chapter for the full set of rules.
 
 ## Dispatch counter
 
