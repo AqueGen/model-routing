@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.11.0 - 2026-07-30
+
+Effort accuracy fix plus a Workflows chapter. Docs only - no pin, config,
+hook, or stats changes.
+
+- **Corrected a stale claim**: the skill stated that Anthropic's
+  quality-first guidance for Opus-class models starts coding and agentic
+  work at `xhigh`. That is the Opus 4.7/4.8 recommendation. Opus 5 is told
+  to start at `high` and to use `low`/`medium` liberally as the primary
+  cost control - the generation this plugin has targeted since 0.9.1. The
+  text now names which generation each recommendation belongs to and says
+  to re-sweep effort after a model change.
+- Effort is documented as shaping all response tokens, tool calls
+  included: at lower effort the model makes fewer tool calls, so a cheap
+  pin saves twice. `low`'s own documented use case is subagents.
+- Sonnet 5 at `medium` is comparable to Sonnet 4.6 at `high` - stated next
+  to the sonnet/medium pins, which that comparison justifies.
+- Prompt-cache caveat: changing effort between requests invalidates the
+  cached prefix, so effort should vary across workloads (per-agent pins,
+  per-`agent()` opts) rather than inside one conversation.
+- New `## Workflows` chapter in the skill: the breadth-vs-chain boundary,
+  per-stage routing with `CLAUDE_CODE_SUBAGENT_MODEL` precedence,
+  granularity as saved progress on resume, the `/config` size guideline
+  (default `unrestricted`), the 25-agent / 1.5M-token warning and the
+  16-concurrent / 1000-total runtime caps, and the `acceptEdits`
+  permission note for workflow subagents. The `## Rules` bullet that
+  restated part of this is now a pointer at the chapter.
+- README: workflow cost settings and the ultracode stance in Recommended
+  settings; the 0.10.0 report caps now cite the 1,000-2,000 token
+  subagent-summary shape; the old "Workflow use" section is renamed
+  "Superpowers flow" so the word "workflow" means one thing.
+- SKILL.md grew 2377 -> 2852 words. Deliberate: the skill is charged per
+  invoke, and the routing anchor - charged every session - was not
+  touched.
+
 ## 0.10.0 - 2026-07-25
 
 Token diet: the plugin's own overhead cut with zero rule loss, plus
