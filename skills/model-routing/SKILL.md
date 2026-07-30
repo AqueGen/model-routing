@@ -30,20 +30,31 @@ which model, and how hard it thinks.
 
 The full ladder is `low / medium / high / xhigh / max`. On current
 models the API default is `high` - an unset effort IS high effort, not
-medium - and Anthropic's quality-first guidance for Opus-class models
-starts coding and agentic work at `xhigh`. Both are model-dependent:
-`xhigh` is the newest level and absent on some models that support `max`
-(e.g. the 4.6 generation), and a future model may ship a different
-default - check the model's own docs when in doubt. This plugin tunes
-for cost instead: pins sit at the lowest level the task shape allows
-and step up on evidence (a weak result retries one step up). That
-deliberate step below the product default, wherever the task allows
-one, is where the effort savings come from.
+medium. The per-model recommendation moves with the generation: Opus
+4.7 and 4.8 are told to start coding and agentic work at `xhigh`, while
+Opus 5 is told to start at `high` and to use `low` and `medium`
+liberally as the primary control for token cost and response time
+wherever evals show quality holds. `xhigh` is also the newest level and
+absent on some models that support `max` (e.g. the 4.6 generation), so
+check the model's own docs when in doubt - and re-sweep effort on your
+own evals after a model change instead of carrying old settings across
+generations. This plugin tunes for cost: pins sit at the lowest level
+the task shape allows and step up on evidence (a weak result retries
+one step up). That deliberate step below the product default, wherever
+the task allows one, is where the effort savings come from.
+
+Effort is not only thinking depth - it shapes every token in the
+response, tool calls included. At lower effort the model folds
+operations into fewer tool calls and skips preamble, so a cheap pin
+saves twice: less reasoning AND fewer round trips. Anthropic's own
+example use case for `low` is subagents.
 
 - **low** - mechanical or well-scoped work: exploration, renames, running
   tests, reading a diff for a known-shape change.
 - **medium** - normal implementation: real logic, but the approach is
-  already clear.
+  already clear. On Sonnet 5 this level is described as comparable to
+  Sonnet 4.6 at `high` - the sonnet/medium pins are not a downgrade to
+  last year's quality.
 - **high** - genuinely hard reasoning: architecture, subtle debugging,
   high-risk final review, anything where a wrong approach is expensive
   to unwind.
@@ -61,6 +72,10 @@ for that agent); Workflow scripts take an `effort` option per `agent()`
 call; any other Agent dispatch inherits the session effort. The Agent
 tool has NO effort param, so dispatching a pinned agent with `model=opus`
 changes the model, not the effort - the frontmatter pin still applies.
+Vary effort across workloads, not inside one conversation: changing the
+effort value between requests invalidates the cached prompt prefix, so
+per-agent pins and per-`agent()` opts - each with its own context - are
+the cache-safe way to differ.
 
 ## Routing table
 
