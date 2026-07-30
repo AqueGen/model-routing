@@ -30,20 +30,32 @@ which model, and how hard it thinks.
 
 The full ladder is `low / medium / high / xhigh / max`. On current
 models the API default is `high` - an unset effort IS high effort, not
-medium - and Anthropic's quality-first guidance for Opus-class models
-starts coding and agentic work at `xhigh`. Both are model-dependent:
-`xhigh` is the newest level and absent on some models that support `max`
-(e.g. the 4.6 generation), and a future model may ship a different
-default - check the model's own docs when in doubt. This plugin tunes
-for cost instead: pins sit at the lowest level the task shape allows
-and step up on evidence (a weak result retries one step up). That
-deliberate step below the product default, wherever the task allows
-one, is where the effort savings come from.
+medium. The per-model recommendation moves with the generation: Opus
+4.7 and 4.8 are told to start coding and agentic work at `xhigh`, while
+Opus 5 is told to start at `high`, step up to `xhigh` for demanding
+coding and agentic work, and use `low` and `medium` liberally as the
+primary control for token cost and response time wherever evals show
+quality holds. The step down got cheaper, not the step up. `xhigh` is
+also the newest level and absent on some models that support `max`
+(e.g. the 4.6 generation), so check the model's own docs when in doubt -
+and re-sweep effort on your own evals after a model change instead of
+carrying old settings across generations. This plugin tunes for cost: pins sit at the lowest level
+the task shape allows and step up on evidence (a weak result retries
+one step up). That deliberate step below the product default, wherever
+the task allows one, is where the effort savings come from.
+
+Effort is not only thinking depth - it shapes every token in the
+response, tool calls included. At lower effort the model folds
+operations into fewer tool calls and skips preamble, so a cheap pin
+saves twice: less reasoning AND fewer round trips. Anthropic's own
+example use case for `low` is subagents.
 
 - **low** - mechanical or well-scoped work: exploration, renames, running
   tests, reading a diff for a known-shape change.
 - **medium** - normal implementation: real logic, but the approach is
-  already clear.
+  already clear. On Sonnet 5 this level is described as comparable to
+  Sonnet 4.6 at `high` - the sonnet/medium pins are not a downgrade to
+  last year's quality.
 - **high** - genuinely hard reasoning: architecture, subtle debugging,
   high-risk final review, anything where a wrong approach is expensive
   to unwind.
@@ -61,6 +73,10 @@ for that agent); Workflow scripts take an `effort` option per `agent()`
 call; any other Agent dispatch inherits the session effort. The Agent
 tool has NO effort param, so dispatching a pinned agent with `model=opus`
 changes the model, not the effort - the frontmatter pin still applies.
+Vary effort across workloads, not inside one conversation: changing the
+effort value between requests invalidates the cached prompt prefix, so
+per-agent pins and per-`agent()` opts - each with its own context - are
+the cache-safe way to differ.
 
 ## Routing table
 
@@ -227,15 +243,61 @@ actually ran with `/model-routing:stats`.
   The failure mode this rule kills is *accidental* inheritance, not
   top-tier usage.
 - The same rule applies inside Workflow scripts, where it is easiest to
-  forget: every `agent()` call without explicit `model`/`effort` opts
-  inherits the session model at session effort, multiplied by the fan-out.
-  Set both per call - finder/mechanical stages cheap and low, verify/judge
-  stages a tier up only when the stage earns it. A 50-agent workflow with
+  forget and where the fan-out multiplies it - a 50-agent workflow with
   one forgotten `model` opt costs more than every other routing decision
-  in the session combined.
+  in the session combined. See **Workflows** below for the full set.
 - If an entire session is one phase (pure implementation), suggest the
   user switch /model instead of delegating everything - a session on the
   right model beats a swarm of subagents.
+
+## Workflows
+
+Dynamic workflows are the other place routing happens: a script the
+runtime executes, spawning subagents per stage. The rules below are
+what changes cost there.
+
+- **Boundary.** Workflows are for breadth - auditing many files for one
+  issue, a migration across hundreds of files, cross-checking research,
+  looping until a check passes. An ordinary multi-step task stays a
+  dispatch chain: a workflow run can cost substantially more than
+  working the same task in conversation.
+- **Per-stage routing.** Every `agent()` call without `model`/`effort`
+  opts inherits the session model at session effort, multiplied by the
+  fan-out. Mechanical finder stages get an explicit cheap model and
+  `effort: low`; a tier up only where the stage earns it. Precedence:
+  the `CLAUDE_CODE_SUBAGENT_MODEL` env var overrides both the script
+  opt and the session model.
+- **Granularity is saved progress.** On resume, completed agents return
+  cached results - but replay follows start order: caching stops at the
+  first agent that did not finish, and every agent that started after it
+  runs again even if it completed. Stopping mid fan-out is therefore
+  expensive, and many small agents survive a pause better than one long
+  one. Resume works only within the same Claude Code session - quit and
+  the run starts from scratch.
+- **Size guideline first.** The Dynamic workflow size setting in
+  `/config` defaults to `medium` (under 15 agents) as of Claude Code
+  2.1.219; older versions defaulted to `unrestricted`. Choosing a value
+  (`small` <5, `medium` <15, `large` <50) targets a fan-out before a run
+  starts - it is advice, not a cap, so a prompt that calls for a
+  different scale still overrides it. Cheapest lever available, but pick
+  the direction deliberately: actively choosing a value also moves the
+  `Large workflow` warning to that agent count, so `small` warns earlier
+  and `large` warns later, at 50. The warning tracks the choice, not the
+  value - an untouched setting keeps the warning at 25 even though its
+  value is `medium`.
+- **Thresholds and limits.** A run is flagged `Large workflow` above 25
+  agents or a projected 1.5M tokens; a configured size guideline
+  replaces the 25-agent threshold, and ultracode sessions suppress the
+  warning entirely. The runtime caps a run at 16 concurrent agents and
+  1000 agents total.
+- **Permissions.** Workflow subagents always run in `acceptEdits` and
+  inherit the allowlist regardless of the session's permission mode -
+  file edits are auto-approved. A broad allowlist therefore applies to
+  every agent in the fan-out, not just the one you would have watched.
+
+Under ultracode (not a sixth effort level but a mode: `xhigh` plus
+automatic workflow planning), these rules still apply - fan-out is
+already consented to, so the savings come from making each node cheap.
 
 ## Complementary settings
 

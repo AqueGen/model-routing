@@ -25,8 +25,8 @@ gateway, no ToS gray zones.
 **Quick links:** [Overview](#whats-inside) | [Example](#example) |
 [Install](#install) | [Getting started](#getting-started) |
 [Usage](#usage) | [Tiers](#model-tiers-and-effort-ladder) |
-[Settings](#recommended-settings) | [Stats](#dispatch-counter) |
-[Pin overrides](#overriding-pins)
+[Settings](#recommended-settings) | [Workflows](#dynamic-workflows) |
+[Stats](#dispatch-counter) | [Pin overrides](#overriding-pins)
 
 ## What's inside
 
@@ -196,9 +196,9 @@ For local development: clone the repo and
    The main session spends tokens only on planning, decisions, final
    review of high-risk diffs, and reading the agents' short reports.
 
-### Workflow use (brainstorm - plan - execute)
+### Superpowers flow (brainstorm - plan - execute)
 
-Works with any plan-driven workflow (superpowers or similar):
+Works with any plan-driven process (superpowers or similar):
 
 1. Brainstorming and plan-writing stay in the main session on the
    strongest model - protecting this thinking is the point of the
@@ -268,6 +268,16 @@ earns its cost (the knobs themselves:
 | E2E / failure interpretation (`e2e-runner`) | sonnet | medium | Driving a browser and telling a product bug from a flake needs some judgment, but not top-tier reasoning. | Medium: real interpretation, clear method. |
 | Planning, architecture, high-risk final review | main session (strongest) | high | These set the direction everything else follows - the one place raw capability changes the outcome most. | High: a wrong call here is the most expensive kind to unwind. |
 
+The 0.10.0 report caps follow the same accounting. [Anthropic's own
+context-engineering
+guidance](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+describes the shape a subagent should have: it may spend tens of
+thousands of tokens exploring and return a distilled summary of
+roughly 1,000-2,000 tokens. The caps (test-runner PASS <= 5
+lines, scout <= 15, e2e step log <= 20) are that principle applied to a
+success path - failures are never truncated, because a failure IS the
+high-signal content.
+
 Research backing: task-type routing beats complexity-score routing
 ([RouteLLM, ICLR 2025](https://arxiv.org/pdf/2406.18665)); the
 sonnet-vs-opus tier gap on benchmarks such as
@@ -321,10 +331,14 @@ session-model choice, not a dispatch target.
 
 The effort ladder - the second knob. Unset effort means `high` on
 current models (not medium), and `xhigh` is absent on some models that
-support `max` (e.g. the 4.6 generation). Anthropic's own quality-first
-guidance starts Opus-class coding at `xhigh` - the pins below are this
-plugin's cost-first counterweight, stepping up on evidence instead of
-starting high:
+support `max` (e.g. the 4.6 generation). The vendor recommendation is
+per-generation ([effort
+reference](https://platform.claude.com/docs/en/build-with-claude/effort)):
+Opus 4.7 and 4.8 start coding and agentic work at `xhigh`, while Opus 5
+starts at `high`, steps up to `xhigh` for demanding coding and agentic
+work, and treats `low` and `medium` as the primary cost control. The
+pins below are this plugin's cost-first reading of that: start low,
+step up on evidence.
 
 | Effort | What it buys | Where the plugin uses it |
 | ------ | ------------ | ------------------------ |
@@ -387,6 +401,36 @@ good lazy default:
 
 (Opus plans, Sonnet executes - no plugin needed.)
 
+### Dynamic workflows
+
+A workflow run spawns subagents per stage, so its cost scales with
+fan-out rather than with your session. Two settings decide most of it
+([dynamic workflows](https://code.claude.com/docs/en/workflows)):
+
+- **Dynamic workflow size** in `/config` defaults to `medium` (under 15
+  agents) on Claude Code 2.1.219 and later; older versions defaulted to
+  `unrestricted`. The values are `small` under 5, `medium` under 15,
+  `large` under 50. It steers the fan-out before a run starts and needs
+  no plugin - but it is advice, not a cap: a prompt that calls for a
+  different scale still overrides it, and the runtime caps (16
+  concurrent, 1000 per run) are the only hard limits. Choosing a value
+  yourself also moves the `Large workflow` warning to that agent count
+  (the other trigger, a projected 1.5M tokens, stays), which cuts both
+  ways: `small` warns earlier, `large` warns later, at 50. The warning
+  tracks the choice, not the value: leave the setting untouched and it
+  stays at 25, even though the default value is `medium`.
+- **Ultracode** (`/effort ultracode`) is the deliberate opposite:
+  `xhigh` effort plus automatic workflow planning for every substantial
+  task, and it suppresses the large-run warning because switching it on
+  already consents to large runs. This plugin does not fight it. What
+  changes is where the savings come from: with fan-out consented to,
+  set `model`/`effort` per `agent()` call so each node is cheap, instead
+  of trying to keep the fan-out small.
+
+Inside a script, every `agent()` call without `model`/`effort` opts
+inherits the session model at session effort - see the skill's Workflows
+chapter for the full set of rules.
+
 ## Dispatch counter
 
 Every Agent dispatch is logged by a PostToolUse hook (agent name + model,
@@ -446,8 +490,11 @@ the `model-routing` skill. If you had pasted a routing snippet into your
 
 ## Overriding pins
 
-There is deliberately no config subsystem - three override paths cover it:
+There is deliberately no config subsystem - four override paths cover it:
 
+- **Whole session**: the `CLAUDE_CODE_SUBAGENT_MODEL` env var outranks
+  everything below it - both an explicit `model` param and a frontmatter
+  pin - and the dispatch report marks those rows `agent (env=...)`.
 - **Per dispatch**: the Agent tool's `model` param overrides any
   frontmatter pin (pins-are-ceilings works through exactly this);
   Workflow `agent()` takes `model` and `effort` opts per call. Plain
