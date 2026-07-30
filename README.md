@@ -329,10 +329,12 @@ session-model choice, not a dispatch target.
 
 The effort ladder - the second knob. Unset effort means `high` on
 current models (not medium), and `xhigh` is absent on some models that
-support `max` (e.g. the 4.6 generation). Anthropic's own quality-first
-guidance starts Opus-class coding at `xhigh` - the pins below are this
-plugin's cost-first counterweight, stepping up on evidence instead of
-starting high:
+support `max` (e.g. the 4.6 generation). The vendor recommendation is
+per-generation: Opus 4.7 and 4.8 start coding and agentic work at
+`xhigh`, while Opus 5 starts at `high`, steps up to `xhigh` for
+demanding coding and agentic work, and treats `low` and `medium` as the
+primary cost control. The pins below are this plugin's cost-first
+reading of that: start low, step up on evidence.
 
 | Effort | What it buys | Where the plugin uses it |
 | ------ | ------------ | ------------------------ |
@@ -406,7 +408,8 @@ fan-out rather than with your session. Two settings decide most of it:
   and a prompt that genuinely needs more scale still overrides it. A
   configured guideline also replaces the built-in 25-agent threshold for
   the `Large workflow` warning (the other trigger, a projected 1.5M
-  tokens, stays).
+  tokens, stays) - which cuts both ways: `small` and `medium` warn
+  earlier than the default, `large` warns later, at 50.
 - **Ultracode** (`/effort ultracode`) is the deliberate opposite:
   `xhigh` effort plus automatic workflow planning for every substantial
   task, and it suppresses the large-run warning because switching it on
@@ -478,8 +481,11 @@ the `model-routing` skill. If you had pasted a routing snippet into your
 
 ## Overriding pins
 
-There is deliberately no config subsystem - three override paths cover it:
+There is deliberately no config subsystem - four override paths cover it:
 
+- **Whole session**: the `CLAUDE_CODE_SUBAGENT_MODEL` env var outranks
+  everything below it - both an explicit `model` param and a frontmatter
+  pin - and the dispatch report marks those rows `agent (env=...)`.
 - **Per dispatch**: the Agent tool's `model` param overrides any
   frontmatter pin (pins-are-ceilings works through exactly this);
   Workflow `agent()` takes `model` and `effort` opts per call. Plain

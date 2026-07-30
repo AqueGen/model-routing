@@ -5,13 +5,14 @@
 Effort accuracy fix plus a Workflows chapter. Docs only - no pin, config,
 hook, or stats changes.
 
-- **Corrected a stale claim**: the skill stated that Anthropic's
+- **Corrected a stale claim**: the skill and README stated that Anthropic's
   quality-first guidance for Opus-class models starts coding and agentic
   work at `xhigh`. That is the Opus 4.7/4.8 recommendation. Opus 5 is told
-  to start at `high` and to use `low`/`medium` liberally as the primary
-  cost control - the generation this plugin has targeted since 0.9.1. The
-  text now names which generation each recommendation belongs to and says
-  to re-sweep effort after a model change.
+  to start at `high`, step up to `xhigh` for demanding coding and agentic
+  work, and use `low`/`medium` liberally as the primary cost control - the
+  generation this plugin has targeted since 0.9.1. The text now names which
+  generation each recommendation belongs to and says to re-sweep effort
+  after a model change.
 - Effort is documented as shaping all response tokens, tool calls
   included: at lower effort the model makes fewer tool calls, so a cheap
   pin saves twice. `low`'s own documented use case is subagents.
@@ -31,7 +32,7 @@ hook, or stats changes.
   settings; the 0.10.0 report caps now cite the 1,000-2,000 token
   subagent-summary shape; the old "Workflow use" section is renamed
   "Superpowers flow" so the word "workflow" means one thing.
-- SKILL.md grew 2377 -> 2852 words. Deliberate: the skill is charged per
+- SKILL.md grew 2377 -> 2904 words. Deliberate: the skill is charged per
   invoke, and the routing anchor - charged every session - was not
   touched.
 

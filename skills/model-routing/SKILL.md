@@ -32,13 +32,14 @@ The full ladder is `low / medium / high / xhigh / max`. On current
 models the API default is `high` - an unset effort IS high effort, not
 medium. The per-model recommendation moves with the generation: Opus
 4.7 and 4.8 are told to start coding and agentic work at `xhigh`, while
-Opus 5 is told to start at `high` and to use `low` and `medium`
-liberally as the primary control for token cost and response time
-wherever evals show quality holds. `xhigh` is also the newest level and
-absent on some models that support `max` (e.g. the 4.6 generation), so
-check the model's own docs when in doubt - and re-sweep effort on your
-own evals after a model change instead of carrying old settings across
-generations. This plugin tunes for cost: pins sit at the lowest level
+Opus 5 is told to start at `high`, step up to `xhigh` for demanding
+coding and agentic work, and use `low` and `medium` liberally as the
+primary control for token cost and response time wherever evals show
+quality holds. The step down got cheaper, not the step up. `xhigh` is
+also the newest level and absent on some models that support `max`
+(e.g. the 4.6 generation), so check the model's own docs when in doubt -
+and re-sweep effort on your own evals after a model change instead of
+carrying old settings across generations. This plugin tunes for cost: pins sit at the lowest level
 the task shape allows and step up on evidence (a weak result retries
 one step up). That deliberate step below the product default, wherever
 the task allows one, is where the effort savings come from.
@@ -273,8 +274,11 @@ what changes cost there.
   session - quit and the run starts from scratch.
 - **Size guideline first.** The Dynamic workflow size setting in
   `/config` defaults to `unrestricted`. Setting it (`small` <5 agents,
-  `medium` <15, `large` <50) caps fan-out before a run starts. It is the
-  cheapest lever available and costs nothing to use.
+  `medium` <15, `large` <50) targets a fan-out before a run starts - it
+  is a guideline, so a prompt that genuinely needs more scale still
+  overrides it. Cheapest lever available, but pick the direction
+  deliberately: `small` and `medium` also tighten the `Large workflow`
+  warning, while `large` loosens it to 50.
 - **Thresholds and limits.** A run is flagged `Large workflow` above 25
   agents or a projected 1.5M tokens; a configured size guideline
   replaces the 25-agent threshold, and ultracode sessions suppress the
@@ -285,9 +289,9 @@ what changes cost there.
   file edits are auto-approved. A broad allowlist therefore applies to
   every agent in the fan-out, not just the one you would have watched.
 
-Under ultracode (`/effort ultracode` - `xhigh` effort plus automatic
-workflow planning), these rules still apply: fan-out is already
-consented to, so the savings come from making each node cheap.
+Under ultracode (not a sixth effort level but a mode: `xhigh` plus
+automatic workflow planning), these rules still apply - fan-out is
+already consented to, so the savings come from making each node cheap.
 
 ## Complementary settings
 
