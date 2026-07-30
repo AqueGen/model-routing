@@ -198,7 +198,7 @@ For local development: clone the repo and
 
 ### Superpowers flow (brainstorm - plan - execute)
 
-Works with any plan-driven workflow (superpowers or similar):
+Works with any plan-driven process (superpowers or similar):
 
 1. Brainstorming and plan-writing stay in the main session on the
    strongest model - protecting this thinking is the point of the
