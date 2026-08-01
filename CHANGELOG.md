@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.11.1 - 2026-08-01
+
+Docs only - one clarification, no pin, config, hook, or stats changes.
+
+- **Scoped the `verifier` gate explicitly**: the verifier gates ANOTHER
+  agent's cheap-tier diff, never the main session's own work. A
+  current-generation model self-verifies, so spawning a subagent to
+  re-check what the main session just wrote burns tokens for no quality
+  gain - which is exactly what Opus 5's prompting guide means by "do not
+  use subagents to verify or double-check your own work". The skill and the
+  session routing-anchor both say so now, closing the one place the routing
+  could be read as contradicting that guidance.
+
 ## 0.11.0 - 2026-07-30
 
 Effort accuracy fix plus a Workflows chapter. Docs only - no pin, config,

@@ -196,7 +196,12 @@ actually ran with `/model-routing:stats`.
   before the main session builds on a wrong diff or a `reviewer` pass
   burns opus tokens on work that missed the point. Skip it when the main
   session reads the full diff anyway - the read IS the verification; a
-  verifier on top would double-pay.
+  verifier on top would double-pay. The verifier gates ANOTHER agent's
+  cheap-tier diff, never the main session's own work: a current-generation
+  model self-verifies, so a subagent that re-checks what the main session
+  just wrote burns tokens for no quality gain (this is what Opus 5's
+  prompting guide means by "do not use subagents to verify or double-check
+  your own work").
 - Escalate, don't guess. When a subagent is stuck on the *approach* (not
   just missing a fact), it should package its state - what it tried, why
   each attempt failed, the candidate directions it sees - and hand it back
