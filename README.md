@@ -76,44 +76,31 @@ Your expensive main-session context grew by two short reports.
 
 ## What that looks like in tokens
 
-**Snapshot: 2026-07-20, measured with v0.8.1** - the author's live
-workload over the preceding 7 days, sessions running the strongest tier
-(Fable) as their default model, via `dispatch-counter.mjs tokens
---session fable` and `... report --session fable`. A fixed snapshot, not
-a live figure: the rolling window moves daily and your split depends on
-your task mix - re-measure your own with the same commands.
+**Snapshot: 2026-08-02, measured with v0.12.0** - the author's live workload over the preceding 7 days, sessions running the strongest tier (Fable) as their default model, via `dispatch-counter.mjs tokens --session fable` and `... report --session fable`. A fixed snapshot, not a live figure: the rolling window moves daily and your split depends on your task mix - re-measure your own with the same commands.
 
-In that window 98% of dispatches (43 of 44) and 87% of token volume ran
-below the session tier. Without routing every subagent inherits the
-session model, so the whole 166.8M would bill at Fable prices; with
-routing only 21.4M did:
+In that window 98% of dispatches (82 of 84) and 283.1M of 283.7M tokens ran below the session tier. Without routing every subagent inherits the session model, so the whole 283.7M would bill at Fable prices; with routing 0.7M did:
 
 ```mermaid
 xychart-beta
     title "Subagent tokens billed at the top (Fable) tier - 7d, fable-default sessions"
     x-axis ["without routing (inherits session model)", "with model-routing"]
-    y-axis "millions of tokens" 0 --> 180
-    bar [166.8, 21.4]
+    y-axis "millions of tokens" 0 --> 300
+    bar [283.7, 0.7]
 ```
 
 Where that volume actually ran with routing active:
 
 ```mermaid
 pie showData title Subagent volume by model (7d, fable-default sessions, millions of tokens)
-    "opus - review + hard implementation (deliberate)" : 71.2
-    "sonnet - implementation, exploration, tests" : 65.5
-    "fable - inherited session tier" : 21.4
-    "haiku - test runs, diff verification" : 8.8
+    "sonnet - implementation, exploration, tests" : 151.7
+    "opus - review + hard implementation (deliberate)" : 104.0
+    "haiku - test runs, diff verification" : 27.4
+    "fable - inherited session tier" : 0.7
 ```
 
-The opus slice is not a leak - on a Fable session even opus is a cheaper
-tier, and review plus multi-file implementation are dispatched there
-deliberately, because a missed bug costs more than the review. The fable
-slice is the honest remainder: agents that inherited the session model,
-mostly Workflow `agent()` calls dispatched without an explicit `model`
-opt - the accidental-inheritance case the routing rules exist to shrink
-(0.7.2 added the Workflow rule after this very measurement). The
-plugin's job is making every slice a decision instead of an accident.
+The opus slice is not a leak - on a Fable session even opus is a cheaper tier, and review plus multi-file implementation are dispatched there deliberately, because a missed bug costs more than the review.
+
+The fable slice is the honest remainder: agents that inherited the session model instead of being sent somewhere on purpose. It is worth reading against the previous snapshot (2026-07-20, v0.8.1), where that slice was 21.4M of 166.8M - mostly Workflow `agent()` calls dispatched without an explicit `model` opt. 0.7.2 added the Workflow routing rule in response to exactly that measurement, and in this window the same slice is 0.7M. Tier leaks now sit at 1 of 11 unpinned dispatches (9%), under the 20% rework threshold the report warns at. The plugin's job is making every slice a decision instead of an accident; this is what that looks like once a leak has been closed.
 
 Which task lands on which tier:
 

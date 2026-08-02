@@ -16,8 +16,12 @@ jobs:
       - name: Extract changelog section
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          # Anchor on the exact "## <version>" header. A substring test would let
+          # 0.1.0 match inside an unrelated header, and stopping on the next
+          # "## " keeps one release's notes out of the next one's.
           awk -v ver="$VERSION" '
-            /^## / { p = index($0, ver) > 0; if (p) next }
+            $0 ~ "^## " ver "([ \t]|$)" { p = 1; next }
+            /^## / { if (p) exit }
             p { print }
           ' CHANGELOG.md > notes.md
           if [ ! -s notes.md ]; then

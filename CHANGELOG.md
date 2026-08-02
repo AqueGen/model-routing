@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.12.1 - 2026-08-02
+
+Refreshed token snapshot, a fix to how release notes are extracted, and a readability pass over every past changelog entry. Docs and CI only - no pin, config, hook, or stats changes.
+
+- **README token snapshot refreshed to 2026-08-02 / v0.12.0**, replacing the 2026-07-20 / v0.8.1 figures. 98% of dispatches (82 of 84) and 283.1M of 283.7M tokens ran below the session tier, over a window roughly 1.7x larger than the previous one.
+- The refresh has a story worth reading, not just newer numbers: the inherited-session-tier slice fell from 21.4M of 166.8M to 0.7M of 283.7M. That slice was the accidental-inheritance case the previous snapshot flagged, 0.7.2 added the Workflow routing rule in response to that exact measurement, and this window is the evidence it worked. Tier leaks now sit at 1 of 11 unpinned dispatches (9%), under the 20% rework threshold the report warns at.
+- **Release-notes extraction anchored on the exact version header.** The workflow matched the version as a substring of any `## ` line, which is fragile - a short version can match inside an unrelated header - and it relied on the next header resetting a flag rather than stopping. It now matches `^## <version>` with a delimiter and exits at the following `## `, so one release's notes can never bleed into another's.
+- **Every past changelog entry rewritten for readability.** Two problems: entries were hard-wrapped at ~72 columns for no reason (Markdown reflows anyway, and the wrapping only made diffs and edits noisy), and many entries opened straight into a bullet with no summary line, so the rendered GitHub release read as though it had been cut off. Every version now leads with one sentence saying what the release is, and no line is wrapped by hand. Substance is unchanged - nothing was padded to look longer, and the genuinely small releases stayed small.
+- All 35 published release bodies were re-pushed from the rewritten entries, so the GitHub releases and the file agree.
+
 ## 0.12.0 - 2026-08-02
 
 Adds the advisor pattern: a plan check before implementation, for the case where no plan exists yet. Docs only - no pin, config, hook, or stats changes.
