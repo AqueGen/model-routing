@@ -99,6 +99,18 @@ xychart-beta
     bar [285.2, 2.1]
 ```
 
+**That left bar is an upper bound, not a measurement.** It assumes every subagent would otherwise inherit the session model, which is the documented default for an UNPINNED agent - but pinned agents exist independently of this plugin. Other installed plugins ship their own pinned agents, and Claude Code's built-in `Explore` picks its own tier. Some of this volume would have run cheaply with model-routing uninstalled; how much was not measured, so read the bar as the ceiling of what routing can be credited with rather than the amount it saved.
+
+Attribution over the same week, across all 266 dispatches, 199 of which ran below their session tier:
+
+| Mechanism | Dispatches | What it means |
+| --- | ---: | --- |
+| Agent frontmatter pins shipped by this plugin | 68 | Automatic. The agent file names the tier, so it fires whether or not any routing rule is followed |
+| An explicit `model=` on the dispatch | 127 | Behavioural. This is the routing rules being applied, and nothing enforces them |
+| Claude Code's built-in `Explore` | 4 | Not this plugin at all |
+
+The honest reading: the automatic half is fully attributable, the behavioural half depends on the session actually following the anchor, and there is no control group - this is the author's own workload measured with the author's own tool, with no before-install baseline. `CLAUDE_CODE_SUBAGENT_MODEL` was not set in this window, which the report would otherwise have annotated per row.
+
 Where that volume actually ran with routing active:
 
 ```mermaid

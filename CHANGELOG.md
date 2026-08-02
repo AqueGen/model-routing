@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.2 - 2026-08-02
+
+Says what the token charts can and cannot be credited with. Docs only - no pin, config, hook, or stats changes.
+
+- **The "without routing" bar is labelled an upper bound rather than a measurement.** It assumes every subagent would otherwise inherit the session model, which is the documented default only for an UNPINNED agent. Other installed plugins ship their own pinned agents and Claude Code's built-in `Explore` picks its own tier, so some of that volume would have run cheaply with this plugin uninstalled. How much was never measured, and the README now says so instead of implying the whole bar is the saving.
+- **Added an attribution table over the same week.** Of 199 routed-down dispatches: 68 came from agent frontmatter pins this plugin ships, which fire automatically whether or not any rule is followed; 127 came from an explicit `model=` on the dispatch, which is the routing rules being applied and is enforced by nothing; 4 came from the built-in `Explore` agent and are not this plugin at all. The automatic half is fully attributable, the behavioural half is not, and the difference is now visible.
+- Stated the obvious limit plainly: this is the author's own workload, measured with the author's own tool, with no before-install baseline and no control group.
+- Recorded that `CLAUDE_CODE_SUBAGENT_MODEL` was unset in the window - a global subagent override would have produced routed-down volume with no routing decision behind it, and the report annotates rows with `env=` when it is set, so its absence is evidence rather than an assumption.
+
 ## 0.13.1 - 2026-08-02
 
 Re-measures the README token section on 0.13.0 so every figure in it comes from one run, and corrects a claim the new measurement made false. Docs only - no pin, config, hook, or stats changes.
