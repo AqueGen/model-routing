@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.12.0 - 2026-08-02
+
+Adds the advisor pattern. Docs only - no pin, config, hook, or stats changes.
+
+- **Plan check before implementation, when no plan exists yet.** Every
+  escalation rule in the skill was reactive: a stuck agent hands back, a
+  weak result retries one step up. Anthropic's model-selection guidance
+  names the proactive counterpart - the advisor strategy, where a
+  lower-cost worker calls a more intelligent model to check its plan and
+  evaluate its work, measured at within 10% of Fable 5's SWE-bench Pro
+  score at 63% of the price of running Fable 5 for the whole task. In this
+  plugin's shape the main session already IS that advisor, so the pattern
+  costs one short turn and adds no new agent. Written as a condition rather
+  than a rule-plus-exemption: it fires when implementation is dispatched
+  with no approved plan behind it, and is silent when a plan was already
+  approved, so it fits a setup where this plugin is the only thing
+  installed as well as one with a planning workflow in front of it.
+
 ## 0.11.1 - 2026-08-01
 
 Docs only - one clarification, no pin, config, hook, or stats changes.

@@ -202,6 +202,19 @@ actually ran with `/model-routing:stats`.
   just wrote burns tokens for no quality gain (this is what Opus 5's
   prompting guide means by "do not use subagents to verify or double-check
   your own work").
+- Advise before the work, not only after it fails. The escalation rules
+  below are reactive - they fire on a stuck agent or a weak result. When
+  implementation work is dispatched with no approved plan behind it, the
+  cheaper move is proactive: have the cheap-tier agent return its PLAN and
+  check it in the main session - already the strongest model in the loop -
+  before it writes code. Anthropic measures this as the advisor strategy,
+  "faster, lower-cost worker models to call more intelligent models to
+  check their plan and evaluate their work", and reports Sonnet 5 with a
+  Fable 5 advisor within 10% of Fable 5's SWE-bench Pro score at 63% of the
+  price of using Fable 5 for the whole task. One short turn beats finding
+  the wrong approach in a finished diff. With a plan already approved -
+  written in the main session or by a planning skill - that check has
+  happened, so dispatch straight to implementation.
 - Escalate, don't guess. When a subagent is stuck on the *approach* (not
   just missing a fact), it should package its state - what it tried, why
   each attempt failed, the candidate directions it sees - and hand it back

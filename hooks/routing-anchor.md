@@ -9,6 +9,7 @@ MODEL ROUTING ACTIVE - expensive model thinks, cheap models grind. You cannot sw
 - Batched implementer output you will not read in full: gate with `verifier` - does the diff match the task. Gates another agent's diff, never the main session's own work (a current-generation model self-verifies).
 - Tests/builds: `test-runner` - raw output stays out of this session. E2E and failure interpretation: `e2e-runner`.
 - Effort is the second knob (low/medium/high/xhigh/max on current models; unset = high): low for mechanical work, medium for normal implementation, high for architecture/debugging/review, xhigh/max only for long-horizon or frontier work. Bundled agents pin theirs.
+- Dispatching implementation work with no approved plan behind it: have the agent return its PLAN first and check it in the main session before it writes code - one short turn beats finding the wrong approach in a finished diff (the advisor pattern). With a plan already approved, dispatch straight to implementation.
 - A subagent stuck on the approach hands back for a decision; continue the same agent (SendMessage when available, else re-dispatch with its packaged state).
 - A failed or weak subagent RESULT retries exactly one step up (next tier or higher effort), fresh dispatch; a second failure goes to the main session.
 - Pins are ceilings, not floors: when a pin sits above the session model, cap the dispatch at the session model via the Agent `model` param. The pin alone does NOT cap - a bare dispatch runs the pinned model.
