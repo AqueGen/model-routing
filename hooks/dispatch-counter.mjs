@@ -318,6 +318,49 @@ if (process.argv[2] === "tokens") {
   const perModel = new Map(); // model -> {agents, in, out, cr, cw, down}
   const perSession = new Map(); // session model -> {agents, vol, downVol}
   let unknownAgents = 0, unknownVol = 0; // models tierOf cannot rank
+  // Main-session volume is the DENOMINATOR, not routable work: the session model
+  // is fixed for the turn, so no routing decision can move it. Reported because a
+  // routed-down percentage over subagents alone reads as "almost everything was
+  // optimized" when subagents may be a small share of what was actually spent.
+  const mainPerModel = new Map(); // model -> volume
+  let mainSessions = 0;
+  // Totals that ignore --session, so a scoped headline is never shown alone.
+  let allDownVol = 0, allCmpVol = 0;
+  // Transcripts that could not be read at all. Reported rather than swallowed:
+  // main-session transcripts run to hundreds of MB, and readFileSync as a string
+  // throws past V8's ~512MB limit. Dropping one silently would understate the
+  // denominator, which biases the routed-down share UPWARD - the exact direction
+  // of error this release exists to remove.
+  let unreadable = 0;
+  const readFileVols = (p, mtimeInWindow) => {
+    // Per-line attribution: usage accumulates onto the model named on that line,
+    // so a mid-run fallback splits the transcript across both models instead of
+    // crediting everything to the last one seen. Lines carrying their own
+    // timestamp are windowed individually - a resumed transcript has a fresh
+    // mtime but old lines; lines without one fall back to the file mtime, which
+    // the caller has already checked.
+    const fileVols = new Map(); // model -> { in, out, cr, cw }
+    let text;
+    try { text = readFileSync(p, "utf-8"); } catch { unreadable++; return fileVols; }
+    for (const line of text.split("\n")) {
+      if (!line.includes('"usage"')) continue;
+      try {
+        const obj = JSON.parse(line);
+        const m = obj.message ?? {};
+        const u = m.usage; if (!u) continue;
+        if (!m.model || m.model.startsWith("<")) continue;
+        const lts = obj.timestamp ? Date.parse(obj.timestamp) : NaN;
+        if (Number.isFinite(lts)) {
+          if (lts < win.start || lts >= win.end) continue;
+        } else if (!mtimeInWindow) continue;
+        const v = fileVols.get(m.model) ?? { in: 0, out: 0, cr: 0, cw: 0 };
+        v.in += u.input_tokens ?? 0; v.out += u.output_tokens ?? 0;
+        v.cr += u.cache_read_input_tokens ?? 0; v.cw += u.cache_creation_input_tokens ?? 0;
+        fileVols.set(m.model, v);
+      } catch {}
+    }
+    return fileVols;
+  };
   const walk = (dir, depth) => {
     let entries;
     try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
@@ -326,7 +369,22 @@ if (process.argv[2] === "tokens") {
       // Depth 6 reaches Workflow-spawned agents too:
       // projects/<proj>/<session>/subagents/workflows/<wf-id>/agent-*.jsonl
       if (e.isDirectory()) { if (depth < 6) walk(p, depth + 1); continue; }
-      if (!e.name.startsWith("agent-") || !e.name.endsWith(".jsonl")) continue;
+      if (!e.name.endsWith(".jsonl")) continue;
+      // Two populations, deliberately kept apart: an agent- prefixed transcript
+      // is subagent work (routable, the plugin's subject) and a bare
+      // <session-id>.jsonl directly inside a project dir is the main session
+      // (not routable, the denominator).
+      //
+      // The main-session test is POSITIVE - exactly depth 1, i.e.
+      // projects/<proj>/<session-id>.jsonl - not "any .jsonl outside
+      // subagents/". The walk descends to depth 6, so a negative test would
+      // enrol any sidecar the harness writes beside a transcript (a journal, a
+      // scratch file) as a whole session and inflate the very denominator the
+      // routing share is measured against. A wrong denominator is worse than
+      // none, because it gets quoted as fact.
+      const isAgent = e.name.startsWith("agent-");
+      const isMainSession = !isAgent && depth === 1;
+      if (!isAgent && !isMainSession) continue;
       let st; try { st = statSync(p); } catch { continue; }
       // mtime below the window start = nothing inside can be newer; safe
       // early skip. The UPPER bound is deliberately NOT applied per file: a
@@ -336,31 +394,20 @@ if (process.argv[2] === "tokens") {
       // falls inside the window.
       if (st.mtimeMs < win.start) continue;
       const mtimeInWindow = st.mtimeMs < win.end;
-      // Per-line attribution: usage accumulates onto the model named on that
-      // line, so a mid-run fallback splits the transcript across both models
-      // instead of crediting everything to the last one seen. Lines carrying
-      // their own timestamp are windowed individually - a resumed transcript
-      // has a fresh mtime but old lines; lines without one fall back to the
-      // file mtime, which already passed the window check above.
-      const fileVols = new Map(); // model -> { in, out, cr, cw }
-      for (const line of readFileSync(p, "utf-8").split("\n")) {
-        if (!line.includes('"usage"')) continue;
-        try {
-          const obj = JSON.parse(line);
-          const m = obj.message ?? {};
-          const u = m.usage; if (!u) continue;
-          if (!m.model || m.model.startsWith("<")) continue;
-          const lts = obj.timestamp ? Date.parse(obj.timestamp) : NaN;
-          if (Number.isFinite(lts)) {
-            if (lts < win.start || lts >= win.end) continue;
-          } else if (!mtimeInWindow) continue;
-          const v = fileVols.get(m.model) ?? { in: 0, out: 0, cr: 0, cw: 0 };
-          v.in += u.input_tokens ?? 0; v.out += u.output_tokens ?? 0;
-          v.cr += u.cache_read_input_tokens ?? 0; v.cw += u.cache_creation_input_tokens ?? 0;
-          fileVols.set(m.model, v);
-        } catch {}
-      }
+      const fileVols = readFileVols(p, mtimeInWindow);
       if (!fileVols.size) continue;
+      if (isMainSession) {
+        // Scoped by the same --session filter as the agents, so the denominator
+        // always describes the same population as the headline above it.
+        if (!sessionModelCache.has(p)) sessionModelCache.set(p, firstModelIn(p, 262144));
+        const sessionModel = sessionModelCache.get(p);
+        if (sf && !(sessionModel && shortModel(sessionModel).toLowerCase().includes(sf))) continue;
+        mainSessions++;
+        for (const [model, v] of fileVols) {
+          mainPerModel.set(model, (mainPerModel.get(model) ?? 0) + v.in + v.cr + v.cw);
+        }
+        continue;
+      }
       // The parent session transcript is <session-id>.jsonl, sibling of the
       // first "subagents" dir on the path - one level up for plain Agent
       // dispatches, further up for Workflow agents nested in workflows/<wf>/.
@@ -370,8 +417,18 @@ if (process.argv[2] === "tokens") {
         sessionModelCache.set(sessionJsonl, firstModelIn(sessionJsonl, 262144));
       }
       const sessionModel = sessionJsonl ? sessionModelCache.get(sessionJsonl) : null;
-      if (sf && !(sessionModel && shortModel(sessionModel).toLowerCase().includes(sf))) continue;
       const tsess = tierOf(sessionModel);
+      // Accumulated BEFORE the filter returns: --session narrows to the sessions
+      // where routing has the most room, so the scoped share is printed next to
+      // the whole-window one rather than on its own.
+      for (const [model, v] of fileVols) {
+        const tm = tierOf(model);
+        if (tm == null || tsess == null) continue;
+        const vol = v.in + v.cr + v.cw;
+        allCmpVol += vol;
+        if (tm < tsess) allDownVol += vol;
+      }
+      if (sf && !(sessionModel && shortModel(sessionModel).toLowerCase().includes(sf))) continue;
       const sessKey = sessionModel ? shortModel(sessionModel) : "(session unknown)";
       for (const [model, v] of fileVols) {
         const vol = v.in + v.cr + v.cw;
@@ -396,11 +453,22 @@ if (process.argv[2] === "tokens") {
     }
   };
   walk(projRoot, 0);
+  const fmtN = (n) => n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(0) + "k" : String(n);
+  const mainRows = [...mainPerModel.entries()].sort((a, b) => b[1] - a[1]);
+  const mainVolTotal = mainRows.reduce((a, [, v]) => a + v, 0);
   if (!perModel.size) {
-    process.stdout.write(`No subagent transcripts found under ${projRoot} (${winLabel}).\nToken stats read Claude Code agent-*.jsonl transcript files; they appear after subagent dispatches. If your config lives elsewhere, set CLAUDE_CONFIG_DIR.`);
+    // Main-session volume still prints when it exists: "no dispatches yet" is a
+    // real answer, and it is more useful next to what the session itself spent.
+    // Deliberately "no subagent volume counted", not "nothing was delegated":
+    // agent transcripts can exist and still contribute nothing to this window
+    // (a resumed transcript whose lines are older than an --ago window, or one
+    // carrying only synthetic model names).
+    const mainNote = mainVolTotal
+      ? `\n\nMain sessions in this window: ${fmtN(mainVolTotal)} across ${mainSessions} sessions, with no subagent volume counted against them.`
+      : "";
+    process.stdout.write(`No subagent transcripts found under ${projRoot} (${winLabel}).\nToken stats read Claude Code agent-*.jsonl transcript files; they appear after subagent dispatches. If your config lives elsewhere, set CLAUDE_CONFIG_DIR.${mainNote}`);
     process.exit(0);
   }
-  const fmtN = (n) => n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(0) + "k" : String(n);
   const rows = [...perModel.entries()].map(([m, s]) => ({ m, vol: s.in + s.cr + s.cw, ...s }))
     .sort((a, b) => b.vol - a.vol);
   const total = rows.reduce((a, r) => a + r.vol, 0) || 1;
@@ -415,12 +483,22 @@ if (process.argv[2] === "tokens") {
     `Subagent token volume - ${winLabel} (input + cache):`,
     "",
     `${fmtN(downTotal)} of ${fmtN(total - unknownVol)} ${unknownVol ? "comparable " : ""}tokens (${Math.round((downTotal / comparableVol) * 100)}%) processed on a cheaper model than their session - judged per session (fable/opus days both count fairly).`,
+    // A --session filter selects the sessions with the most room to route down,
+    // so the scoped figure is never the only one on screen.
+    ...(sf && allCmpVol ? [`Across ALL sessions, unfiltered: ${Math.round((allDownVol / allCmpVol) * 100)}% of ${fmtN(allCmpVol)} comparable tokens - the filter above scopes to sessions where routing has the most room.`] : []),
     "",
     ...rows.map((r) => `${shortModel(r.m).padEnd(16)} ${bar(r.vol).padEnd(25)} ${fmtN(r.vol).padStart(7)} (${Math.round((r.vol / total) * 100)}%)  ${r.agents} agents, out ${fmtN(r.out)}`),
     "",
     "By session model:",
     ...sessionRows.map(([m, s]) => `  ${m}: ${fmtN(s.vol)} across ${s.agents} agents - ${s.cmpVol ? `${Math.round((s.downVol / s.cmpVol) * 100)}% below session tier` : "not tier-comparable"}${s.cmpVol && s.vol > s.cmpVol ? ` (${fmtN(s.vol - s.cmpVol)} not comparable)` : ""}`),
     ...(unknownAgents ? ["", `${unknownAgents} agents not tier-comparable (${fmtN(unknownVol)}) - unrecognized agent model or unknown session tier, excluded from routed-down math; extend TIER_PATTERNS in dispatch-counter.mjs.`] : []),
+    ...(unreadable ? ["", `${unreadable} transcript(s) could not be read (too large to load as one string, or unreadable) - the totals below understate by whatever they held.`] : []),
+    ...(mainVolTotal ? [
+      "",
+      `Main sessions (not routable): ${fmtN(mainVolTotal)} across ${mainSessions} sessions.`,
+      `Subagents are ${Math.round((total / (total + mainVolTotal)) * 100)}% of the ${fmtN(total + mainVolTotal)} total - routing governs that slice, and the session model is fixed for the turn, so the rest is not addressable by any routing decision.`,
+      ...mainRows.map(([m, v]) => `  ${shortModel(m).padEnd(16)} ${fmtN(v).padStart(7)} (${Math.round((v / mainVolTotal) * 100)}%)`),
+    ] : []),
     "",
     "Volume = tokens the subagent processed; cache reads are billed at the subagent's model rate, which is where routing saves.",
     "Session model is sampled at session START - a mid-session /model switch or fallback attributes later subagents to the start model (the dispatch report does not have this limit).",

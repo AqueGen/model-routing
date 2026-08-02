@@ -78,7 +78,9 @@ Your expensive main-session context grew by two short reports.
 
 **Snapshot: 2026-08-02, measured with v0.12.0** - the author's live workload over the preceding 7 days, sessions running the strongest tier (Fable) as their default model, via `dispatch-counter.mjs tokens --session fable` and `... report --session fable`. A fixed snapshot, not a live figure: the rolling window moves daily and your split depends on your task mix - re-measure your own with the same commands.
 
-In that window 98% of dispatches (82 of 84) and 283.1M of 283.7M tokens ran below the session tier. Without routing every subagent inherits the session model, so the whole 283.7M would bill at Fable prices; with routing 0.7M did:
+**Read the scope before the numbers.** Everything below measures SUBAGENT volume. Your main session is not in it and never can be - the session model is fixed for the turn, so no routing decision moves it, and in this same window main sessions were 6.82B against 1.79B of subagent volume. Routing governs roughly a fifth of what was spent; the charts describe how well it governs that fifth, not how much of the bill it removes. `dispatch-counter.mjs tokens` prints both figures for exactly this reason.
+
+Within that slice, 98% of dispatches (82 of 84) and 283.1M of 283.7M tokens ran below the session tier. Without routing every subagent inherits the session model, so the whole 283.7M would bill at Fable prices; with routing 0.7M did:
 
 ```mermaid
 xychart-beta
@@ -99,6 +101,8 @@ pie showData title Subagent volume by model (7d, fable-default sessions, million
 ```
 
 The opus slice is not a leak - on a Fable session even opus is a cheaper tier, and review plus multi-file implementation are dispatched there deliberately, because a missed bug costs more than the review.
+
+This window is also the one where routing had the most room. Scoping to fable-default sessions is what the `--session` filter is for, and it flatters the number: unfiltered, across every session in the same week, 33% of 1.77B comparable tokens ran below their session tier. Most of the rest came from opus-default sessions, where an opus subagent is not a step down and there is little room to route anywhere. Both figures are true; the tool prints them together so the scoped one is never read as the whole story.
 
 The fable slice is the honest remainder: agents that inherited the session model instead of being sent somewhere on purpose. It is worth reading against the previous snapshot (2026-07-20, v0.8.1), where that slice was 21.4M of 166.8M - mostly Workflow `agent()` calls dispatched without an explicit `model` opt. 0.7.2 added the Workflow routing rule in response to exactly that measurement, and in this window the same slice is 0.7M. Tier leaks now sit at 1 of 11 unpinned dispatches (9%), under the 20% rework threshold the report warns at. The plugin's job is making every slice a decision instead of an accident; this is what that looks like once a leak has been closed.
 

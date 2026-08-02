@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.13.0 - 2026-08-02
+
+`tokens` now prints the denominator its percentage is measured against. The routed-down share was true and easy to over-read, including by the author, which is the failure this release exists to close.
+
+- **Main-session volume is reported next to the routed-down share.** `tokens` walked `agent-*.jsonl` only, so it described subagent work exclusively. That is the right subject - the main session model is fixed for the turn and no routing decision can move it - but printing "283.1M of 283.7M (100%) processed on a cheaper model" with nothing beside it reads as "almost everything was optimized". In the author's own window main sessions were 6.82B against 1.79B of subagent volume, so routing governed 21% of what was actually spent. The report now says so, with a per-model split of the main-session side.
+- **A `--session` filter no longer shows its share alone.** Scoping to fable-default sessions reported 100% routed down; unfiltered across the same week it was 33%, because opus-default sessions have little room to route down at all. Both are honest, and the filtered figure was the one on the README. The unfiltered share is now printed directly beneath the scoped one, with the reason they differ.
+- Populations are separated by an explicit test rather than a negative one: a bare `<session-id>.jsonl` at a project root is a main session, a transcript whose name begins with `agent-` is subagent work, and a non-agent file under `subagents/` is neither. A stray sidecar there would otherwise inflate the denominator it is being measured against.
+- The empty case improved too: with main-session volume present but no dispatches, the report says how much the session spent undelegated instead of only "no subagent transcripts found".
+- Per-file usage summation was extracted into one helper now that both populations need it, so per-line model attribution and timestamp-vs-mtime windowing cannot drift between them.
+- **The main-session test is positive, not negative** - exactly depth 1, `projects/<proj>/<session-id>.jsonl`. The first cut asked "not an agent transcript and not under `subagents/`", which the walk applies down to depth 6, so any sidecar the harness writes beside a transcript would have enrolled as a whole session. Since that sidecar's volume lands in the denominator, the error would have pushed the routed-down share UP - the same direction of flattery this release removes.
+- **An unreadable transcript is reported, not swallowed.** `tokens` previously read only agent transcripts, which are small; main-session transcripts run to hundreds of MB, and `readFileSync` as a string throws past V8's ~512MB limit. That now fails the single file instead of the whole command, and the count is printed, because a silently dropped session understates the denominator and again biases the share upward.
+- The empty-window note says "no subagent volume counted against them" rather than "none of it delegated": agent transcripts can exist and still contribute nothing to a window, e.g. a resumed transcript whose lines predate an `--ago` range.
+- Tests 27 -> 32: the denominator line, the unfiltered-beside-scoped line, a non-agent file under `subagents/`, a sidecar beside `subagents/` (the depth case above), and `--session` scoping the denominator as well as the headline. Measured at ~2s over 83 sessions and 8.63B tokens, so the extra read stays comfortable for an on-demand command.
+- README: the token section now opens with its own scope - subagent volume only, main session excluded and why - and states the unfiltered 33% next to the scoped 100%.
+- The first three findings above came from an adversarial review of this diff run on Fable; the arithmetic of the new accumulators was checked and confirmed correct in the same pass.
+
 ## 0.12.1 - 2026-08-02
 
 Refreshed token snapshot, a fix to how release notes are extracted, and a readability pass over every past changelog entry. Docs and CI only - no pin, config, hook, or stats changes.

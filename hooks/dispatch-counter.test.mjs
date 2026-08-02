@@ -466,6 +466,93 @@ test("tokens happy path: volume rows, session breakdown, unknown-model note", ()
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
+test("tokens reports main-session volume as the denominator", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  // The main transcript carries real usage here, not just a model marker.
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), usageLine("claude-fable-5", 9000) + "\n");
+  writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-sonnet-5", 1000) + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /Main sessions \(not routable\): 9k across 1 sessions/);
+    // 1000 subagent of 10000 total: the routed-down headline covers a tenth of
+    // what was actually spent, which is the whole point of printing this.
+    assert.match(out, /Subagents are 10% of the 10k total/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("--session prints the unfiltered share next to the scoped one", () => {
+  const cfg = freshConfigDir();
+  const fableDir = join(cfg, "projects", "proj", "sess-fable", "subagents");
+  const opusDir = join(cfg, "projects", "proj", "sess-opus", "subagents");
+  mkdirSync(fableDir, { recursive: true });
+  mkdirSync(opusDir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-fable.jsonl"), '{"model":"claude-fable-5"}\n');
+  writeFileSync(join(cfg, "projects", "proj", "sess-opus.jsonl"), '{"model":"claude-opus-4-8"}\n');
+  writeFileSync(join(fableDir, "agent-a.jsonl"), usageLine("claude-sonnet-5", 1000) + "\n"); // routed down
+  writeFileSync(join(opusDir, "agent-b.jsonl"), usageLine("claude-opus-4-8", 3000) + "\n");  // at tier
+  try {
+    const out = run(["tokens", "--session", "fable"], cfg);
+    assert.match(out, /100%\) processed on a cheaper model/);
+    // The flattering slice never appears alone: 1000 of 4000 unfiltered.
+    assert.match(out, /Across ALL sessions, unfiltered: 25% of 4k comparable tokens/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a non-agent .jsonl under subagents/ counts as neither population", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), usageLine("claude-fable-5", 5000) + "\n");
+  writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-sonnet-5", 1000) + "\n");
+  // Under subagents/ but not agent-*: must not be mistaken for a main session,
+  // or a stray sidecar would inflate the denominator it is measured against.
+  writeFileSync(join(dir, "scratch.jsonl"), usageLine("claude-opus-5", 999999) + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /Main sessions \(not routable\): 5k across 1 sessions/);
+    assert.doesNotMatch(out, /opus-5/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a sidecar .jsonl beside subagents/ is not counted as a main session", () => {
+  const cfg = freshConfigDir();
+  const sess = join(cfg, "projects", "proj", "sess-1");
+  mkdirSync(join(sess, "subagents"), { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), usageLine("claude-fable-5", 5000) + "\n");
+  writeFileSync(join(sess, "subagents", "agent-a.jsonl"), usageLine("claude-sonnet-5", 1000) + "\n");
+  // Sibling of subagents/, inside the session dir - a journal or scratch file.
+  // Only the transcript one level up is a session; anything deeper is not.
+  writeFileSync(join(sess, "journal.jsonl"), usageLine("claude-opus-5", 999999) + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /Main sessions \(not routable\): 5k across 1 sessions/);
+    assert.doesNotMatch(out, /opus-5/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("--session scopes the main-session denominator too", () => {
+  const cfg = freshConfigDir();
+  const fableDir = join(cfg, "projects", "proj", "sess-fable", "subagents");
+  const opusDir = join(cfg, "projects", "proj", "sess-opus", "subagents");
+  mkdirSync(fableDir, { recursive: true });
+  mkdirSync(opusDir, { recursive: true });
+  // Both main transcripts carry usage, so the filter - not an empty read - is
+  // what decides which one reaches the denominator.
+  writeFileSync(join(cfg, "projects", "proj", "sess-fable.jsonl"), usageLine("claude-fable-5", 4000) + "\n");
+  writeFileSync(join(cfg, "projects", "proj", "sess-opus.jsonl"), usageLine("claude-opus-4-8", 8000) + "\n");
+  writeFileSync(join(fableDir, "agent-a.jsonl"), usageLine("claude-sonnet-5", 1000) + "\n");
+  writeFileSync(join(opusDir, "agent-b.jsonl"), usageLine("claude-opus-4-8", 3000) + "\n");
+  try {
+    const out = run(["tokens", "--session", "fable"], cfg);
+    // Only the fable session's 4k, never the opus session's 8k.
+    assert.match(out, /Main sessions \(not routable\): 4k across 1 sessions/);
+    assert.match(out, /Subagents are 20% of the 5k total/);
+    assert.doesNotMatch(out, /opus-4-8\s+8k/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
 test("tokens reaches Workflow-spawned agents nested under subagents/workflows/", () => {
   const cfg = freshConfigDir();
   const wfDir = join(cfg, "projects", "proj", "sess-1", "subagents", "workflows", "wf_abc123");
