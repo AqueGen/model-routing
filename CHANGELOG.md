@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.1 - 2026-08-02
+
+Re-measures the README token section on 0.13.0 so every figure in it comes from one run, and corrects a claim the new measurement made false. Docs only - no pin, config, hook, or stats changes.
+
+- **Every number in the token section now comes from a single measurement.** The previous draft quoted 1.79B of subagent volume in one paragraph and 283.7M two lines later. Both were true - the first across all sessions, the second scoped to fable-default ones - and a reader had no way to reconcile them. The section now opens with a two-column table, all sessions against fable-default sessions, with main-session and subagent volume on separate rows, and every later figure states which column it belongs to.
+- **Corrected a claim the re-measurement falsified.** The fable slice grew from 0.7M to 2.1M, and the growth is a `model=fable` reviewer dispatched deliberately above the session tier - to review 0.13.0 itself. The old text called that slice "the honest remainder" of accidental inheritance, which is now wrong about most of it. It says so instead, and points at the above-tier reporting added in 0.8.0 as the reason a deliberate top-tier dispatch shows up as a decision rather than hiding among at-tier work.
+- The scoped headline is 99%, not the 100% quoted before: a fable subagent in a fable session is at tier, not below it, so the deliberate review moved the figure. Left as measured rather than re-scoped to keep the round number.
+- Snapshot attribution corrected to v0.13.0; the previous line still credited v0.12.0, which could not have produced the main-session figures beside it.
+
 ## 0.13.0 - 2026-08-02
 
 `tokens` now prints the denominator its percentage is measured against. The routed-down share was true and easy to over-read, including by the author, which is the failure this release exists to close.
@@ -13,7 +22,7 @@
 - **An unreadable transcript is reported, not swallowed.** `tokens` previously read only agent transcripts, which are small; main-session transcripts run to hundreds of MB, and `readFileSync` as a string throws past V8's ~512MB limit. That now fails the single file instead of the whole command, and the count is printed, because a silently dropped session understates the denominator and again biases the share upward.
 - The empty-window note says "no subagent volume counted against them" rather than "none of it delegated": agent transcripts can exist and still contribute nothing to a window, e.g. a resumed transcript whose lines predate an `--ago` range.
 - Tests 27 -> 32: the denominator line, the unfiltered-beside-scoped line, a non-agent file under `subagents/`, a sidecar beside `subagents/` (the depth case above), and `--session` scoping the denominator as well as the headline. Measured at ~2s over 83 sessions and 8.63B tokens, so the extra read stays comfortable for an on-demand command.
-- README: the token section now opens with its own scope - subagent volume only, main session excluded and why - and states the unfiltered 33% next to the scoped 100%.
+- README: the token section now opens with its own scope - subagent volume only, main session excluded and why - and states the unfiltered share next to the scoped one.
 - The first three findings above came from an adversarial review of this diff run on Fable; the arithmetic of the new accumulators was checked and confirmed correct in the same pass.
 
 ## 0.12.1 - 2026-08-02
