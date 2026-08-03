@@ -8,6 +8,15 @@
             "command": "cat \"${CLAUDE_PLUGIN_ROOT}/hooks/routing-anchor.md\""
           }
         ]
+      },
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/update-check.mjs\""
+          }
+        ]
       }
     ],
     "PostToolUse": [
