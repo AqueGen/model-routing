@@ -214,7 +214,7 @@ actually ran with `/model-routing:stats`.
   price of using Fable 5 for the whole task. One short turn beats finding
   the wrong approach in a finished diff. With a plan already approved -
   written in the main session or by a planning skill - that check has
-  happened, so dispatch straight to implementation.
+  happened, so dispatch straight to implementation. The harness also ships this pattern as a built-in tool - see `advisorModel` under Complementary settings.
 - Escalate, don't guess. When a subagent is stuck on the *approach* (not
   just missing a fact), it should package its state - what it tried, why
   each attempt failed, the candidate directions it sees - and hand it back
@@ -321,7 +321,13 @@ already consented to, so the savings come from making each node cheap.
 
 - `fallbackModel` in settings.json: `["opus", "sonnet"]` - the harness
   falls back down the tier ladder when the primary model is unavailable
-  or its quota is exhausted.
+  or its quota is exhausted. Match the context variant to the session model: a `["opus", ...]` chain falls back to the 200K-window alias, which cannot hold a session already past 200K - on an `opus[1m]` session the fallback wants `opus[1m]` too.
+- `/advisor`, the `advisorModel` setting, or `--advisor`: a server-side tool that consults a stronger model at decision points - before committing to an approach, on a recurring error, before declaring a task done. Claude chooses when to call it, and the advisor receives the FULL conversation, so unlike a subagent it needs no state packaging and has no fresh-context blind spot. This is the advisor strategy above, productized. What to know before enabling it:
+  - The advisor must be at least as capable as the main model. An Opus 4.7-or-later session accepts only another Opus 4.7+ (a Sonnet 5 advisor is rejected); a Sonnet session accepts Opus.
+  - Fable is not currently offered as an advisor. A saved `"fable"` attaches no advisor and raises NO error - it fails silently - while `/advisor fable` and `--advisor fable` are rejected outright. A remote rollout controls when it returns.
+  - Subagents inherit the configured advisor and re-run the pairing check against their own model. A sonnet `implementer` with an opus advisor is exactly the pairing the advisor strategy measures, applied automatically.
+  - Cost scales with conversation length, not task size: each call re-reads the whole transcript at the advisor's rates and is never cached. It does not appear in `/model-routing:stats` - a server tool is not an Agent dispatch - so `/usage` is where it lands.
+  - Anthropic API only (not Bedrock, Claude Platform on AWS, Google Cloud's Agent Platform, or Microsoft Foundry). Experimental. `CLAUDE_CODE_DISABLE_ADVISOR_TOOL=1` disables it entirely.
 - `/model opusplan`: built-in two-tier hybrid (Opus plans, Sonnet
   executes) - a good lazy default for sessions that do not need the
   strongest tier.
