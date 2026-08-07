@@ -154,6 +154,23 @@ actually earns its cost:
   low/medium punch well above their weight - when a dispatch feels too
   expensive, step the EFFORT down before the tier; when a result is too
   shallow, step effort up before tier up.
+- **Fable-class sessions shift two constants.** The Fable 5 tokenizer
+  produces ~30% more tokens than Opus for the same content (Sonnet 5
+  shares the new tokenizer, with the same gap vs Sonnet 4.6), so the
+  effective price gap vs opus is wider than the per-token sticker -
+  one more reason dispatches on a fable session default to an explicit
+  cheaper `model` rather than inheriting. And effort punches above
+  prior generations: `low` on Fable often matches or beats `max` on
+  earlier models, so sweep Workflow `effort` opts downward and suggest
+  a `low`/`medium` session effort for routine phases - an unset session
+  effort is `high`, the most expensive default on the priciest tier.
+- **Security work caps at opus, never fable.** Fable's cyber safety
+  classifiers can refuse security scanning and offensive-security
+  analysis (a `refusal` stop reason) - a security-review dispatch or
+  escalation that lands on fable can burn the turn and return nothing.
+  Cap security-sensitive dispatches at `model=opus` even when the
+  session runs Fable; for this work the escalation ladder tops out at
+  opus.
 
 Research backing: task-type routing outperforms complexity-score routing
 (RouteLLM, ICLR 2025); benchmark tier gaps confirm sonnet as the
@@ -243,7 +260,9 @@ actually ran with `/model-routing:stats`.
   take it to the main session. Distinguish this from the stuck-on-approach
   handback above: stuck agents hand back BEFORE producing a result and
   continue via SendMessage; failed results re-dispatch fresh one tier up,
-  because the failed attempt's context is part of the problem.
+  because the failed attempt's context is part of the problem. One
+  ceiling on the climb: security-sensitive work never escalates onto
+  fable (see the Fable caveats above) - its ladder tops out at opus.
 - A pin is also a FLOOR, and undercutting it is not a saving. The pin states
   how much reasoning the role needs, so `reviewer` dispatched with
   `model=haiku` is a weaker review rather than a cheaper one, and it still
