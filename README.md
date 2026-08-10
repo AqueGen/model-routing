@@ -20,7 +20,7 @@ than a missing fact, it escalates back to the main session for a decision
 instead of thrashing.
 
 Everything stays inside Anthropic models. No proxy, no third-party
-gateway, no ToS gray zones.
+gateway, nothing extra in the request path.
 
 **Quick links:** [Overview](#whats-inside) | [Example](#example) |
 [Install](#install) | [Getting started](#getting-started) |
@@ -539,11 +539,13 @@ Releases are cut by [release-please](https://github.com/googleapis/release-pleas
 
 ## Why not a router proxy?
 
-[free-claude-code](https://github.com/alishahryar1/free-claude-code), [claude-code-router](https://github.com/musistudio/claude-code-router) and similar gateways solve a different problem: routing across providers (OpenAI, Gemini, DeepSeek, local models). They override a whole tier at a time - `MODEL_OPUS`, `MODEL_SONNET`, `MODEL_HAIKU` - so the substitution is per tier, never per task: a proxy sees which tier was requested, not what the work is. Claude Code asks for one tier for the session and haiku for background chores, so tier-level substitution has three buckets; deciding that exploration is cheap and review is expensive is what subagent delegation adds, natively and with no extra moving parts.
+[free-claude-code](https://github.com/alishahryar1/free-claude-code), [claude-code-router](https://github.com/musistudio/claude-code-router) and similar gateways solve a different problem: sending Claude Code's requests to other providers - OpenAI, Gemini, DeepSeek, Groq, local models. How finely they route differs, and it is worth checking rather than assuming: free-claude-code substitutes a whole tier at a time (`MODEL_FABLE`, `MODEL_OPUS`, `MODEL_SONNET`, `MODEL_HAIKU`) and lists no Anthropic provider, while claude-code-router matches on request headers and bodies with rewrites, retries and ordered fallbacks, and speaks the Anthropic Messages protocol, so it can be pointed back at Anthropic.
 
-Nor can a proxy keep you inside Anthropic - the provider catalogs do not list it - so the real trade is data egress, server tools (the advisor tool needs the request forwarded to Anthropic intact), and Anthropic-style prompt caching, whose cache-read economics are where routing saves most.
+What no gateway sees is the task. It observes the tier Claude Code asked for and the shape of the request, not whether this particular errand is a throwaway grep or the review that guards a release - and Claude Code asks for one tier for the whole session plus haiku for background chores. Deciding that exploration is cheap and review is expensive happens above that layer, which is what subagent delegation does, natively, with no extra process in the request path.
 
-The two compose rather than compete. A proxy reaches one thing no plugin can: Claude Code's own background traffic - quota probes, conversation titles, command-prefix detection - which never surfaces as a dispatch. If sending your code to a third party is acceptable for the work at hand, run both: this plugin decides which tier per task, the proxy decides which model per tier.
+The costs are worth naming plainly, because they are not about compliance. Routing away from Anthropic means your code leaves it; server tools stop working unless the request reaches Anthropic intact, which the [advisor tool](#recommended-settings) needs; and Anthropic-style prompt caching, whose cache-read rate is where most of the saving in this plugin actually comes from, is not something every provider offers.
+
+Against that, a gateway reaches one thing no plugin can: Claude Code's own background traffic - quota probes, conversation titles, command-prefix detection - which never surfaces as an Agent dispatch and so is invisible here. The two compose rather than compete. Where sending code to a third party is acceptable for the work at hand, run both: this plugin decides which tier each task deserves, the gateway decides which model serves a tier.
 
 ## License
 
