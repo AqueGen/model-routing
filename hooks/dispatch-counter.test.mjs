@@ -12,11 +12,18 @@ import { fileURLToPath } from "node:url";
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "dispatch-counter.mjs");
 
-function run(args, configDir, stdin, extraEnv) {
+function run(args, configDir, stdin, extraEnv, cwd) {
   return execFileSync(process.execPath, [SCRIPT, ...args].filter(Boolean), {
-    // CLAUDE_CODE_SUBAGENT_MODEL is blanked by default so a developer's own
-    // override cannot leak into the hermetic tests; set via extraEnv to test.
-    env: { ...process.env, CLAUDE_CONFIG_DIR: configDir, CLAUDE_CODE_SUBAGENT_MODEL: "", ...(extraEnv ?? {}) },
+    // CLAUDE_CODE_SUBAGENT_MODEL and CLAUDE_CODE_EFFORT_LEVEL are blanked by
+    // default so a developer's own overrides cannot leak into the hermetic
+    // tests; set either via extraEnv to test it.
+    env: { ...process.env, CLAUDE_CONFIG_DIR: configDir, CLAUDE_CODE_SUBAGENT_MODEL: "", CLAUDE_CODE_EFFORT_LEVEL: "", ...(extraEnv ?? {}) },
+    // Default the working directory to the temp config dir, never the directory
+    // the suite happens to run from: the hook reads <cwd>/.claude/settings*.json
+    // for the session effort, so an ambient cwd would let a real settings file
+    // two levels up decide a test outcome. Tests that need a specific project
+    // cascade pass their own cwd.
+    cwd: cwd ?? configDir,
     input: stdin ?? "",
     encoding: "utf-8",
   });
@@ -146,6 +153,34 @@ test("PINNED_MODELS mirrors agents/*.md frontmatter", () => {
   const table = readFileSync(SCRIPT, "utf-8").match(/const PINNED_MODELS = \{([\s\S]*?)\};/)[1];
   const pinned = Object.fromEntries([...table.matchAll(/"([^"]+)":\s*"([^"]+)"/g)].map((m) => [m[1], m[2]]));
   assert.deepEqual(pinned, fromFrontmatter);
+});
+
+test("PINNED_EFFORT mirrors agents/*.md frontmatter", () => {
+  // Same drift class as PINNED_MODELS above, one table over. Without this the
+  // effort section keeps reporting a pin the frontmatter no longer carries,
+  // and the whole suite stays green while the report misinforms.
+  const agentsDir = join(dirname(SCRIPT), "..", "agents");
+  const fromFrontmatter = Object.fromEntries(
+    readdirSync(agentsDir).filter((f) => f.endsWith(".md")).map((f) => {
+      const fm = readFileSync(join(agentsDir, f), "utf-8").match(/^---\r?\n([\s\S]*?)\r?\n---/)[1];
+      return [`model-routing:${f.replace(/\.md$/, "")}`, fm.match(/^effort:\s*(\S+)/m)?.[1] ?? null];
+    }));
+  const table = readFileSync(SCRIPT, "utf-8").match(/const PINNED_EFFORT = \{([\s\S]*?)\};/)[1];
+  const pinned = Object.fromEntries([...table.matchAll(/"([^"]+)":\s*"([^"]+)"/g)].map((m) => [m[1], m[2]]));
+  assert.deepEqual(pinned, fromFrontmatter);
+});
+
+test("the effort ladders match what Claude Code accepts per source", () => {
+  // Settings reject max and ultracode (session-only); the env var accepts max
+  // but not ultracode. Logging a level from a source that would have rejected
+  // it reports an effort the session never ran on.
+  const src = readFileSync(SCRIPT, "utf-8");
+  const settings = src.match(/const SETTINGS_EFFORTS = new Set\(\[([^\]]*)\]\)/)[1];
+  assert.deepEqual([...settings.matchAll(/"([^"]+)"/g)].map((m) => m[1]), ["low", "medium", "high", "xhigh"]);
+  const env = src.match(/const ENV_EFFORTS = new Set\(\[([^\]]*)\]\)/)[1];
+  assert.match(env, /SETTINGS_EFFORTS/);
+  assert.match(env, /"max"/);
+  assert.doesNotMatch(src, /"ultracode"/);
 });
 
 test("agent frontmatter stays plain-YAML-safe in unquoted values", () => {
@@ -570,10 +605,11 @@ test("tokens reaches Workflow-spawned agents nested under subagents/workflows/",
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
-// Effort is read from the settings cascade, so these tests pin BOTH ends of it:
-// a temp CLAUDE_CONFIG_DIR for the user file and a temp cwd for the project
-// one. Without the temp cwd the result would depend on the directory the suite
-// happens to run from.
+// Effort has three sources with a precedence between them, so these tests pin
+// every rung: a temp CLAUDE_CONFIG_DIR for the user file, a temp cwd for the two
+// project files, and an explicit env var for the override. Nothing here may read
+// the directory the suite happens to run from - run() defaults cwd to the temp
+// config dir for exactly that reason.
 function freshCwd() {
   return mkdtempSync(join(tmpdir(), "mr-cwd-"));
 }
@@ -583,61 +619,145 @@ function logEntries(cfg) {
     .split("\n").filter(Boolean).map((l) => JSON.parse(l));
 }
 
-test("hook records the session effort from the user settings file", () => {
+// One dispatch through the hook, returning the logged entry. `settings` maps a
+// rung to its JSON: "user" -> <cfg>/settings.json, "project" ->
+// <cwd>/.claude/settings.json, "local" -> <cwd>/.claude/settings.local.json.
+function dispatchWithSettings({ settings = {}, env, sessionModel }) {
   const cfg = freshConfigDir();
   const cwd = freshCwd();
-  writeFileSync(join(cfg, "settings.json"), JSON.stringify({ effortLevel: "high" }));
   try {
-    run([], cfg, JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: "x" }, cwd }));
-    assert.equal(logEntries(cfg)[0].effort, "high");
+    if (settings.user !== undefined) writeFileSync(join(cfg, "settings.json"), JSON.stringify(settings.user));
+    if (settings.project !== undefined || settings.local !== undefined) mkdirSync(join(cwd, ".claude"), { recursive: true });
+    if (settings.project !== undefined) writeFileSync(join(cwd, ".claude", "settings.json"), JSON.stringify(settings.project));
+    if (settings.local !== undefined) writeFileSync(join(cwd, ".claude", "settings.local.json"), JSON.stringify(settings.local));
+    const event = { tool_name: "Agent", tool_input: { subagent_type: "x" }, cwd };
+    if (sessionModel) {
+      const sess = join(cfg, "sess.jsonl");
+      writeFileSync(sess, JSON.stringify({ message: { model: sessionModel } }) + "\n");
+      event.transcript_path = sess;
+    }
+    run([], cfg, JSON.stringify(event), env);
+    return logEntries(cfg)[0];
   } finally {
     rmSync(cfg, { recursive: true, force: true });
     rmSync(cwd, { recursive: true, force: true });
   }
+}
+
+test("hook records the session effort from the user settings file", () => {
+  const e = dispatchWithSettings({ settings: { user: { effortLevel: "high" } } });
+  assert.equal(e.effort, "high");
+  assert.equal(e.effortFrom, "settings");
 });
 
-test("a project settings file outranks the user one for effort", () => {
-  const cfg = freshConfigDir();
-  const cwd = freshCwd();
-  writeFileSync(join(cfg, "settings.json"), JSON.stringify({ effortLevel: "high" }));
-  mkdirSync(join(cwd, ".claude"), { recursive: true });
-  writeFileSync(join(cwd, ".claude", "settings.local.json"), JSON.stringify({ effortLevel: "low" }));
-  try {
-    run([], cfg, JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: "x" }, cwd }));
-    assert.equal(logEntries(cfg)[0].effort, "low");
-  } finally {
-    rmSync(cfg, { recursive: true, force: true });
-    rmSync(cwd, { recursive: true, force: true });
-  }
+test("the project settings file outranks the user one for effort", () => {
+  // The middle rung: without a test here, dropping or misordering it passes.
+  const e = dispatchWithSettings({ settings: { user: { effortLevel: "high" }, project: { effortLevel: "medium" } } });
+  assert.equal(e.effort, "medium");
+});
+
+test("the local settings file outranks the project one for effort", () => {
+  const e = dispatchWithSettings({ settings: { project: { effortLevel: "medium" }, local: { effortLevel: "low" } } });
+  assert.equal(e.effort, "low");
+});
+
+test("CLAUDE_CODE_EFFORT_LEVEL overrides every settings rung", () => {
+  // The env var wins in Claude Code, so reporting the settings value would name
+  // an effort the session did not run on.
+  const e = dispatchWithSettings({
+    settings: { user: { effortLevel: "high" }, local: { effortLevel: "high" } },
+    env: { CLAUDE_CODE_EFFORT_LEVEL: "low" },
+  });
+  assert.equal(e.effort, "low");
+  assert.equal(e.effortFrom, "env");
+});
+
+test("max is accepted from the env var but rejected from a settings file", () => {
+  // Settings reject max as session-only; the env var accepts it.
+  const fromEnv = dispatchWithSettings({ env: { CLAUDE_CODE_EFFORT_LEVEL: "max" } });
+  assert.equal(fromEnv.effort, "max");
+  const fromSettings = dispatchWithSettings({ settings: { user: { effortLevel: "max" } } });
+  assert.equal("effort" in fromSettings, false);
+});
+
+test("CLAUDE_CODE_EFFORT_LEVEL=auto records the model default, not the settings value", () => {
+  const e = dispatchWithSettings({
+    settings: { user: { effortLevel: "low" } },
+    env: { CLAUDE_CODE_EFFORT_LEVEL: "auto" },
+    sessionModel: "claude-opus-5",
+  });
+  assert.equal(e.effort, "high");
+  assert.equal(e.effortFrom, "default");
+});
+
+test("an unset effortLevel records the documented model default", () => {
+  // The most common configuration of all: nothing set anywhere. Omitting it
+  // left the report blank for most users.
+  const opus5 = dispatchWithSettings({ sessionModel: "claude-opus-5" });
+  assert.equal(opus5.effort, "high");
+  assert.equal(opus5.effortFrom, "default");
+  // Opus 4.7 is the documented exception.
+  const opus47 = dispatchWithSettings({ sessionModel: "claude-opus-4-7" });
+  assert.equal(opus47.effort, "xhigh");
+});
+
+test("no default is invented for a session model this script cannot rank", () => {
+  const e = dispatchWithSettings({ sessionModel: "claude-zephyr-1" });
+  assert.equal("effort" in e, false);
 });
 
 test("an effort value outside the ladder is ignored rather than logged", () => {
+  // A typo or a future level must not become a fabricated data point.
+  const e = dispatchWithSettings({ settings: { user: { effortLevel: "turbo" } } });
+  assert.equal("effort" in e, false);
+});
+
+test("a bad value stops the walk instead of falling through to the next rung", () => {
+  // Falling through would log the user-level "high" for a session whose local
+  // file tried to set something else: a wrong data point replacing a missing
+  // one. The harness would not have read past that rung either.
+  const e = dispatchWithSettings({
+    settings: { user: { effortLevel: "high" }, local: { effortLevel: "turbo" } },
+    sessionModel: "claude-opus-5",
+  });
+  assert.equal("effort" in e, false);
+});
+
+test("a malformed settings file defers to the next rung", () => {
+  // A file the harness cannot parse is ignored wholesale, so the next rung
+  // decides - unlike a parseable file carrying a bad value.
   const cfg = freshConfigDir();
   const cwd = freshCwd();
-  // A typo or a future level must not become a fabricated data point.
-  writeFileSync(join(cfg, "settings.json"), JSON.stringify({ effortLevel: "turbo" }));
+  writeFileSync(join(cfg, "settings.json"), JSON.stringify({ effortLevel: "medium" }));
+  mkdirSync(join(cwd, ".claude"), { recursive: true });
+  writeFileSync(join(cwd, ".claude", "settings.local.json"), "{ not json");
   try {
     run([], cfg, JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: "x" }, cwd }));
-    assert.equal("effort" in logEntries(cfg)[0], false);
+    assert.equal(logEntries(cfg)[0].effort, "medium");
   } finally {
     rmSync(cfg, { recursive: true, force: true });
     rmSync(cwd, { recursive: true, force: true });
   }
 });
 
-test("report counts only unpinned agents as inheriting the session effort", () => {
+test("report separates inherited effort from pinned, and flags inferred levels", () => {
   const cfg = freshConfigDir();
   const now = Date.now();
   writeLog(cfg, [
-    { ts: now, agent: "general-purpose", model: "sonnet", session: "claude-opus-5", effort: "high" },
-    { ts: now, agent: "general-purpose", model: "haiku", session: "claude-opus-5", effort: "high" },
+    { ts: now, agent: "general-purpose", model: "sonnet", session: "claude-opus-5", effort: "high", effortFrom: "settings" },
+    { ts: now, agent: "general-purpose", model: "haiku", session: "claude-opus-5", effort: "high", effortFrom: "default" },
     // Frontmatter-pinned: carries its own effort, so it never inherits.
-    { ts: now, agent: "model-routing:scout", session: "claude-opus-5", effort: "high" },
+    { ts: now, agent: "model-routing:scout", session: "claude-opus-5", effort: "high", effortFrom: "settings" },
   ]);
   try {
     const out = run(["report"], cfg);
-    assert.match(out, /Effort: 2 of 3 dispatches ran on an agent type with no effort pin/);
+    assert.match(out, /Effort: 2 of 3 dispatches ran on an agent type carrying no pin this plugin knows about/);
     assert.match(out, /\(2 at high\)/);
+    // An inferred default must never read as an observed setting.
+    assert.match(out, /1 of these levels are the documented model default rather than an observed setting/);
+    // The source order and the invisible-change limit are stated, not implied.
+    assert.match(out, /CLAUDE_CODE_EFFORT_LEVEL, then settings effortLevel, then the model default/);
+    assert.match(out, /an agent from anywhere else may pin its own effort/i);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
@@ -663,5 +783,21 @@ test("tokens falls back to the transcript tail when the head names no model", ()
     const out = run(["tokens"], cfg);
     assert.match(out, /opus-5: 1k across 1 agents - 100% below session tier/);
     assert.doesNotMatch(out, /session unknown/);
+    // The footer must admit the tail case: for these sessions the attribution
+    // is the LAST model, the opposite bias from the start-model promise.
+    assert.match(out, /the tail is read instead and that session is attributed to its LAST model/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("the not-comparable note names the unreadable-session cause, not just the tier table", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  // No parent sess-1.jsonl at all: the session model cannot be read, which
+  // extending TIER_PATTERNS would never have fixed.
+  writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-sonnet-5", 1000) + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /no model could be read from the parent session transcript/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
