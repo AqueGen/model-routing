@@ -539,11 +539,11 @@ Releases are cut by [release-please](https://github.com/googleapis/release-pleas
 
 ## Why not a router proxy?
 
-[claude-code-router](https://github.com/musistudio/claude-code-router) and
-similar gateways solve a different problem: routing across providers
-(OpenAI, Gemini, DeepSeek...). If you live inside Anthropic models, a
-proxy adds a failure point and ToS risk for no gain. Subagent delegation
-is native, supported, and does the same tier-splitting.
+[free-claude-code](https://github.com/alishahryar1/free-claude-code), [claude-code-router](https://github.com/musistudio/claude-code-router) and similar gateways solve a different problem: routing across providers (OpenAI, Gemini, DeepSeek, local models). They override a whole tier at a time - `MODEL_OPUS`, `MODEL_SONNET`, `MODEL_HAIKU` - so the substitution is per tier, never per task: a proxy sees which tier was requested, not what the work is. Claude Code asks for one tier for the session and haiku for background chores, so tier-level substitution has three buckets; deciding that exploration is cheap and review is expensive is what subagent delegation adds, natively and with no extra moving parts.
+
+Nor can a proxy keep you inside Anthropic - the provider catalogs do not list it - so the real trade is data egress, server tools (the advisor tool needs the request forwarded to Anthropic intact), and Anthropic-style prompt caching, whose cache-read economics are where routing saves most.
+
+The two compose rather than compete. A proxy reaches one thing no plugin can: Claude Code's own background traffic - quota probes, conversation titles, command-prefix detection - which never surfaces as a dispatch. If sending your code to a third party is acceptable for the work at hand, run both: this plugin decides which tier per task, the proxy decides which model per tier.
 
 ## License
 
