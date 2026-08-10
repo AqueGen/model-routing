@@ -18,6 +18,9 @@
 // the agent's frontmatter pin) ranks below the recorded session model. Entries
 // missing either side fall back to a cheap-agent/cheap-tier heuristic. Counts
 // dispatches, not tokens - honest bookkeeping, no dollar fiction.
+// Each entry also records the session's effort level (from the settings
+// cascade, the only place it is observable) so the report can show the second
+// knob: dispatches on unpinned agent types inherit it, pinned agents do not.
 // Log lives in <config>/model-routing/dispatches.jsonl and self-prunes to 30d.
 
 import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
@@ -62,16 +65,54 @@ const PINNED_MODELS = {
   "model-routing:implementer": "sonnet",
   "model-routing:reviewer": "opus",
 };
+// Frontmatter effort pins of the bundled agents - the second cost knob, which
+// moves cost as hard as tier does. Every OTHER agent type has no pin and runs
+// at the session level, so a mechanical errand sent to general-purpose lands
+// on a cheap model that thinks as hard as the session does. Keep in sync with
+// agents/*.md.
+const PINNED_EFFORT = {
+  "model-routing:scout": "low",
+  "model-routing:test-runner": "low",
+  "model-routing:verifier": "low",
+  "model-routing:implementer": "medium",
+  "model-routing:e2e-runner": "medium",
+  "model-routing:reviewer": "high",
+};
 // Unpinned agent types that are inherently cheap dispatch targets.
 const CHEAP_AGENTS = new Set(["Explore"]);
 
-function dataFile() {
-  const cfg = process.env.CLAUDE_CONFIG_DIR?.trim()
+function configDir() {
+  return process.env.CLAUDE_CONFIG_DIR?.trim()
     ? resolve(process.env.CLAUDE_CONFIG_DIR)
     : join(homedir(), ".claude");
-  const dir = join(cfg, "model-routing");
+}
+
+function dataFile() {
+  const dir = join(configDir(), "model-routing");
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   return join(dir, "dispatches.jsonl");
+}
+
+// The session's reasoning effort. Transcripts do not record effort at all, so
+// the persisted `effortLevel` from the settings cascade (local > project >
+// user) is the only observable source. A `--effort` launch flag or a
+// mid-session change is therefore invisible - the report states the limit
+// rather than implying per-dispatch precision. Reads one key and never emits
+// anything else from these files, which routinely hold secrets.
+const EFFORT_LEVELS = new Set(["low", "medium", "high", "xhigh", "max"]);
+function sessionEffort(cwd) {
+  const files = [
+    join(cwd, ".claude", "settings.local.json"),
+    join(cwd, ".claude", "settings.json"),
+    join(configDir(), "settings.json"),
+  ];
+  for (const f of files) {
+    try {
+      const v = JSON.parse(readFileSync(f, "utf-8")).effortLevel;
+      if (typeof v === "string" && EFFORT_LEVELS.has(v)) return v;
+    } catch {}
+  }
+  return null;
 }
 
 function readEntries(file) {
@@ -121,6 +162,15 @@ function firstModelIn(file, bytes) {
   const m = readSlice(file, bytes, false).match(/"model":"(?:[a-z0-9-]+\.)*(claude-[a-z0-9.-]+)"/);
   return m?.[1] ?? null;
 }
+
+// Session model for the tokens report. The head names the model the session
+// STARTED on, but a long session can push the first assistant message past the
+// head window (measured here: 6 of 60 transcripts, all multi-MB), and
+// returning null there dropped those sessions out of the routed-down math as
+// "session unknown" - and they are the biggest ones, so the loss was
+// concentrated exactly where it mattered. Fall back to the tail, accepting the
+// lower precision: a late-window model beats no model.
+const sessionModelOf = (file) => firstModelIn(file, 262144) ?? lastModelIn(file, 262144);
 
 function lastModelIn(file, bytes) {
   // Model in effect NOW: the last model named in the transcript tail. The
@@ -256,6 +306,26 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     leakLines.push("", `Tier leaks: ${leaks.length} of ${capable.length} unpinned dispatches inherited a strong session model bare (${Math.round(rate * 100)}%).`);
     if (rate > LEAK_WARN) leakLines.push(`  ! above the 20% rework threshold - pass an explicit model= on general-purpose/custom dispatches (sonnet default).`);
   }
+  // Effort, the knob the tier columns cannot show. A dispatch on an unpinned
+  // agent type inherits the session level, so cheap-tier work can still think
+  // at the session's expense - the failure mode a tier-only report calls a
+  // success. Counted only over entries that recorded an effort, so old logs
+  // and machines with no effortLevel set simply omit the section.
+  const effortLines = [];
+  const withEffort = entries.filter((e) => e.effort);
+  if (withEffort.length) {
+    const inherited = withEffort.filter((e) => !PINNED_EFFORT[e.agent]);
+    const byLevel = [...inherited.reduce((m, e) => m.set(e.effort, (m.get(e.effort) ?? 0) + 1), new Map())]
+      .sort((a, b) => b[1] - a[1])
+      .map(([lvl, n]) => `${n} at ${lvl}`)
+      .join(", ");
+    effortLines.push(
+      "",
+      `Effort: ${inherited.length} of ${withEffort.length} dispatches ran on an agent type with no effort pin and inherited the session level${byLevel ? ` (${byLevel})` : ""}.`,
+      `  The bundled agents pin theirs - low for scout/test-runner/verifier, medium for implementer/e2e-runner, high for reviewer - so routing a mechanical errand through a role agent buys a cheaper effort as well as a cheaper tier.`,
+      `  Read from settings effortLevel, so a --effort launch flag or a mid-session change is not visible here.`,
+    );
+  }
   // Grouped sections instead of per-row v/- markers: the reader should not
   // need a legend to see what ran cheap and what ran at the session tier.
   const groups = { down: [], top: [], up: [], unknown: [] };
@@ -290,6 +360,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     "By session model:",
     ...sessionRows.map(([m, s]) => `  ${m}: ${s.down} of ${s.cmp} routed down (${s.cmp ? Math.round((s.down / s.cmp) * 100) : 0}%)${s.n > s.cmp ? ` - ${s.n - s.cmp} not comparable` : ""}`),
     ...leakLines,
+    ...effortLines,
     "",
     `Log: ${dataFile()} - history kept 30 days.`,
   ];
@@ -399,7 +470,7 @@ if (process.argv[2] === "tokens") {
       if (isMainSession) {
         // Scoped by the same --session filter as the agents, so the denominator
         // always describes the same population as the headline above it.
-        if (!sessionModelCache.has(p)) sessionModelCache.set(p, firstModelIn(p, 262144));
+        if (!sessionModelCache.has(p)) sessionModelCache.set(p, sessionModelOf(p));
         const sessionModel = sessionModelCache.get(p);
         if (sf && !(sessionModel && shortModel(sessionModel).toLowerCase().includes(sf))) continue;
         mainSessions++;
@@ -414,7 +485,7 @@ if (process.argv[2] === "tokens") {
       const anchored = p.match(/^(.*?)[\\/]subagents[\\/]/);
       const sessionJsonl = anchored ? anchored[1] + ".jsonl" : null;
       if (sessionJsonl && !sessionModelCache.has(sessionJsonl)) {
-        sessionModelCache.set(sessionJsonl, firstModelIn(sessionJsonl, 262144));
+        sessionModelCache.set(sessionJsonl, sessionModelOf(sessionJsonl));
       }
       const sessionModel = sessionJsonl ? sessionModelCache.get(sessionJsonl) : null;
       const tsess = tierOf(sessionModel);
@@ -491,7 +562,7 @@ if (process.argv[2] === "tokens") {
     "",
     "By session model:",
     ...sessionRows.map(([m, s]) => `  ${m}: ${fmtN(s.vol)} across ${s.agents} agents - ${s.cmpVol ? `${Math.round((s.downVol / s.cmpVol) * 100)}% below session tier` : "not tier-comparable"}${s.cmpVol && s.vol > s.cmpVol ? ` (${fmtN(s.vol - s.cmpVol)} not comparable)` : ""}`),
-    ...(unknownAgents ? ["", `${unknownAgents} agents not tier-comparable (${fmtN(unknownVol)}) - unrecognized agent model or unknown session tier, excluded from routed-down math; extend TIER_PATTERNS in dispatch-counter.mjs.`] : []),
+    ...(unknownAgents ? ["", `${unknownAgents} agents not tier-comparable (${fmtN(unknownVol)}), excluded from routed-down math - either the agent ran an unrecognized model family (extend TIER_PATTERNS in dispatch-counter.mjs) or no model could be read from the parent session transcript, which happens when the transcript is gone or names no model anywhere.`] : []),
     ...(unreadable ? ["", `${unreadable} transcript(s) could not be read (too large to load as one string, or unreadable) - the totals below understate by whatever they held.`] : []),
     ...(mainVolTotal ? [
       "",
@@ -518,6 +589,7 @@ try {
   const event = JSON.parse(raw);
   if (event.tool_name !== "Agent" && event.tool_name !== "Task") process.exit(0);
   const input = event.tool_input ?? {};
+  const effort = sessionEffort(event.cwd ?? process.cwd());
   const entry = {
     ts: Date.now(),
     agent: input.subagent_type ?? "general-purpose",
@@ -530,6 +602,10 @@ try {
     // in the session transcript, i.e. the one in effect at dispatch time
     // (survives /model switches, opusplan handoffs, and quota fallbacks).
     session: event.transcript_path ? lastModelIn(event.transcript_path, 262144) : null,
+    // The session's effort level, so the report can show the second knob at
+    // all. Omitted when no settings file names one - an absent key means the
+    // model's own default, which is not a level this log can assert.
+    ...(effort ? { effort } : {}),
   };
   const file = dataFile();
   appendFileSync(file, JSON.stringify(entry) + "\n");

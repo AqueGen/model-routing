@@ -569,3 +569,99 @@ test("tokens reaches Workflow-spawned agents nested under subagents/workflows/",
     assert.match(run(["tokens", "--session", "fable"], cfg), /No subagent transcripts found[\s\S]*fable sessions/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
+
+// Effort is read from the settings cascade, so these tests pin BOTH ends of it:
+// a temp CLAUDE_CONFIG_DIR for the user file and a temp cwd for the project
+// one. Without the temp cwd the result would depend on the directory the suite
+// happens to run from.
+function freshCwd() {
+  return mkdtempSync(join(tmpdir(), "mr-cwd-"));
+}
+
+function logEntries(cfg) {
+  return readFileSync(join(cfg, "model-routing", "dispatches.jsonl"), "utf-8")
+    .split("\n").filter(Boolean).map((l) => JSON.parse(l));
+}
+
+test("hook records the session effort from the user settings file", () => {
+  const cfg = freshConfigDir();
+  const cwd = freshCwd();
+  writeFileSync(join(cfg, "settings.json"), JSON.stringify({ effortLevel: "high" }));
+  try {
+    run([], cfg, JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: "x" }, cwd }));
+    assert.equal(logEntries(cfg)[0].effort, "high");
+  } finally {
+    rmSync(cfg, { recursive: true, force: true });
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("a project settings file outranks the user one for effort", () => {
+  const cfg = freshConfigDir();
+  const cwd = freshCwd();
+  writeFileSync(join(cfg, "settings.json"), JSON.stringify({ effortLevel: "high" }));
+  mkdirSync(join(cwd, ".claude"), { recursive: true });
+  writeFileSync(join(cwd, ".claude", "settings.local.json"), JSON.stringify({ effortLevel: "low" }));
+  try {
+    run([], cfg, JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: "x" }, cwd }));
+    assert.equal(logEntries(cfg)[0].effort, "low");
+  } finally {
+    rmSync(cfg, { recursive: true, force: true });
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("an effort value outside the ladder is ignored rather than logged", () => {
+  const cfg = freshConfigDir();
+  const cwd = freshCwd();
+  // A typo or a future level must not become a fabricated data point.
+  writeFileSync(join(cfg, "settings.json"), JSON.stringify({ effortLevel: "turbo" }));
+  try {
+    run([], cfg, JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: "x" }, cwd }));
+    assert.equal("effort" in logEntries(cfg)[0], false);
+  } finally {
+    rmSync(cfg, { recursive: true, force: true });
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("report counts only unpinned agents as inheriting the session effort", () => {
+  const cfg = freshConfigDir();
+  const now = Date.now();
+  writeLog(cfg, [
+    { ts: now, agent: "general-purpose", model: "sonnet", session: "claude-opus-5", effort: "high" },
+    { ts: now, agent: "general-purpose", model: "haiku", session: "claude-opus-5", effort: "high" },
+    // Frontmatter-pinned: carries its own effort, so it never inherits.
+    { ts: now, agent: "model-routing:scout", session: "claude-opus-5", effort: "high" },
+  ]);
+  try {
+    const out = run(["report"], cfg);
+    assert.match(out, /Effort: 2 of 3 dispatches ran on an agent type with no effort pin/);
+    assert.match(out, /\(2 at high\)/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("report omits the effort section when no entry recorded one", () => {
+  const cfg = freshConfigDir();
+  writeLog(cfg, [{ ts: Date.now(), agent: "general-purpose", model: "sonnet", session: "claude-opus-5" }]);
+  try {
+    assert.doesNotMatch(run(["report"], cfg), /^Effort:/m);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("tokens falls back to the transcript tail when the head names no model", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  // A head larger than the 256KB read window that names no model: the first
+  // assistant message lands past it, exactly as in real multi-MB sessions,
+  // which used to drop the whole session out of the routed-down math.
+  const pad = JSON.stringify({ type: "user", filler: "x".repeat(300000) });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), pad + "\n" + usageLine("claude-opus-5", 5000) + "\n");
+  writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-sonnet-5", 1000) + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /opus-5: 1k across 1 agents - 100% below session tier/);
+    assert.doesNotMatch(out, /session unknown/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
