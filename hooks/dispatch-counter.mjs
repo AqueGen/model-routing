@@ -120,7 +120,10 @@ const ENV_EFFORTS = new Set([...SETTINGS_EFFORTS, "max"]);
 // consistency test pins the two together instead - every model named here must
 // be rankable there.
 const EFFORT_SUPPORT = [
-  [/fable-5|opus-5|sonnet-5|opus-4-8|opus-4-7/, ["low", "medium", "high", "xhigh", "max"]],
+  // mythos-5 rides with fable-5 here for the same reason it does in PRICES and
+  // TIER_PATTERNS: same generation, same knobs. Leaving it out of this one table
+  // was the only way the three could disagree, and it did.
+  [/fable-5|mythos-5|opus-5|sonnet-5|opus-4-8|opus-4-7/, ["low", "medium", "high", "xhigh", "max"]],
   [/opus-4-6|sonnet-4-6/, ["low", "medium", "high", "max"]],
 ];
 const EFFORT_LADDER = ["low", "medium", "high", "xhigh", "max"];
@@ -340,21 +343,16 @@ function belowPin(e) {
   return te < Math.min(tp, ts);
 }
 
-function isRoutedDown(e) {
-  // With the session model recorded (0.5.3+ entries), judge by tier: an
-  // effective model (explicit param or frontmatter pin) below the session
-  // tier is routed down - so a bare implementer dispatch from an opus
-  // session counts, because its pin ran it on sonnet. Unknown tiers (null)
-  // and entries without both fields fall back to the heuristic instead of
-  // comparing against a made-up rank.
-  const model = effectiveModel(e);
-  if (model && e.session) {
-    const tm = tierOf(model), ts = tierOf(e.session);
-    if (tm != null && ts != null) return tm < ts;
-  }
-  // Heuristic: cheap = sonnet tier or below, ranked via tierOf so dashed
-  // full ids ("claude-sonnet-5...") classify the same as short names.
-  return CHEAP_AGENTS.has(e.agent) || (tierOf(model) ?? 99) <= 2;
+// The documented fallback for entries the tier comparison cannot judge: cheap =
+// a known cheap agent, or sonnet tier or below. Ranked via tierOf so dashed full
+// ids ("claude-sonnet-5...") classify the same as short names.
+//
+// It used to open with a tier comparison of its own, which was dead code: its
+// only caller reaches it precisely when that comparison is impossible, so the
+// branch could never be entered. Two copies of the same rule, one unreachable,
+// is how the two drift apart unnoticed.
+function isCheapByHeuristic(e) {
+  return CHEAP_AGENTS.has(e.agent) || (tierOf(effectiveModel(e)) ?? 99) <= 2;
 }
 
 if (process.argv[2] === "stats" || process.argv[2] === "report") {
@@ -391,7 +389,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     }
     // No session recorded at all (pre-0.5.3 entries): the documented
     // cheap-tier heuristic.
-    return isRoutedDown(e) ? "down" : "at";
+    return isCheapByHeuristic(e) ? "down" : "at";
   };
   const down = entries.filter((e) => verdictOf(e) === "down");
   const upCount = entries.filter((e) => verdictOf(e) === "up").length;
@@ -456,16 +454,31 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   // is gone - here inverted, >20% of cheap-capable dispatches leaking UP
   // is the same signal that the tier assignment is not holding.
   const BUNDLED = new Set([...Object.keys(AGENT_PINS), ...CHEAP_AGENTS]);
-  const capable = entries.filter((e) => !BUNDLED.has(e.agent));
+  const unpinned = entries.filter((e) => !BUNDLED.has(e.agent));
+  // The question "did this inherit a STRONG session model" is only answerable
+  // where the session model is both recorded and rankable. An entry without one
+  // was previously kept in the denominator and could only ever come out clean:
+  // `?? 0` ranked an unrecognized family as the cheapest tier there is, so a bare
+  // dispatch on a future top-tier model counted as a non-leak and diluted the
+  // rate. Unknown now leaves the fraction entirely and is declared on its own
+  // line - the same rule the routed-down math and the below-pin flag already use.
+  const capable = unpinned.filter((e) => e.session && tierOf(e.session) != null);
+  const unrankable = unpinned.length - capable.length;
   // An env override means the dispatch did NOT inherit the session model,
   // no matter that the call itself was bare - not a leak.
-  const leaks = capable.filter((e) => !e.env && !e.model && e.session && (tierOf(e.session) ?? 0) > 2);
+  const leaks = capable.filter((e) => !e.env && !e.model && tierOf(e.session) > 2);
   const LEAK_WARN = 0.20;
   const leakLines = [];
   if (capable.length) {
     const rate = leaks.length / capable.length;
     leakLines.push("", `Tier leaks: ${leaks.length} of ${capable.length} unpinned dispatches inherited a strong session model bare (${Math.round(rate * 100)}%).`);
     if (rate > LEAK_WARN) leakLines.push(`  ! above the 20% rework threshold - pass an explicit model= on general-purpose/custom dispatches (sonnet default).`);
+  }
+  if (unrankable) {
+    leakLines.push(
+      ...(capable.length ? [] : ["", "Tier leaks: not measurable in this window."]),
+      `  ${unrankable} unpinned dispatch(es) left out: no session model recorded, or one on a family TIER_PATTERNS cannot rank. Whether they inherited something strong is not knowable, so they are not counted either way.`
+    );
   }
   // Effort, the knob the tier columns cannot show. A dispatch on an agent type
   // with no known pin inherits the session level, so cheap-tier work can still
@@ -502,9 +515,12 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     // Mixed rows (same key dispatched from sessions on different tiers) go
     // to the majority side, annotated so a row never silently contradicts
     // the headline count.
+    // Both forms count out of `judged`, never `s.n`: the headline excluded the
+    // unknown entries, so a row saying "1 of 3" under it described a population
+    // the reader could not reconcile with anything on screen.
     const mixed = s.up > 0
       ? (s.up < judged ? ` [${s.down} down / ${at} at / ${s.up} above]` : "")
-      : (s.down > 0 && s.down < judged ? ` [${s.down} of ${s.n} down]` : "");
+      : (s.down > 0 && s.down < judged ? ` [${s.down} of ${judged} down]` : "");
     const row = `${String(s.n).padStart(4)}  ${agent}${mixed}`;
     if (s.unknown === s.n) groups.unknown.push(row);
     // Checked before the cheaper/at-tier split: these ARE cheaper than the
@@ -564,7 +580,7 @@ if (process.argv[2] === "tokens") {
   // the price table changes rate on a date that falls inside the horizon these
   // windows can reach.
   const priceAt = win.end;
-  let costRan = 0, costInherited = 0, unpricedVol = 0;
+  let costRan = 0, costInherited = 0, unpricedVol = 0, unpricedSessionVol = 0;
   let mainCost = 0, mainUnpricedVol = 0;
   // Main-session volume is the DENOMINATOR, not routable work: the session model
   // is fixed for the turn, so no routing decision can move it. Reported because a
@@ -692,16 +708,29 @@ if (process.argv[2] === "tokens") {
       }
       if (sf && !(sessionModel && shortModel(sessionModel).toLowerCase().includes(sf))) continue;
       const sessKey = sessionModel ? shortModel(sessionModel) : "(session unknown)";
+      // One transcript is one agent. This counter belongs OUTSIDE the per-model
+      // loop below: a single agent whose volume splits across two models (a
+      // mid-run fallback) was being counted once per model, so a report could
+      // claim more agents than transcripts existed. The per-model rows are a
+      // different question - "how many agents touched this model" - and there
+      // counting once per file-and-model pair is the right answer.
+      const ss = perSession.get(sessKey) ?? { agents: 0, vol: 0, cmpVol: 0, downVol: 0 };
+      ss.agents++;
+      perSession.set(sessKey, ss);
       for (const [model, v] of fileVols) {
         const vol = volOf(v);
         // Cost as it ran, and what the same token counts would have cost had the
         // dispatch inherited the session model instead - the counterfactual the
         // charts in the README already frame as an upper bound. Both sides are
         // skipped together when either model is unpriced, so the difference is
-        // never a comparison against a missing half.
+        // never a comparison against a missing half. Which side was missing is
+        // tracked separately: the two need different sentences, and reporting
+        // both as "ran on an unpriced model" was false for the session-side case,
+        // where the tokens ran on a perfectly priceable model.
         const ran = costOf(model, v, priceAt);
         const inherited = costOf(sessionModel, v, priceAt);
-        if (ran == null || inherited == null) unpricedVol += vol;
+        if (ran == null) unpricedVol += vol;
+        else if (inherited == null) unpricedSessionVol += vol;
         else { costRan += ran; costInherited += inherited; }
         const tm = tierOf(model);
         // Unknown tier on EITHER side = not comparable: excluded from the
@@ -709,17 +738,15 @@ if (process.argv[2] === "tokens") {
         // agent model or a future-family session must not drag the share.
         if (tm == null || tsess == null) { unknownAgents++; unknownVol += vol; }
         const down = tm != null && tsess != null && tm < tsess;
-        const s = perModel.get(model) ?? { agents: 0, in: 0, out: 0, cr: 0, cw5: 0, cw1h: 0, downVol: 0, downAgents: 0 };
+        const s = perModel.get(model) ?? { agents: 0, in: 0, out: 0, cr: 0, cw5: 0, cw1h: 0, downVol: 0 };
         s.agents++; s.in += v.in; s.out += v.out; s.cr += v.cr; s.cw5 += v.cw5; s.cw1h += v.cw1h;
-        if (down) { s.downVol += vol; s.downAgents++; }
+        if (down) s.downVol += vol;
         perModel.set(model, s);
-        const ss = perSession.get(sessKey) ?? { agents: 0, vol: 0, cmpVol: 0, downVol: 0 };
-        ss.agents++; ss.vol += vol;
+        ss.vol += vol;
         // Per-session rows use the same comparable-only denominator as the
         // headline; non-comparable volume is shown, never percented.
         if (tm != null && tsess != null) ss.cmpVol += vol;
         if (down) ss.downVol += vol;
-        perSession.set(sessKey, ss);
       }
     }
   };
@@ -791,11 +818,15 @@ if (process.argv[2] === "tokens") {
       `Subagents are ${Math.round((total / (total + mainVolTotal)) * 100)}% of the ${fmtN(total + mainVolTotal)} total - routing governs that slice, and the session model is fixed for the turn, so the rest is not addressable by any routing decision.`,
       ...mainRows.map(([m, v]) => `  ${shortModel(m).padEnd(16)} ${fmtN(v).padStart(7)} (${Math.round((v / mainVolTotal) * 100)}%)`),
     ] : []),
-    ...(costRan || mainCost || unpricedVol || mainUnpricedVol ? [
+    ...(costRan || mainCost || unpricedVol || unpricedSessionVol || mainUnpricedVol ? [
       "",
       `At API list prices (rates as of ${PRICES_ASOF}), this is what the volume above would have cost on the Claude API:`,
       ...costRows.map(([label, n]) => `  ${label.padEnd(costW)}${fmtUsd(n).padStart(12)}`),
       ...(unpricedVol || mainUnpricedVol ? [`  ${fmtN(unpricedVol + mainUnpricedVol)} tokens ran on a model absent from the price table and could not be priced${costRows.length ? ", so they are excluded from every figure above" : ""}.`] : []),
+      // Kept separate from the line above because the cause is different and the
+      // reader can act on it differently: nothing is wrong with the model that
+      // ran, only with what we know about the session it would have inherited.
+      ...(unpricedSessionVol ? [`  ${fmtN(unpricedSessionVol)} tokens ran on a priced model but under a session model that could not be priced, so pricing them "as it ran" without the inherited side would leave the difference below a comparison against a missing half${costRows.length ? " - they are excluded from every figure above too" : ""}.`] : []),
       // The counterfactual caveats belong to the counterfactual: in a window
       // with no priceable subagent volume there is no difference row for them
       // to qualify, and printing them anyway would describe a figure that is

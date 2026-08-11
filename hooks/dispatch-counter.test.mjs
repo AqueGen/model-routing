@@ -1141,3 +1141,89 @@ test("the not-comparable note names the unreadable-session cause, not just the t
     assert.match(out, /no model could be read from the parent session transcript/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
+
+test("tier leaks leave out dispatches whose session cannot be ranked", () => {
+  const cfg = freshConfigDir();
+  const now = Date.now();
+  writeLog(cfg, [
+    // The one answerable case: unpinned, bare, strong session. A leak.
+    { ts: now, agent: "general-purpose", session: "claude-opus-5" },
+    // Session on a family TIER_PATTERNS cannot rank. `?? 0` used to call that
+    // the cheapest tier there is, so this counted as a clean non-leak and
+    // diluted the rate - a false negative, in the flattering direction.
+    { ts: now, agent: "general-purpose", session: "claude-zephyr-9" },
+    // No session recorded at all: can never be a leak, so it has no business
+    // sitting in the denominator either.
+    { ts: now, agent: "general-purpose" },
+  ]);
+  try {
+    const out = run(["report"], cfg);
+    assert.match(out, /Tier leaks: 1 of 1 unpinned dispatches inherited a strong session model bare \(100%\)/);
+    assert.match(out, /2 unpinned dispatch\(es\) left out/);
+    // The warning is the point of the fraction: 1 of 3 reads as 33% and stays
+    // quiet, 1 of 1 is 100% and trips the threshold.
+    assert.match(out, /above the 20% rework threshold/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a mixed row counts out of the judged entries, not the raw total", () => {
+  const cfg = freshConfigDir();
+  const now = Date.now();
+  // One row key - same agent, same model= suffix - dispatched from three
+  // sessions on different tiers, which is the only way a row can be mixed.
+  writeLog(cfg, [
+    { ts: now, agent: "general-purpose", model: "sonnet", session: "claude-opus-5" },   // down
+    { ts: now, agent: "general-purpose", model: "sonnet", session: "claude-sonnet-5" }, // at
+    { ts: now, agent: "general-purpose", model: "sonnet", session: "claude-zephyr-9" }, // unknown
+  ]);
+  try {
+    const out = run(["report"], cfg);
+    // The headline excluded the unknown entry, so the row must too: "1 of 3"
+    // described a population nothing else on screen agreed with.
+    assert.match(out, /\[1 of 2 down\]/);
+    assert.doesNotMatch(out, /\[1 of 3 down\]/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("one transcript is one agent even when its volume splits across models", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), usageLine("claude-opus-5", 1) + "\n");
+  // One agent, two models in its own transcript - a mid-run fallback. Counting
+  // inside the per-model loop reported this as 2 agents, more agents than
+  // transcripts on disk.
+  writeFileSync(
+    join(dir, "agent-a.jsonl"),
+    usageLine("claude-sonnet-5", 1000) + "\n" + usageLine("claude-haiku-4-5", 1000) + "\n"
+  );
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /opus-5: [\d.]+k across 1 agents/);
+    assert.doesNotMatch(out, /across 2 agents/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("an unpriceable SESSION model is declared as such, not as an unpriced agent model", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  // Session on a model with no price row; the agent's own model is priced.
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), usageLine("claude-zephyr-9", 1) + "\n");
+  writeFileSync(join(dir, "agent-a.jsonl"), costLine("claude-sonnet-5", { input: 1e6 }) + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /ran on a priced model but under a session model that could not be priced/);
+    // The old wording was simply false for this volume: sonnet-5 is in the table.
+    assert.doesNotMatch(out, /1\.0M tokens ran on a model absent from the price table/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a model in the tier table also has an effort row", () => {
+  // mythos-5 was priced and rankable but absent from EFFORT_SUPPORT, so a
+  // session on it recorded no effort at all - the one direction the table-
+  // consistency test does not cover, since it only walks effort/price -> tier.
+  const e = dispatchWithSettings({ sessionModel: "claude-mythos-5" });
+  assert.equal(e.effort, "high");
+  assert.equal(e.effortFrom, "default");
+});

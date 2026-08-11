@@ -189,10 +189,11 @@ For local development: clone the repo and
 1. Pick your session model with `/model` (opus, fable, whatever your
    plan offers). The plugin never changes it - the main session is where
    planning and decisions happen, so give it the strongest tier you are
-   willing to pay for. Session effort: Claude's own default is high
-   (unset = high); dropping the session to medium is the cost-conscious
-   pick when the main session mostly coordinates - the bundled agents pin
-   their own either way.
+   willing to pay for. Session effort: left unset, you get the model's own
+   default - high on most models, xhigh on Opus 4.7, and some models have no
+   effort knob at all (see [the effort ladder](#model-tiers-and-effort-ladder));
+   dropping the session to medium is the cost-conscious pick when the main
+   session mostly coordinates - the bundled agents pin their own either way.
 2. Work normally. Mechanical work routes down automatically:
 
    | You ask | Who runs it | Model / effort |
@@ -461,7 +462,10 @@ invented dollar savings:
 /model-routing:stats
 # in-chat report: per-agent dispatch breakdown + real token volume per model
 # also flags "tier leaks" - unpinned dispatches that inherited a strong
-# session model bare; warns past the 20% rework threshold
+# session model bare; warns past the 20% rework threshold. Counted only
+# where the session model is recorded AND rankable - the rest is left out
+# and declared, because "did this inherit something strong" has no answer
+# for a session nothing can rank
 
 /model-routing:stats --days 1
 # today's slice; --days N sizes the window (default 7)
