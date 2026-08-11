@@ -244,6 +244,17 @@ actually ran with `/model-routing:stats`.
   handback above: stuck agents hand back BEFORE producing a result and
   continue via SendMessage; failed results re-dispatch fresh one tier up,
   because the failed attempt's context is part of the problem.
+- A pin is also a FLOOR, and undercutting it is not a saving. The pin states
+  how much reasoning the role needs, so `reviewer` dispatched with
+  `model=haiku` is a weaker review rather than a cheaper one, and it still
+  counts as "cheaper than the session" in every cost figure - which is exactly
+  why it is easy to do and hard to notice. The floor is the lower of the pin
+  and the session model, so capping at a cheaper session stays correct, and a
+  dispatch whose session model cannot be read is left unjudged rather than
+  guessed at. When
+  the cheap tier genuinely fits the work, pick an agent pinned for it
+  (`test-runner`, `verifier`) instead of overriding a role agent downward; the
+  dispatch report lists below-pin dispatches in their own section.
 - Agent pins are ceilings, not floors. A pin says "this task never needs
   more than X"; the session model says what the user is willing to pay.
   When a pin sits above the session model, cap the dispatch at the

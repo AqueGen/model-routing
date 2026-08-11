@@ -97,6 +97,122 @@ test("bare pinned agents classify by their frontmatter pin", () => {
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
+test("a dispatch below its agent's pin is called out, not counted as a win", () => {
+  const cfg = freshConfigDir();
+  const now = Date.now();
+  writeLog(cfg, [
+    // reviewer pins opus and the session IS opus, so haiku undercuts the role by
+    // two tiers. Still cheaper than the session, which is why it would otherwise
+    // have padded the routed-down figure.
+    { ts: now, agent: "model-routing:reviewer", model: "haiku", session: "claude-opus-5" },
+    // implementer pins sonnet: haiku is one tier under.
+    { ts: now, agent: "model-routing:implementer", model: "haiku", session: "claude-opus-5" },
+    // A legitimate cheap dispatch for contrast: unpinned agent, no floor.
+    { ts: now, agent: "general-purpose", model: "haiku", session: "claude-opus-5" },
+  ]);
+  try {
+    const out = run(["report"], cfg);
+    assert.match(out, /2 of the cheaper ones went BELOW their agent's own pin/);
+    // Section-scoped assertions: a [\s\S]* reaching from one heading to the end
+    // of the report would pass with the row in the wrong group, which is the
+    // whole thing under test here.
+    const sect = (title) => out.split(/\n(?=\S.*:$)/m).find((s) => s.startsWith(title)) ?? "";
+    const under = sect("Ran BELOW the agent's pin");
+    assert.match(under, /reviewer \(model=haiku, pin=opus\)/);
+    assert.match(under, /implementer \(model=haiku, pin=sonnet\)/);
+    // The unpinned one stays a legitimate saving, and the undercut roles must NOT
+    // also appear in the win column - no double listing.
+    const cheaper = sect("Ran cheaper");
+    assert.match(cheaper, /general-purpose \(model=haiku\)/);
+    assert.doesNotMatch(cheaper, /reviewer|implementer/);
+    // All three are still cheaper than the session, so the headline does not move
+    // - the annotation qualifies it instead of redefining it.
+    assert.match(out, /3 of 3 dispatches \(100%\) ran on a cheaper model/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("an unreadable session model leaves a below-pin dispatch unjudged", () => {
+  const cfg = freshConfigDir();
+  writeLog(cfg, [
+    // Session recorded but on a family this script cannot rank. Judging the
+    // floor against the raw pin would announce a below-pin dispatch in the
+    // headline while the row itself filed under "not tier-comparable" - a claim
+    // with no section under it.
+    { ts: Date.now(), agent: "model-routing:reviewer", model: "haiku", session: "claude-newfamily-1" },
+    // And a pre-0.5.3 entry with no session at all: it may well have been the
+    // correct cap on a haiku session, so it is not a violation either.
+    { ts: Date.now(), agent: "model-routing:reviewer", model: "haiku" },
+  ]);
+  try {
+    const out = run(["report"], cfg);
+    assert.doesNotMatch(out, /BELOW their agent's own pin/);
+    assert.doesNotMatch(out, /Ran BELOW the agent's pin/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a session below the pin still has a floor of its own", () => {
+  const cfg = freshConfigDir();
+  writeLog(cfg, [
+    // reviewer pins opus, the session is sonnet so the cap is sonnet, and haiku
+    // is under THAT. The session could not afford opus, which is why the wording
+    // claims only that nothing required going under the cap.
+    { ts: Date.now(), agent: "model-routing:reviewer", model: "haiku", session: "claude-sonnet-5" },
+  ]);
+  try {
+    const out = run(["report"], cfg);
+    assert.match(out, /1 of the cheaper ones went BELOW their agent's own pin/);
+    assert.doesNotMatch(out, /the session could afford it/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("an env override is never counted as undercutting the pin", () => {
+  const cfg = freshConfigDir();
+  writeLog(cfg, [
+    // CLAUDE_CODE_SUBAGENT_MODEL forces every subagent at once, so this is a
+    // machine-wide setting rather than a per-dispatch decision and the section's
+    // advice would not apply. Covered indirectly by the env-override test above,
+    // but a rule should carry its own case.
+    { ts: Date.now(), agent: "model-routing:reviewer", env: "haiku", session: "claude-opus-5" },
+  ]);
+  try {
+    const out = run(["report"], cfg);
+    assert.doesNotMatch(out, /BELOW/);
+    assert.match(out, /reviewer \(env=haiku\)/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("capping a pin at a cheaper session model is not below-pin", () => {
+  const cfg = freshConfigDir();
+  const now = Date.now();
+  writeLog(cfg, [
+    // The pins-are-ceilings rule REQUIRES this: reviewer pins opus, the session
+    // is sonnet, so sonnet is the correct dispatch and must not be flagged.
+    { ts: now, agent: "model-routing:reviewer", model: "sonnet", session: "claude-sonnet-5" },
+    // Same for a bare dispatch of a haiku-pinned agent on a haiku session.
+    { ts: now, agent: "model-routing:verifier", model: null, session: "claude-haiku-4-5" },
+  ]);
+  try {
+    const out = run(["report"], cfg);
+    assert.doesNotMatch(out, /BELOW their agent's own pin/);
+    assert.doesNotMatch(out, /Ran BELOW the agent's pin/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("an unpinned agent has no floor to fall below", () => {
+  const cfg = freshConfigDir();
+  writeLog(cfg, [
+    { ts: Date.now(), agent: "general-purpose", model: "haiku", session: "claude-fable-5" },
+    { ts: Date.now(), agent: "Explore", model: null, session: "claude-fable-5" },
+  ]);
+  try {
+    const out = run(["report"], cfg);
+    // Named rather than a bare /BELOW/, which would pass for the wrong reason if
+    // the section title were reworded.
+    assert.doesNotMatch(out, /BELOW their agent's own pin/);
+    assert.doesNotMatch(out, /Ran BELOW the agent's pin/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
 test("--days and --ago window the report", () => {
   const cfg = freshConfigDir();
   const now = Date.now();
