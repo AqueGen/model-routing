@@ -215,6 +215,53 @@ const tierOf = (m) => {
 };
 const shortModel = (m) => m ? m.replace(/^claude-/, "").replace(/-\d{8}$/, "") : m;
 
+// USD per million BASE INPUT and OUTPUT tokens, transcribed from the Anthropic
+// pricing page, captured on the date below. Enumerated per model rather than
+// per family for the same reason EFFORT_SUPPORT is: families span price changes
+// (Opus 4.1 bills at three times Opus 4.5) and a loose pattern would quietly
+// misprice a retired model. A model absent from this table is reported as
+// unpriced volume, never as zero.
+const PRICES_ASOF = "2026-08-11";
+const SONNET5_STANDARD_FROM = Date.parse("2026-09-01T00:00:00Z");
+const PRICES = [
+  // Retired families first: a looser pattern below must not claim them.
+  [/opus-4-1-|opus-4-20/, () => [15, 75]],
+  // Pre-4.x ids put the generation first (claude-3-5-haiku-...), so both orders
+  // are matched; the row above needs the same trick for claude-opus-4-20250514.
+  [/3-5-haiku|haiku-3-5/, () => [0.8, 4]],
+  [/fable-5|mythos-5/, () => [10, 50]],
+  [/opus-5|opus-4-8|opus-4-7|opus-4-6|opus-4-5/, () => [5, 25]],
+  // The one model on the page whose price changes on a date rather than with a
+  // new id: introductory $2/$10 through 2026-08-31, standard $3/$15 after.
+  [/sonnet-5/, (at) => (at < SONNET5_STANDARD_FROM ? [2, 10] : [3, 15])],
+  [/sonnet-4-6|sonnet-4-5|sonnet-4-20/, () => [3, 15]],
+  [/haiku-4-5/, () => [1, 5]],
+];
+// Prompt-caching multipliers, quoted from the same page: a 5-minute cache write
+// costs 1.25x base input, a 1-hour write 2x, and a cache read 0.1x. Transcripts
+// break cache writes down by TTL, so no averaging is needed.
+const CACHE_WRITE_5M = 1.25, CACHE_WRITE_1H = 2, CACHE_READ = 0.1;
+
+// Billable input volume: everything the model read, however it was cached.
+// Output is counted separately because it prices an order of magnitude higher.
+const volOf = (v) => v.in + v.cr + v.cw5 + v.cw1h;
+
+// Dollars for one model's token counts, or null when the model is not on the
+// price table. `at` is the instant the rates are taken from - the price of a
+// window, not of today, since one model's rate changes on a date inside the
+// horizon these reports can cover.
+function costOf(model, v, at) {
+  const row = model ? PRICES.find(([re]) => re.test(model)) : null;
+  if (!row) return null;
+  const [inRate, outRate] = row[1](at);
+  const perTok = inRate / 1e6;
+  return (v.in * perTok)
+    + (v.cw5 * perTok * CACHE_WRITE_5M)
+    + (v.cw1h * perTok * CACHE_WRITE_1H)
+    + (v.cr * perTok * CACHE_READ)
+    + (v.out * outRate / 1e6);
+}
+
 // Bounded fd reads, NOT readFileSync - these run inside the PostToolUse
 // hook and session transcripts can be hundreds of MB. The optional vendor
 // prefix accepts Bedrock/Vertex ids (us.anthropic.claude-...) while
@@ -466,9 +513,16 @@ if (process.argv[2] === "tokens") {
     + (sf ? `, ${sf} sessions` : "");
   const projRoot = join(configDir(), "projects");
   const sessionModelCache = new Map();
-  const perModel = new Map(); // model -> {agents, in, out, cr, cw, down}
+  const perModel = new Map(); // model -> {agents, in, out, cr, cw5, cw1h, down}
   const perSession = new Map(); // session model -> {agents, vol, downVol}
   let unknownAgents = 0, unknownVol = 0; // models tierOf cannot rank
+  // Cost accounting. The rate epoch is the END of the window, not "now", so a
+  // historical window is priced at the rates that applied to it - one model on
+  // the price table changes rate on a date that falls inside the horizon these
+  // windows can reach.
+  const priceAt = win.end;
+  let costRan = 0, costInherited = 0, unpricedVol = 0;
+  let mainCost = 0, mainUnpricedVol = 0;
   // Main-session volume is the DENOMINATOR, not routable work: the session model
   // is fixed for the turn, so no routing decision can move it. Reported because a
   // routed-down percentage over subagents alone reads as "almost everything was
@@ -490,7 +544,7 @@ if (process.argv[2] === "tokens") {
     // timestamp are windowed individually - a resumed transcript has a fresh
     // mtime but old lines; lines without one fall back to the file mtime, which
     // the caller has already checked.
-    const fileVols = new Map(); // model -> { in, out, cr, cw }
+    const fileVols = new Map(); // model -> { in, out, cr, cw5, cw1h }
     let text;
     try { text = readFileSync(p, "utf-8"); } catch { unreadable++; return fileVols; }
     for (const line of text.split("\n")) {
@@ -504,9 +558,21 @@ if (process.argv[2] === "tokens") {
         if (Number.isFinite(lts)) {
           if (lts < win.start || lts >= win.end) continue;
         } else if (!mtimeInWindow) continue;
-        const v = fileVols.get(m.model) ?? { in: 0, out: 0, cr: 0, cw: 0 };
+        const v = fileVols.get(m.model) ?? { in: 0, out: 0, cr: 0, cw5: 0, cw1h: 0 };
         v.in += u.input_tokens ?? 0; v.out += u.output_tokens ?? 0;
-        v.cr += u.cache_read_input_tokens ?? 0; v.cw += u.cache_creation_input_tokens ?? 0;
+        v.cr += u.cache_read_input_tokens ?? 0;
+        // Cache writes are split by TTL because they are priced differently
+        // (1.25x base input at 5 minutes, 2x at an hour). Whatever the breakdown
+        // does not account for - a line carrying only the flat total, or a TTL
+        // bucket added upstream that this code has never heard of - is charged
+        // at the cheaper 5-minute rate. Taking the remainder rather than
+        // choosing between the two shapes is what stops an unknown bucket from
+        // disappearing out of both the volume and the cost.
+        const cc = u.cache_creation;
+        const e5 = cc?.ephemeral_5m_input_tokens ?? 0;
+        const e1h = cc?.ephemeral_1h_input_tokens ?? 0;
+        v.cw1h += e1h;
+        v.cw5 += e5 + Math.max(0, (u.cache_creation_input_tokens ?? 0) - e5 - e1h);
         fileVols.set(m.model, v);
       } catch {}
     }
@@ -555,7 +621,9 @@ if (process.argv[2] === "tokens") {
         if (sf && !(sessionModel && shortModel(sessionModel).toLowerCase().includes(sf))) continue;
         mainSessions++;
         for (const [model, v] of fileVols) {
-          mainPerModel.set(model, (mainPerModel.get(model) ?? 0) + v.in + v.cr + v.cw);
+          mainPerModel.set(model, (mainPerModel.get(model) ?? 0) + volOf(v));
+          const c = costOf(model, v, priceAt);
+          if (c == null) mainUnpricedVol += volOf(v); else mainCost += c;
         }
         continue;
       }
@@ -575,22 +643,31 @@ if (process.argv[2] === "tokens") {
       for (const [model, v] of fileVols) {
         const tm = tierOf(model);
         if (tm == null || tsess == null) continue;
-        const vol = v.in + v.cr + v.cw;
+        const vol = volOf(v);
         allCmpVol += vol;
         if (tm < tsess) allDownVol += vol;
       }
       if (sf && !(sessionModel && shortModel(sessionModel).toLowerCase().includes(sf))) continue;
       const sessKey = sessionModel ? shortModel(sessionModel) : "(session unknown)";
       for (const [model, v] of fileVols) {
-        const vol = v.in + v.cr + v.cw;
+        const vol = volOf(v);
+        // Cost as it ran, and what the same token counts would have cost had the
+        // dispatch inherited the session model instead - the counterfactual the
+        // charts in the README already frame as an upper bound. Both sides are
+        // skipped together when either model is unpriced, so the difference is
+        // never a comparison against a missing half.
+        const ran = costOf(model, v, priceAt);
+        const inherited = costOf(sessionModel, v, priceAt);
+        if (ran == null || inherited == null) unpricedVol += vol;
+        else { costRan += ran; costInherited += inherited; }
         const tm = tierOf(model);
         // Unknown tier on EITHER side = not comparable: excluded from the
         // routed-down denominator, reported on its own line - an exotic
         // agent model or a future-family session must not drag the share.
         if (tm == null || tsess == null) { unknownAgents++; unknownVol += vol; }
         const down = tm != null && tsess != null && tm < tsess;
-        const s = perModel.get(model) ?? { agents: 0, in: 0, out: 0, cr: 0, cw: 0, downVol: 0, downAgents: 0 };
-        s.agents++; s.in += v.in; s.out += v.out; s.cr += v.cr; s.cw += v.cw;
+        const s = perModel.get(model) ?? { agents: 0, in: 0, out: 0, cr: 0, cw5: 0, cw1h: 0, downVol: 0, downAgents: 0 };
+        s.agents++; s.in += v.in; s.out += v.out; s.cr += v.cr; s.cw5 += v.cw5; s.cw1h += v.cw1h;
         if (down) { s.downVol += vol; s.downAgents++; }
         perModel.set(model, s);
         const ss = perSession.get(sessKey) ?? { agents: 0, vol: 0, cmpVol: 0, downVol: 0 };
@@ -605,6 +682,27 @@ if (process.argv[2] === "tokens") {
   };
   walk(projRoot, 0);
   const fmtN = (n) => n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(0) + "k" : String(n);
+  // Two decimals up to $1000, none above it: cents matter on a day's work and
+  // are noise on a quarter's.
+  // Sign outside the dollar mark, and magnitude judged on the absolute value:
+  // the difference goes negative whenever subagents deliberately ran ABOVE the
+  // session tier, which is a documented move, not an error state.
+  const fmtUsd = (n) => (n < 0 ? "-$" : "$") + (Math.abs(n) >= 1000 ? Math.round(Math.abs(n)).toLocaleString("en-US") : Math.abs(n).toFixed(2));
+  // One list of [label, amount], so the width is derived from the labels that
+  // are actually printed. A separate width table would only be right while
+  // somebody kept the two copies in step - the same failure as a hand-counted
+  // constant, one indirection further away.
+  const costRows = [
+    // The three subagent rows only mean something when some subagent volume was
+    // priceable; the main-session row stands on its own.
+    ...(costRan ? [
+      ["as it ran", costRan],
+      ["had every subagent inherited its session model", costInherited],
+      ["difference", costInherited - costRan],
+    ] : []),
+    ...(mainCost ? [["main sessions, same rates (not routable)", mainCost]] : []),
+  ];
+  const costW = Math.max(0, ...costRows.map(([l]) => l.length)) + 2;
   const mainRows = [...mainPerModel.entries()].sort((a, b) => b[1] - a[1]);
   const mainVolTotal = mainRows.reduce((a, [, v]) => a + v, 0);
   if (!perModel.size) {
@@ -620,7 +718,7 @@ if (process.argv[2] === "tokens") {
     process.stdout.write(`No subagent transcripts found under ${projRoot} (${winLabel}).\nToken stats read Claude Code agent-*.jsonl transcript files; they appear after subagent dispatches. If your config lives elsewhere, set CLAUDE_CONFIG_DIR.${mainNote}`);
     process.exit(0);
   }
-  const rows = [...perModel.entries()].map(([m, s]) => ({ m, vol: s.in + s.cr + s.cw, ...s }))
+  const rows = [...perModel.entries()].map(([m, s]) => ({ m, vol: volOf(s), ...s }))
     .sort((a, b) => b.vol - a.vol);
   const total = rows.reduce((a, r) => a + r.vol, 0) || 1;
   const downTotal = rows.reduce((a, r) => a + r.downVol, 0);
@@ -649,6 +747,22 @@ if (process.argv[2] === "tokens") {
       `Main sessions (not routable): ${fmtN(mainVolTotal)} across ${mainSessions} sessions.`,
       `Subagents are ${Math.round((total / (total + mainVolTotal)) * 100)}% of the ${fmtN(total + mainVolTotal)} total - routing governs that slice, and the session model is fixed for the turn, so the rest is not addressable by any routing decision.`,
       ...mainRows.map(([m, v]) => `  ${shortModel(m).padEnd(16)} ${fmtN(v).padStart(7)} (${Math.round((v / mainVolTotal) * 100)}%)`),
+    ] : []),
+    ...(costRan || mainCost || unpricedVol || mainUnpricedVol ? [
+      "",
+      `At API list prices (rates as of ${PRICES_ASOF}), this is what the volume above would have cost on the Claude API:`,
+      ...costRows.map(([label, n]) => `  ${label.padEnd(costW)}${fmtUsd(n).padStart(12)}`),
+      ...(unpricedVol || mainUnpricedVol ? [`  ${fmtN(unpricedVol + mainUnpricedVol)} tokens ran on a model absent from the price table and could not be priced${costRows.length ? ", so they are excluded from every figure above" : ""}.`] : []),
+      // The counterfactual caveats belong to the counterfactual: in a window
+      // with no priceable subagent volume there is no difference row for them
+      // to qualify, and printing them anyway would describe a figure that is
+      // not on screen.
+      ...(costRan ? [
+        "This is a counterfactual, not a bill: on a subscription you pay none of it, and the difference is the same upper bound the volume chart is - it assumes every subagent would otherwise have inherited the session model, which pinned agents from other plugins would not.",
+        "The difference is conservative for a documented reason. Models from Opus 4.7, Sonnet 5 and Fable 5 onward use a tokenizer producing about 30% more tokens for the same text than Sonnet 4.6 and earlier, so re-pricing a cheap model's token count at an expensive model's rate understates the inherited side, and with it the difference. It does not touch what actually ran.",
+      ] : []),
+      "Two more modifiers understate every figure here. Cache writes whose transcript line names no TTL are charged at the cheapest write rate. And nothing in a usage line reveals whether fast mode (which doubles Opus 5 and Opus 4.8 rates) or US-only inference (1.1x on everything from 4.6) was in effect, so neither is applied.",
+      "Rates are first-party Claude API list prices - Bedrock and Google Cloud bill separately and are not modelled. They are transcribed from the Anthropic pricing page on the date above and will drift; a window straddling a price change is priced wholly at the rates in effect at its end. Re-check PRICES in dispatch-counter.mjs before quoting a figure.",
     ] : []),
     "",
     "Volume = tokens the subagent processed; cache reads are billed at the subagent's model rate, which is where routing saves.",
