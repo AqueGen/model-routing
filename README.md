@@ -1,6 +1,7 @@
 # model-routing
 
-[![validate](https://github.com/AqueGen/model-routing/actions/workflows/validate.yml/badge.svg)](https://github.com/AqueGen/model-routing/actions/workflows/validate.yml)
+[![tests](https://img.shields.io/github/actions/workflow/status/AqueGen/model-routing/validate.yml?branch=main&label=tests)](https://github.com/AqueGen/model-routing/actions/workflows/validate.yml)
+[![version](https://img.shields.io/github/v/tag/AqueGen/model-routing?label=version)](https://github.com/AqueGen/model-routing/releases)
 
 Tiered model routing for Claude Code token economy: **the strongest model
 thinks, cheaper models grind.**
