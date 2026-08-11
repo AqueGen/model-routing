@@ -141,8 +141,8 @@ function defaultEffortFor(sessionModel) {
 // cannot: an organization effort cap, and the model-default hold that Fable 5,
 // Opus 4.8 and Opus 4.7 apply on first run "even if you previously set a
 // different level", overriding a persisted setting until an explicit choice is
-// made. The report names both rather than claiming more than it knows. No
-// session model means the
+// made. The report names both rather than claiming more than it knows.
+// No session model means the
 // clamp cannot be computed, so nothing is recorded: a configured `high` on a
 // session whose transcript could not be read might have been a Haiku 4.5
 // session, where the level does not exist at all. That matches how the rest of

@@ -731,7 +731,16 @@ test("every model in the effort table is rankable by the tier table", () => {
   const rows = src.match(/const EFFORT_SUPPORT = \[([\s\S]*?)^\];/m)[1];
   const families = [...rows.matchAll(/\/([^/]+)\//g)].flatMap((m) => m[1].split("|"));
   assert.ok(families.length >= 6, `expected the documented model list, parsed ${families.length}`);
-  const tiers = src.match(/const TIER_PATTERNS = \[(.*?)\];/)[1];
+  // Every level named in a support row must exist on the ladder clampEffort
+  // walks: a stray one would pass `levels.includes` and then fall out of the
+  // downward walk silently, since indexOf returns -1 for it.
+  const ladder = new Set([...src.match(/const EFFORT_LADDER = \[([^\]]*)\]/)[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]));
+  for (const level of [...rows.matchAll(/"([^"]+)"/g)].map((m) => m[1])) {
+    assert.ok(ladder.has(level), `${level} is in EFFORT_SUPPORT but not on EFFORT_LADDER`);
+  }
+  // [\s\S] rather than . so reformatting either table across lines fails this
+  // test on its subject, not on its own parsing.
+  const tiers = src.match(/const TIER_PATTERNS = \[([\s\S]*?)\];/)[1];
   for (const family of families) {
     const ranked = [...tiers.matchAll(/\/([^/]+)\//g)]
       .some((m) => m[1].split("|").some((p) => new RegExp(p).test(`claude-${family}`)));
