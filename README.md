@@ -501,6 +501,26 @@ Effort is reconstructed rather than observed, because transcripts do not record 
 
 The line states its limits rather than hiding them, and there are more than the sources suggest. Four documented states override the reconstruction and none of them are visible to a hook: a `/effort` or `--effort` choice made inside a running session, ultracode (which sends `xhigh`), an organization effort cap, and the model-default hold that Fable 5, Opus 4.8 and Opus 4.7 apply on first run over a level you previously set. Only the pins of the bundled agents are known here too - an agent from another plugin may pin its own effort and will still be counted as inheriting. Read the figure as what the visible sources resolve to, not as a measurement.
 
+### The cost line
+
+`tokens` also prices the volume it just counted, because tokens need translating and dollars do not:
+
+```text
+At API list prices (rates as of 2026-08-11), this is what the subagent volume above would have cost on the Claude API:
+  as it ran                                            $2,365
+  had every subagent inherited its session model       $4,402
+  difference                                           $2,037
+  main sessions, same rates (not routable)            $15,560
+```
+
+Read it as a counterfactual, which is exactly what it is: on a subscription you pay none of this, and the difference carries the same assumption as the volume figures above - that every subagent would otherwise have inherited the session model, which agents pinned by other plugins would not.
+
+The arithmetic is per token type rather than per token, because they are priced an order of magnitude apart: base input at the model rate, cache reads at 0.1x, five-minute cache writes at 1.25x, one-hour writes at 2x, and output at its own rate. Cache reads dominate real transcripts, so a flat volume multiply would overstate the bill several times over. Transcripts break cache writes down by TTL; a line carrying only a total is charged at the cheaper five-minute rate.
+
+Two documented facts push the difference DOWNWARD, so treat it as conservative rather than optimistic. Models from Opus 4.7, Sonnet 5 and Fable 5 onward use a tokenizer producing roughly 30% more tokens for the same text than Sonnet 4.6 and earlier, so re-pricing a cheap model's token count at an expensive model's rate understates what that work would really have cost there. And a model absent from the price table is excluded from every figure and declared on its own line, never counted as free.
+
+Prices are transcribed from the Anthropic pricing page and stamped with the date, which is printed beside the figure. One model on that table changes rate on a calendar date, so a window is priced at the rates in effect at its end rather than at today's. Before quoting a number anywhere, check the stamp against the [current page](https://platform.claude.com/docs/en/about-claude/pricing).
+
 Embed the one-liner in your status line by appending the command's output
 to whatever your `statusLine.command` already prints. Delete the `.jsonl`
 any time to reset; a missing file just means zero.
