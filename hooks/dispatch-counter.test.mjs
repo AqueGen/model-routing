@@ -140,47 +140,25 @@ test("tokens with no transcripts explains where it looked", () => {
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
-test("PINNED_MODELS mirrors agents/*.md frontmatter", () => {
+test("AGENT_PINS mirrors agents/*.md frontmatter, both columns", () => {
   // The exact drift class 0.7.1 fixes: a pin changed in frontmatter but not
   // in the stats table. Bidirectional deepEqual catches a stale pin, a new
-  // agent missing from the table, and an orphaned table entry alike.
+  // agent missing from the table, and an orphaned table entry alike - and it
+  // now covers effort as well as model, because both live in one table.
   const agentsDir = join(dirname(SCRIPT), "..", "agents");
   const fromFrontmatter = Object.fromEntries(
     readdirSync(agentsDir).filter((f) => f.endsWith(".md")).map((f) => {
       const fm = readFileSync(join(agentsDir, f), "utf-8").match(/^---\r?\n([\s\S]*?)\r?\n---/)[1];
-      return [`model-routing:${f.replace(/\.md$/, "")}`, fm.match(/^model:\s*(\S+)/m)?.[1] ?? null];
+      return [`model-routing:${f.replace(/\.md$/, "")}`, {
+        model: fm.match(/^model:\s*(\S+)/m)?.[1] ?? null,
+        effort: fm.match(/^effort:\s*(\S+)/m)?.[1] ?? null,
+      }];
     }));
-  const table = readFileSync(SCRIPT, "utf-8").match(/const PINNED_MODELS = \{([\s\S]*?)\};/)[1];
-  const pinned = Object.fromEntries([...table.matchAll(/"([^"]+)":\s*"([^"]+)"/g)].map((m) => [m[1], m[2]]));
+  const table = readFileSync(SCRIPT, "utf-8").match(/const AGENT_PINS = \{([\s\S]*?)^\};/m)[1];
+  const pinned = Object.fromEntries(
+    [...table.matchAll(/"([^"]+)":\s*\{\s*model:\s*"([^"]+)",\s*effort:\s*"([^"]+)"\s*\}/g)]
+      .map((m) => [m[1], { model: m[2], effort: m[3] }]));
   assert.deepEqual(pinned, fromFrontmatter);
-});
-
-test("PINNED_EFFORT mirrors agents/*.md frontmatter", () => {
-  // Same drift class as PINNED_MODELS above, one table over. Without this the
-  // effort section keeps reporting a pin the frontmatter no longer carries,
-  // and the whole suite stays green while the report misinforms.
-  const agentsDir = join(dirname(SCRIPT), "..", "agents");
-  const fromFrontmatter = Object.fromEntries(
-    readdirSync(agentsDir).filter((f) => f.endsWith(".md")).map((f) => {
-      const fm = readFileSync(join(agentsDir, f), "utf-8").match(/^---\r?\n([\s\S]*?)\r?\n---/)[1];
-      return [`model-routing:${f.replace(/\.md$/, "")}`, fm.match(/^effort:\s*(\S+)/m)?.[1] ?? null];
-    }));
-  const table = readFileSync(SCRIPT, "utf-8").match(/const PINNED_EFFORT = \{([\s\S]*?)\};/)[1];
-  const pinned = Object.fromEntries([...table.matchAll(/"([^"]+)":\s*"([^"]+)"/g)].map((m) => [m[1], m[2]]));
-  assert.deepEqual(pinned, fromFrontmatter);
-});
-
-test("the effort ladders match what Claude Code accepts per source", () => {
-  // Settings reject max and ultracode (session-only); the env var accepts max
-  // but not ultracode. Logging a level from a source that would have rejected
-  // it reports an effort the session never ran on.
-  const src = readFileSync(SCRIPT, "utf-8");
-  const settings = src.match(/const SETTINGS_EFFORTS = new Set\(\[([^\]]*)\]\)/)[1];
-  assert.deepEqual([...settings.matchAll(/"([^"]+)"/g)].map((m) => m[1]), ["low", "medium", "high", "xhigh"]);
-  const env = src.match(/const ENV_EFFORTS = new Set\(\[([^\]]*)\]\)/)[1];
-  assert.match(env, /SETTINGS_EFFORTS/);
-  assert.match(env, /"max"/);
-  assert.doesNotMatch(src, /"ultracode"/);
 });
 
 test("agent frontmatter stays plain-YAML-safe in unquoted values", () => {
@@ -680,6 +658,35 @@ test("max is accepted from the env var but rejected from a settings file", () =>
   assert.equal("effort" in fromSettings, false);
 });
 
+test("ultracode is accepted from no source", () => {
+  // It is a Claude Code setting, not a model effort level: the persisted key
+  // and the env var both reject it, so it must never appear as a level.
+  assert.equal("effort" in dispatchWithSettings({ env: { CLAUDE_CODE_EFFORT_LEVEL: "ultracode" } }), false);
+  assert.equal("effort" in dispatchWithSettings({ settings: { user: { effortLevel: "ultracode" } } }), false);
+});
+
+test("a model the docs list as having no effort support gets no level", () => {
+  // The support table is an enumeration, not a version threshold: Haiku 4.5 is
+  // absent from it, and claude-3-5-sonnet ranks fine under TIER_PATTERNS while
+  // predating adaptive reasoning entirely. Neither may be handed a default, and
+  // neither may be handed a configured level as though it had run.
+  const haiku = dispatchWithSettings({ sessionModel: "claude-haiku-4-5" });
+  assert.equal("effort" in haiku, false);
+  const old = dispatchWithSettings({ sessionModel: "claude-3-5-sonnet-20241022", settings: { user: { effortLevel: "high" } } });
+  assert.equal("effort" in old, false);
+});
+
+test("a level the model does not support is recorded as the level that ran", () => {
+  // "xhigh runs as high on Opus 4.6" - so logging xhigh there would name an
+  // effort the session never used.
+  const clamped = dispatchWithSettings({ settings: { user: { effortLevel: "xhigh" } }, sessionModel: "claude-opus-4-6" });
+  assert.equal(clamped.effort, "high");
+  assert.equal(clamped.effortFrom, "settings");
+  // Control: the same level on a model that does support it is untouched.
+  const kept = dispatchWithSettings({ settings: { user: { effortLevel: "xhigh" } }, sessionModel: "claude-opus-5" });
+  assert.equal(kept.effort, "xhigh");
+});
+
 test("CLAUDE_CODE_EFFORT_LEVEL=auto records the model default, not the settings value", () => {
   const e = dispatchWithSettings({
     settings: { user: { effortLevel: "low" } },
@@ -746,14 +753,19 @@ test("report separates inherited effort from pinned, and flags inferred levels",
   writeLog(cfg, [
     { ts: now, agent: "general-purpose", model: "sonnet", session: "claude-opus-5", effort: "high", effortFrom: "settings" },
     { ts: now, agent: "general-purpose", model: "haiku", session: "claude-opus-5", effort: "high", effortFrom: "default" },
-    // Frontmatter-pinned: carries its own effort, so it never inherits.
-    { ts: now, agent: "model-routing:scout", session: "claude-opus-5", effort: "high", effortFrom: "settings" },
+    // Frontmatter-pinned: carries its own effort, so it never inherits. Two of
+    // them, both on the model default, so a count scoped to the whole
+    // population instead of the inherited subset would print 3 of these under a
+    // total of 2 - the fixture has to be able to tell those apart.
+    { ts: now, agent: "model-routing:scout", session: "claude-opus-5", effort: "high", effortFrom: "default" },
+    { ts: now, agent: "model-routing:reviewer", session: "claude-opus-5", effort: "high", effortFrom: "default" },
   ]);
   try {
     const out = run(["report"], cfg);
-    assert.match(out, /Effort: 2 of 3 dispatches ran on an agent type carrying no pin this plugin knows about/);
+    assert.match(out, /Effort: 2 of 4 dispatches ran on an agent type carrying no pin this plugin knows about/);
     assert.match(out, /\(2 at high\)/);
-    // An inferred default must never read as an observed setting.
+    // An inferred default must never read as an observed setting, and the count
+    // must be the inherited subset - 1 here, not the 3 in the whole population.
     assert.match(out, /1 of these levels are the documented model default rather than an observed setting/);
     // The source order and the invisible-change limit are stated, not implied.
     assert.match(out, /CLAUDE_CODE_EFFORT_LEVEL, then settings effortLevel, then the model default/);

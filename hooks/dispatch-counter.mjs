@@ -18,9 +18,10 @@
 // the agent's frontmatter pin) ranks below the recorded session model. Entries
 // missing either side fall back to a cheap-agent/cheap-tier heuristic. Counts
 // dispatches, not tokens - honest bookkeeping, no dollar fiction.
-// Each entry also records the session's effort level (from the settings
-// cascade, the only place it is observable) so the report can show the second
-// knob: dispatches on unpinned agent types inherit it, pinned agents do not.
+// Each entry also records the session's effort level and which source it came
+// from - CLAUDE_CODE_EFFORT_LEVEL, else the settings cascade, else the model's
+// documented default - so the report can show the second knob: dispatches on
+// agent types with no known pin inherit it, pinned agents do not.
 // Log lives in <config>/model-routing/dispatches.jsonl and self-prunes to 30d.
 
 import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
@@ -53,31 +54,24 @@ function sessionFilterFromArgs(argv) {
   const i = argv.indexOf("--session");
   return i >= 0 && argv[i + 1] ? String(argv[i + 1]).toLowerCase() : null;
 }
-// Frontmatter pins of the bundled agents. A bare dispatch (no model param)
-// still runs on the pinned model, so classification must resolve through
-// this table or bare implementer dispatches (pin=sonnet since 0.6.0) get
-// miscounted as session-tier work. Keep in sync with agents/*.md.
-const PINNED_MODELS = {
-  "model-routing:scout": "sonnet",
-  "model-routing:test-runner": "haiku",
-  "model-routing:e2e-runner": "sonnet",
-  "model-routing:verifier": "haiku",
-  "model-routing:implementer": "sonnet",
-  "model-routing:reviewer": "opus",
+// Frontmatter pins of the bundled agents, model and effort together. A bare
+// dispatch (no model param) still runs on the pinned model, so classification
+// must resolve through this table or bare implementer dispatches (pin=sonnet
+// since 0.6.0) get miscounted as session-tier work; the effort column is the
+// second cost knob, which moves cost as hard as tier does. One table rather
+// than two because they are two columns of one fact - the agent's frontmatter -
+// and asking "is this agent pinned" through separate tables let them disagree.
+// Keep in sync with agents/*.md; one sync test guards both columns.
+const AGENT_PINS = {
+  "model-routing:scout": { model: "sonnet", effort: "low" },
+  "model-routing:test-runner": { model: "haiku", effort: "low" },
+  "model-routing:e2e-runner": { model: "sonnet", effort: "medium" },
+  "model-routing:verifier": { model: "haiku", effort: "low" },
+  "model-routing:implementer": { model: "sonnet", effort: "medium" },
+  "model-routing:reviewer": { model: "opus", effort: "high" },
 };
-// Frontmatter effort pins of the bundled agents - the second cost knob, which
-// moves cost as hard as tier does. Every OTHER agent type has no pin and runs
-// at the session level, so a mechanical errand sent to general-purpose lands
-// on a cheap model that thinks as hard as the session does. Keep in sync with
-// agents/*.md.
-const PINNED_EFFORT = {
-  "model-routing:scout": "low",
-  "model-routing:test-runner": "low",
-  "model-routing:verifier": "low",
-  "model-routing:implementer": "medium",
-  "model-routing:e2e-runner": "medium",
-  "model-routing:reviewer": "high",
-};
+const pinnedModel = (agent) => AGENT_PINS[agent]?.model ?? null;
+const pinnedEffort = (agent) => AGENT_PINS[agent]?.effort ?? null;
 // Unpinned agent types that are inherently cheap dispatch targets.
 const CHEAP_AGENTS = new Set(["Explore"]);
 
@@ -112,11 +106,44 @@ function dataFile() {
 const SETTINGS_EFFORTS = new Set(["low", "medium", "high", "xhigh"]);
 const ENV_EFFORTS = new Set([...SETTINGS_EFFORTS, "max"]);
 
-// Documented model defaults. Returns null for a model this script cannot rank,
-// so an unrecognized session never receives a fabricated level.
+// Which levels each model offers, transcribed from the Claude Code docs (Model
+// configuration, "Adjust effort level") rather than inferred from version
+// numbers: that table is an explicit enumeration and it states "Models not
+// listed here do not support effort". Being rankable by TIER_PATTERNS is
+// therefore NOT the test - claude-3-5-sonnet ranks fine and has no effort knob
+// at all, and Haiku 4.5 is absent from the table entirely. Add a row when the
+// docs add a model; assert nothing for one that is not listed.
+const EFFORT_SUPPORT = [
+  [/fable-5/, ["low", "medium", "high", "xhigh", "max"]],
+  [/opus-5|sonnet-5|opus-4-8|opus-4-7/, ["low", "medium", "high", "xhigh", "max"]],
+  [/opus-4-6|sonnet-4-6/, ["low", "medium", "high", "max"]],
+];
+const EFFORT_LADDER = ["low", "medium", "high", "xhigh", "max"];
+const effortLevelsFor = (m) => (m ? EFFORT_SUPPORT.find(([re]) => re.test(m))?.[1] ?? null : null);
+
+// "The default effort is high on every model that supports effort, except Opus
+// 4.7, which defaults to xhigh." No support, no default - an unlisted or
+// unrecognized session model never receives a fabricated level.
 function defaultEffortFor(sessionModel) {
-  if (!sessionModel || tierOf(sessionModel) == null) return null;
+  if (!effortLevelsFor(sessionModel)) return null;
   return /opus-4-7/.test(sessionModel) ? "xhigh" : "high";
+}
+
+// "If you set a level the active model does not support, Claude Code falls back
+// to the highest supported level at or below the one you set. For example,
+// xhigh runs as high on Opus 4.6." So a configured level is not necessarily the
+// level that ran, and this log records what ran. When the session model is
+// unknown the clamp cannot be computed, and the configured level is recorded
+// unchanged - the one place this figure is a configuration rather than an
+// observation.
+function clampEffort(level, sessionModel) {
+  const levels = effortLevelsFor(sessionModel);
+  if (!levels) return sessionModel ? null : level;
+  if (levels.includes(level)) return level;
+  for (let i = EFFORT_LADDER.indexOf(level) - 1; i >= 0; i--) {
+    if (levels.includes(EFFORT_LADDER[i])) return EFFORT_LADDER[i];
+  }
+  return null;
 }
 
 function sessionEffort(cwd, sessionModel) {
@@ -124,13 +151,17 @@ function sessionEffort(cwd, sessionModel) {
     const def = defaultEffortFor(sessionModel);
     return def ? { effort: def, effortFrom: "default" } : null;
   };
+  const asRan = (level, from) => {
+    const ran = clampEffort(level, sessionModel);
+    return ran ? { effort: ran, effortFrom: from } : null;
+  };
   const env = process.env.CLAUDE_CODE_EFFORT_LEVEL?.trim();
   if (env) {
     if (env === "auto") return fromDefault();
     // An unrecognized override is still an override: settings were bypassed,
     // and by what is unknown, so assert nothing rather than reporting the
     // level the session did NOT run on.
-    return ENV_EFFORTS.has(env) ? { effort: env, effortFrom: "env" } : null;
+    return ENV_EFFORTS.has(env) ? asRan(env, "env") : null;
   }
   for (const f of [
     join(cwd, ".claude", "settings.local.json"),
@@ -147,9 +178,7 @@ function sessionEffort(cwd, sessionModel) {
     // which is not the level this session ran on - a wrong data point is worse
     // than a missing one.
     const v = parsed.effortLevel;
-    return typeof v === "string" && SETTINGS_EFFORTS.has(v)
-      ? { effort: v, effortFrom: "settings" }
-      : null;
+    return typeof v === "string" && SETTINGS_EFFORTS.has(v) ? asRan(v, "settings") : null;
   }
   return fromDefault();
 }
@@ -225,7 +254,7 @@ function lastModelIn(file, bytes) {
 // CLAUDE_CODE_SUBAGENT_MODEL env override (recorded by the hook as e.env),
 // else the explicit model param, else the agent's frontmatter pin, else
 // unknown (session-model inheritance).
-const effectiveModel = (e) => e.env ?? e.model ?? PINNED_MODELS[e.agent] ?? null;
+const effectiveModel = (e) => e.env ?? e.model ?? pinnedModel(e.agent) ?? null;
 
 function isRoutedDown(e) {
   // With the session model recorded (0.5.3+ entries), judge by tier: an
@@ -298,7 +327,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   for (const e of entries) {
     const key = e.env ? `${e.agent} (env=${e.env})`
       : e.model ? `${e.agent} (model=${e.model})`
-      : PINNED_MODELS[e.agent] ? `${e.agent} (pin=${PINNED_MODELS[e.agent]})`
+      : pinnedModel(e.agent) ? `${e.agent} (pin=${pinnedModel(e.agent)})`
       : e.agent;
     const s = byAgent.get(key) ?? { n: 0, down: 0, up: 0, unknown: 0 };
     s.n++;
@@ -333,7 +362,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   // routed-down tier would need rework >~20% of the time the price edge
   // is gone - here inverted, >20% of cheap-capable dispatches leaking UP
   // is the same signal that the tier assignment is not holding.
-  const BUNDLED = new Set([...Object.keys(PINNED_MODELS), ...CHEAP_AGENTS]);
+  const BUNDLED = new Set([...Object.keys(AGENT_PINS), ...CHEAP_AGENTS]);
   const capable = entries.filter((e) => !BUNDLED.has(e.agent));
   // An env override means the dispatch did NOT inherit the session model,
   // no matter that the call itself was bare - not a leak.
@@ -345,20 +374,24 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     leakLines.push("", `Tier leaks: ${leaks.length} of ${capable.length} unpinned dispatches inherited a strong session model bare (${Math.round(rate * 100)}%).`);
     if (rate > LEAK_WARN) leakLines.push(`  ! above the 20% rework threshold - pass an explicit model= on general-purpose/custom dispatches (sonnet default).`);
   }
-  // Effort, the knob the tier columns cannot show. A dispatch on an unpinned
-  // agent type inherits the session level, so cheap-tier work can still think
-  // at the session's expense - the failure mode a tier-only report calls a
-  // success. Counted only over entries that recorded an effort, so old logs
-  // and machines with no effortLevel set simply omit the section.
+  // Effort, the knob the tier columns cannot show. A dispatch on an agent type
+  // with no known pin inherits the session level, so cheap-tier work can still
+  // think at the session's expense - the failure mode a tier-only report calls a
+  // success. Counted only over entries that recorded an effort: pre-0.15 logs
+  // have none, and neither does a session on a model the docs list as having no
+  // effort support at all.
   const effortLines = [];
   const withEffort = entries.filter((e) => e.effort);
   if (withEffort.length) {
-    const inherited = withEffort.filter((e) => !PINNED_EFFORT[e.agent]);
+    const inherited = withEffort.filter((e) => !pinnedEffort(e.agent));
     const byLevel = [...inherited.reduce((m, e) => m.set(e.effort, (m.get(e.effort) ?? 0) + 1), new Map())]
       .sort((a, b) => b[1] - a[1])
       .map(([lvl, n]) => `${n} at ${lvl}`)
       .join(", ");
-    const inferred = withEffort.filter((e) => e.effortFrom === "default").length;
+    // Scoped to `inherited`, not to `withEffort`: the sentence below reads as a
+    // subset of the count in the line above it, and a pinned agent on the model
+    // default would otherwise print "8 of these" under a total of 2.
+    const inferred = inherited.filter((e) => e.effortFrom === "default").length;
     effortLines.push(
       "",
       `Effort: ${inherited.length} of ${withEffort.length} dispatches ran on an agent type carrying no pin this plugin knows about, and so inherited the session level${byLevel ? ` (${byLevel})` : ""}.`,

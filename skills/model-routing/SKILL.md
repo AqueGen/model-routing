@@ -29,8 +29,11 @@ thinking lightly often beats a weaker model thinking hard. Pick both:
 which model, and how hard it thinks.
 
 The full ladder is `low / medium / high / xhigh / max`. On current
-models the API default is `high` - an unset effort IS high effort, not
-medium. The per-model recommendation moves with the generation: Opus
+models the default is `high` - an unset effort IS high effort, not
+medium - with one documented exception: Opus 4.7 defaults to `xhigh`.
+Which levels exist at all is a per-model list rather than a version
+cutoff, and setting a level the model does not support runs the highest
+supported level at or below it. The per-model recommendation moves with the generation: Opus
 4.7 and 4.8 are told to start coding and agentic work at `xhigh`, while
 Opus 5 is told to start at `high`, step up to `xhigh` for demanding
 coding and agentic work, and use `low` and `medium` liberally as the

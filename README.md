@@ -339,9 +339,15 @@ which is why the medium pins survived the generation jump unchanged;
 the fable-class tier is built for long-horizon frontier work - a
 session-model choice, not a dispatch target.
 
-The effort ladder - the second knob. Unset effort means `high` on
-current models (not medium), and `xhigh` is absent on some models that
-support `max` (e.g. the 4.6 generation). The vendor recommendation is
+The effort ladder - the second knob. Unset effort means `high` on every
+model that supports effort, the one exception being Opus 4.7, which
+defaults to `xhigh`. Support itself is an explicit list rather than a
+version cutoff: Fable 5, Opus 5, Sonnet 5, Opus 4.8 and Opus 4.7 take the
+whole ladder, Opus 4.6 and Sonnet 4.6 take everything but `xhigh`, and a
+model absent from that list - Haiku 4.5 among them - has no effort knob at
+all. Setting a level a model does not support runs the highest supported
+level at or below it, so `xhigh` becomes `high` on Opus 4.6. The vendor
+recommendation is
 per-generation ([effort
 reference](https://platform.claude.com/docs/en/build-with-claude/effort)):
 Opus 4.7 and 4.8 start coding and agentic work at `xhigh`, while Opus 5
@@ -491,7 +497,7 @@ volume against the parent session like any other subagent.
 
 `report` also prints how many dispatches ran on an agent type carrying no effort pin, and therefore inherited whatever the session was set to. That is the failure a tier-only report scores as a win: a mechanical errand sent to `general-purpose` with `model=sonnet` still thinks as hard as your session does, while `scout` would have run the same errand at `low`.
 
-Effort is reconstructed rather than observed, because transcripts do not record it. The sources are read in the order Claude Code applies them: `CLAUDE_CODE_EFFORT_LEVEL` first (the only place `max` is accepted), then `effortLevel` from the settings cascade (local, then project, then user - these accept `low`/`medium`/`high`/`xhigh` only), then the documented model default, which is `high` everywhere effort is supported and `xhigh` on Opus 4.7. Levels that came from that last rung are counted separately in the report, so an inferred default never reads as a setting somebody chose.
+Effort is reconstructed rather than observed, because transcripts do not record it. The sources are read in the order Claude Code applies them: `CLAUDE_CODE_EFFORT_LEVEL` first (the only place `max` is accepted), then `effortLevel` from the settings cascade (local, then project, then user - these accept `low`/`medium`/`high`/`xhigh` only), then the documented model default described in [the effort ladder](#model-tiers-and-effort-ladder). Levels that came from that last rung are counted separately in the report, so an inferred default never reads as a setting somebody chose, and a level the session model does not support is recorded as the level that actually ran. A session on a model with no effort support contributes nothing to the line rather than a guess.
 
 Two limits the line states rather than hides: a `/effort` or `--effort` change inside a running session is invisible to all three sources, and only the pins of the bundled agents are known here - an agent from another plugin may pin its own effort and will still be counted as inheriting.
 
