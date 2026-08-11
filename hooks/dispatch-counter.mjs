@@ -226,7 +226,9 @@ const SONNET5_STANDARD_FROM = Date.parse("2026-09-01T00:00:00Z");
 const PRICES = [
   // Retired families first: a looser pattern below must not claim them.
   [/opus-4-1-|opus-4-20/, () => [15, 75]],
-  [/haiku-3-5/, () => [0.8, 4]],
+  // Pre-4.x ids put the generation first (claude-3-5-haiku-...), so both orders
+  // are matched; the row above needs the same trick for claude-opus-4-20250514.
+  [/3-5-haiku|haiku-3-5/, () => [0.8, 4]],
   [/fable-5|mythos-5/, () => [10, 50]],
   [/opus-5|opus-4-8|opus-4-7|opus-4-6|opus-4-5/, () => [5, 25]],
   // The one model on the page whose price changes on a date rather than with a
@@ -239,7 +241,6 @@ const PRICES = [
 // costs 1.25x base input, a 1-hour write 2x, and a cache read 0.1x. Transcripts
 // break cache writes down by TTL, so no averaging is needed.
 const CACHE_WRITE_5M = 1.25, CACHE_WRITE_1H = 2, CACHE_READ = 0.1;
-const COST_LABEL_W = 47; // widest cost row label, so the dollar column lines up
 
 // Billable input volume: everything the model read, however it was cached.
 // Output is counted separately because it prices an order of magnitude higher.
@@ -512,7 +513,7 @@ if (process.argv[2] === "tokens") {
     + (sf ? `, ${sf} sessions` : "");
   const projRoot = join(configDir(), "projects");
   const sessionModelCache = new Map();
-  const perModel = new Map(); // model -> {agents, in, out, cr, cw, down}
+  const perModel = new Map(); // model -> {agents, in, out, cr, cw5, cw1h, down}
   const perSession = new Map(); // session model -> {agents, vol, downVol}
   let unknownAgents = 0, unknownVol = 0; // models tierOf cannot rank
   // Cost accounting. The rate epoch is the END of the window, not "now", so a
@@ -543,7 +544,7 @@ if (process.argv[2] === "tokens") {
     // timestamp are windowed individually - a resumed transcript has a fresh
     // mtime but old lines; lines without one fall back to the file mtime, which
     // the caller has already checked.
-    const fileVols = new Map(); // model -> { in, out, cr, cw }
+    const fileVols = new Map(); // model -> { in, out, cr, cw5, cw1h }
     let text;
     try { text = readFileSync(p, "utf-8"); } catch { unreadable++; return fileVols; }
     for (const line of text.split("\n")) {
@@ -561,17 +562,17 @@ if (process.argv[2] === "tokens") {
         v.in += u.input_tokens ?? 0; v.out += u.output_tokens ?? 0;
         v.cr += u.cache_read_input_tokens ?? 0;
         // Cache writes are split by TTL because they are priced differently
-        // (1.25x base input at 5 minutes, 2x at an hour). The flat
-        // cache_creation_input_tokens is the fallback for lines that carry only
-        // the total, and it is charged at the cheaper 5-minute rate rather than
-        // guessing upward.
+        // (1.25x base input at 5 minutes, 2x at an hour). Whatever the breakdown
+        // does not account for - a line carrying only the flat total, or a TTL
+        // bucket added upstream that this code has never heard of - is charged
+        // at the cheaper 5-minute rate. Taking the remainder rather than
+        // choosing between the two shapes is what stops an unknown bucket from
+        // disappearing out of both the volume and the cost.
         const cc = u.cache_creation;
-        if (cc && (cc.ephemeral_5m_input_tokens != null || cc.ephemeral_1h_input_tokens != null)) {
-          v.cw5 += cc.ephemeral_5m_input_tokens ?? 0;
-          v.cw1h += cc.ephemeral_1h_input_tokens ?? 0;
-        } else {
-          v.cw5 += u.cache_creation_input_tokens ?? 0;
-        }
+        const e5 = cc?.ephemeral_5m_input_tokens ?? 0;
+        const e1h = cc?.ephemeral_1h_input_tokens ?? 0;
+        v.cw1h += e1h;
+        v.cw5 += e5 + Math.max(0, (u.cache_creation_input_tokens ?? 0) - e5 - e1h);
         fileVols.set(m.model, v);
       } catch {}
     }
@@ -683,7 +684,15 @@ if (process.argv[2] === "tokens") {
   const fmtN = (n) => n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(0) + "k" : String(n);
   // Two decimals up to $1000, none above it: cents matter on a day's work and
   // are noise on a quarter's.
-  const fmtUsd = (n) => "$" + (n >= 1000 ? Math.round(n).toLocaleString("en-US") : n.toFixed(2));
+  // Sign outside the dollar mark, and magnitude judged on the absolute value:
+  // the difference goes negative whenever subagents deliberately ran ABOVE the
+  // session tier, which is a documented move, not an error state.
+  const fmtUsd = (n) => (n < 0 ? "-$" : "$") + (Math.abs(n) >= 1000 ? Math.round(Math.abs(n)).toLocaleString("en-US") : Math.abs(n).toFixed(2));
+  // Label width derived from the labels themselves, so renaming a row cannot
+  // silently break the column the way a hand-counted constant did.
+  const COST_ROWS = ["as it ran", "had every subagent inherited its session model", "difference", "main sessions, same rates (not routable)"];
+  const costW = Math.max(...COST_ROWS.map((l) => l.length)) + 2;
+  const costRow = (label, n) => label.padEnd(costW) + fmtUsd(n).padStart(12);
   const mainRows = [...mainPerModel.entries()].sort((a, b) => b[1] - a[1]);
   const mainVolTotal = mainRows.reduce((a, [, v]) => a + v, 0);
   if (!perModel.size) {
@@ -729,17 +738,22 @@ if (process.argv[2] === "tokens") {
       `Subagents are ${Math.round((total / (total + mainVolTotal)) * 100)}% of the ${fmtN(total + mainVolTotal)} total - routing governs that slice, and the session model is fixed for the turn, so the rest is not addressable by any routing decision.`,
       ...mainRows.map(([m, v]) => `  ${shortModel(m).padEnd(16)} ${fmtN(v).padStart(7)} (${Math.round((v / mainVolTotal) * 100)}%)`),
     ] : []),
-    ...(costRan ? [
+    ...(costRan || mainCost || unpricedVol || mainUnpricedVol ? [
       "",
-      `At API list prices (rates as of ${PRICES_ASOF}), this is what the subagent volume above would have cost on the Claude API:`,
-      `  ${"as it ran".padEnd(COST_LABEL_W)}${fmtUsd(costRan).padStart(10)}`,
-      `  ${"had every subagent inherited its session model".padEnd(COST_LABEL_W)}${fmtUsd(costInherited).padStart(10)}`,
-      `  ${"difference".padEnd(COST_LABEL_W)}${fmtUsd(costInherited - costRan).padStart(10)}`,
-      ...(mainCost ? [`  ${"main sessions, same rates (not routable)".padEnd(COST_LABEL_W)}${fmtUsd(mainCost).padStart(10)}`] : []),
+      `At API list prices (rates as of ${PRICES_ASOF}), this is what the volume above would have cost on the Claude API:`,
+      // The three subagent rows only mean something when some subagent volume
+      // was priceable; the main-session row and the unpriced declaration stand
+      // on their own, so an all-unpriced window still says what it dropped.
+      ...(costRan ? [
+        `  ${costRow("as it ran", costRan)}`,
+        `  ${costRow("had every subagent inherited its session model", costInherited)}`,
+        `  ${costRow("difference", costInherited - costRan)}`,
+      ] : []),
+      ...(mainCost ? [`  ${costRow("main sessions, same rates (not routable)", mainCost)}`] : []),
       ...(unpricedVol || mainUnpricedVol ? [`  ${fmtN(unpricedVol + mainUnpricedVol)} tokens ran on a model absent from the price table and are excluded from every figure above.`] : []),
       "This is a counterfactual, not a bill: on a subscription you pay none of it, and the difference is the same upper bound the volume chart is - it assumes every subagent would otherwise have inherited the session model, which pinned agents from other plugins would not.",
-      "Two documented facts bias the difference DOWNWARD, so read it as conservative. Models from Opus 4.7, Sonnet 5 and Fable 5 onward use a tokenizer producing about 30% more tokens for the same text than Sonnet 4.6 and earlier, so re-pricing a cheap model's token count at an expensive model's rate understates what that work would really have cost there. And cache writes whose transcript line carries no TTL breakdown are charged at the cheaper 5-minute rate.",
-      "Prices are transcribed from the Anthropic pricing page on the date above and will drift; re-check PRICES in dispatch-counter.mjs before quoting a figure.",
+      "Several documented modifiers bias these figures DOWNWARD, so read them as conservative. Models from Opus 4.7, Sonnet 5 and Fable 5 onward use a tokenizer producing about 30% more tokens for the same text than Sonnet 4.6 and earlier, so re-pricing a cheap model's token count at an expensive model's rate understates what that work would really have cost there. Cache writes whose transcript line names no TTL are charged at the cheapest rate. And nothing in a usage line reveals whether fast mode (which doubles Opus 5 and Opus 4.8 rates) or US-only inference (1.1x on everything from 4.6) was in effect, so neither is applied.",
+      "Rates are first-party Claude API list prices - Bedrock and Google Cloud bill separately and are not modelled. They are transcribed from the Anthropic pricing page on the date above and will drift; a window straddling a price change is priced wholly at the rates in effect at its end. Re-check PRICES in dispatch-counter.mjs before quoting a figure.",
     ] : []),
     "",
     "Volume = tokens the subagent processed; cache reads are billed at the subagent's model rate, which is where routing saves.",

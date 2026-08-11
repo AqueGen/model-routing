@@ -859,20 +859,103 @@ test("cost prices every token type at its own documented rate", () => {
   const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), usageLine("claude-opus-5", 1) + "\n");
-  // Haiku 4.5 at $1/MTok input, $5/MTok output, with the caching multipliers:
-  // 1M base = $1.00, 1M cache read at 0.1x = $0.10, 1M 5m write at 1.25x =
-  // $1.25, 1M 1h write at 2x = $2.00, 1M output at $5 = $5.00. Total $9.35.
+  // Counts are deliberately DISTINCT per type. With an equal count everywhere
+  // the total is invariant under any permutation of the caching multipliers, so
+  // swapping 0.1 and 1.25 would still print the expected figure - a green test
+  // that identifies nothing. At 1M/2M/4M/8M each rate is separably pinned.
+  // Haiku 4.5, $1/MTok input and $5/MTok output:
+  //   1M base           x1      = $1.00
+  //   2M cache read     x0.1    = $0.20
+  //   4M 5m write       x1.25   = $5.00
+  //   8M 1h write       x2      = $16.00
+  //   1M output         @$5     = $5.00   -> $27.20
   writeFileSync(join(dir, "agent-a.jsonl"),
-    costLine("claude-haiku-4-5", { input: 1e6, cacheRead: 1e6, cw5: 1e6, cw1h: 1e6, out: 1e6 }) + "\n");
+    costLine("claude-haiku-4-5", { input: 1e6, cacheRead: 2e6, cw5: 4e6, cw1h: 8e6, out: 1e6 }) + "\n");
   try {
     const out = run(["tokens"], cfg);
-    assert.match(out, /as it ran\s+\$9\.35/);
-    // The same counts on Opus 5 ($5/$25) come to $46.75 - five times haiku,
-    // which is what the counterfactual has to show for the difference to mean
-    // anything.
-    assert.match(out, /had every subagent inherited its session model\s+\$46\.75/);
-    assert.match(out, /difference\s+\$37\.40/);
+    assert.match(out, /as it ran\s+\$27\.20/);
+    // The same counts on Opus 5 ($5/$25) come to $136.00 - what the
+    // counterfactual has to show for the difference to mean anything.
+    assert.match(out, /had every subagent inherited its session model\s+\$136\.00/);
+    assert.match(out, /difference\s+\$108\.80/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a cache-write bucket this code has never heard of is still charged", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), usageLine("claude-haiku-4-5", 1) + "\n");
+  // A breakdown that does not add up to the flat total, as a new TTL bucket
+  // upstream would produce. Taking only the known buckets would drop 2M tokens
+  // out of both volume and cost; the remainder goes to the cheapest rate.
+  // 1M 5m at 1.25x = $1.25, 1M 1h at 2x = $2.00, 2M remainder at 1.25x = $2.50.
+  writeFileSync(join(dir, "agent-a.jsonl"), JSON.stringify({
+    message: {
+      model: "claude-haiku-4-5",
+      usage: {
+        input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 4e6,
+        cache_creation: { ephemeral_5m_input_tokens: 1e6, ephemeral_1h_input_tokens: 1e6, ephemeral_24h_input_tokens: 2e6 },
+      },
+    },
+  }) + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /as it ran\s+\$5\.75/);
+    // And the tokens are not missing from the volume either.
+    assert.match(out, /haiku-4-5\s+#+\s+4\.0M/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a difference that goes negative reads as a negative amount", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  // Deliberate above-tier work: a fable subagent from an opus session, which the
+  // README describes doing on purpose. The counterfactual is then CHEAPER than
+  // what ran, and "$-x" would be a formatting bug on a documented case.
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), usageLine("claude-opus-5", 1) + "\n");
+  writeFileSync(join(dir, "agent-a.jsonl"), costLine("claude-fable-5", { input: 1e6 }) + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /as it ran\s+\$10\.00/);
+    assert.match(out, /difference\s+-\$5\.00/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("unpriced subagents still get their main-session cost and their declaration", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  // Priced main session, entirely unpriced subagents: gating the section on the
+  // subagent figure alone would drop both the main-session row and the promise
+  // that unpriced volume is always declared rather than counted as free.
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), costLine("claude-opus-5", { input: 1e6 }) + "\n");
+  writeFileSync(join(dir, "agent-a.jsonl"), costLine("claude-zephyr-1", { input: 3e6 }) + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /main sessions, same rates \(not routable\)\s+\$5\.00/);
+    assert.match(out, /3\.0M tokens ran on a model absent from the price table/);
+    // No subagent volume could be priced, so the three subagent rows stay out.
+    assert.doesNotMatch(out, /as it ran/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("every model in the price table is rankable by the tier table", () => {
+  // PRICES is the third ordered regex over the model string. The same coupling
+  // the effort table has: a model that can be priced but not ranked would be
+  // counted in the cost figures while sitting outside the routed-down math.
+  const src = readFileSync(SCRIPT, "utf-8");
+  const rows = src.match(/const PRICES = \[([\s\S]*?)^\];/m)[1];
+  const families = [...rows.matchAll(/\[\/([^/]+)\//g)].flatMap((m) => m[1].split("|"));
+  assert.ok(families.length >= 8, `expected the transcribed price list, parsed ${families.length}`);
+  const tiers = src.match(/const TIER_PATTERNS = \[([\s\S]*?)\];/)[1];
+  for (const family of families) {
+    const ranked = [...tiers.matchAll(/\/([^/]+)\//g)]
+      .some((m) => m[1].split("|").some((p) => new RegExp(p).test(`claude-${family}`)));
+    assert.ok(ranked, `${family} has a price but no tier in TIER_PATTERNS`);
+  }
 });
 
 test("a cache write with no TTL breakdown is charged at the cheaper rate", () => {
@@ -905,14 +988,18 @@ test("volume on a model absent from the price table is excluded, not zeroed", ()
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
-test("the cost section is absent when nothing in the window can be priced", () => {
+test("a window with nothing priceable says so instead of showing figures", () => {
   const cfg = freshConfigDir();
   const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), usageLine("claude-zephyr-1", 1) + "\n");
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), costLine("claude-zephyr-1", { input: 1e6 }) + "\n");
   writeFileSync(join(dir, "agent-a.jsonl"), costLine("claude-zephyr-1", { input: 1e6 }) + "\n");
   try {
-    assert.doesNotMatch(run(["tokens"], cfg), /At API list prices/);
+    const out = run(["tokens"], cfg);
+    // Silence would read as "routing cost nothing". The declaration is the
+    // answer; a dollar row would be a fabrication.
+    assert.match(out, /2\.0M tokens ran on a model absent from the price table/);
+    assert.doesNotMatch(out, /\$\d/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
