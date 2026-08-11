@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.14.0](https://github.com/AqueGen/model-routing/compare/v0.13.2...v0.14.0) (2026-08-11)
+
+
+### Features
+
+* call out dispatches that went below their agent's pin ([#27](https://github.com/AqueGen/model-routing/issues/27)) ([2b9b433](https://github.com/AqueGen/model-routing/commit/2b9b433baa3bdeb66d618555d8315c0d5ddafdc3))
+* notify on session start when a newer plugin version is available ([d6affc2](https://github.com/AqueGen/model-routing/commit/d6affc2e5949c2de5a49a61bc5a91569d660df1c))
+* price the token volume at API list rates ([#26](https://github.com/AqueGen/model-routing/issues/26)) ([c00d736](https://github.com/AqueGen/model-routing/commit/c00d73656ac1fba40006a221e15d152228b634f3))
+* report reasoning effort, and stop losing big sessions from the math ([#25](https://github.com/AqueGen/model-routing/issues/25)) ([634a32a](https://github.com/AqueGen/model-routing/commit/634a32aab27cec07810193e8c7e64c2a26a46739))
+
+
+### Bug Fixes
+
+* show the update notice to the user, not to Claude ([#28](https://github.com/AqueGen/model-routing/issues/28)) ([4ab07f5](https://github.com/AqueGen/model-routing/commit/4ab07f5ba748671d5bc46c621051da027f5ff7ad))
+* stop scoring what the report cannot judge, and count agents not models ([#29](https://github.com/AqueGen/model-routing/issues/29)) ([6565dfe](https://github.com/AqueGen/model-routing/commit/6565dfe455565d31d73b5ec8a37b6f3fefadc591))
+
 ## 0.13.2 - 2026-08-02
 
 Says what the token charts can and cannot be credited with. Docs only - no pin, config, hook, or stats changes.
