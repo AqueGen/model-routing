@@ -314,6 +314,27 @@ function lastModelIn(file, bytes) {
 // unknown (session-model inheritance).
 const effectiveModel = (e) => e.env ?? e.model ?? pinnedModel(e.agent) ?? null;
 
+// A pinned agent has a FLOOR as well as a ceiling. The pin states how much
+// reasoning the role needs - reviewer on opus because a missed bug costs more
+// than the review - so a dispatch below it is not a cheaper way to do the job,
+// it is a different and worse job, while still counting as "cheaper than the
+// session" in every other figure here. The floor is min(pin, session) rather
+// than the pin itself, because the pins-are-ceilings rule REQUIRES capping at
+// the session model: reviewer on a sonnet session correctly runs sonnet, and
+// that must not be flagged. Unpinned agent types have no floor at all.
+function belowPin(e) {
+  // CLAUDE_CODE_SUBAGENT_MODEL forces every subagent at once, so it is a
+  // deliberate machine-wide setting rather than a judgement made per dispatch.
+  // Flagging it would fill this section with rows whose only remedy is unsetting
+  // the variable, which the env= rows already say plainly.
+  if (e.env) return false;
+  const tp = tierOf(pinnedModel(e.agent));
+  const te = tierOf(effectiveModel(e));
+  if (tp == null || te == null) return false;
+  const ts = tierOf(e.session);
+  return te < (ts == null ? tp : Math.min(tp, ts));
+}
+
 function isRoutedDown(e) {
   // With the session model recorded (0.5.3+ entries), judge by tier: an
   // effective model (explicit param or frontmatter pin) below the session
@@ -382,9 +403,16 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   // tiers, and a key-level re-judgement contradicted the headline (a bare
   // pin=sonnet implementer from a sonnet session is NOT routed down).
   const byAgent = new Map(); // key -> { n, down, up, unknown }
+  // Keys collected while aggregating rather than re-derived from the row string
+  // later, for the reason stated above: judgement happens per entry.
+  const underPinKeys = new Set();
+  let underPinCount = 0;
   for (const e of entries) {
+    // Below-pin dispatches carry the pin in the key as well as the model, so the
+    // row reads as the comparison it is rather than looking like an ordinary
+    // cheap dispatch, and so they group apart from the same agent used properly.
     const key = e.env ? `${e.agent} (env=${e.env})`
-      : e.model ? `${e.agent} (model=${e.model})`
+      : e.model ? `${e.agent} (model=${e.model}${belowPin(e) ? `, pin=${pinnedModel(e.agent)}` : ""})`
       : pinnedModel(e.agent) ? `${e.agent} (pin=${pinnedModel(e.agent)})`
       : e.agent;
     const s = byAgent.get(key) ?? { n: 0, down: 0, up: 0, unknown: 0 };
@@ -393,6 +421,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     if (v === "unknown") s.unknown++;
     else if (v === "down") s.down++;
     else if (v === "up") s.up++;
+    if (belowPin(e)) { underPinKeys.add(key); underPinCount++; }
     byAgent.set(key, s);
   }
   const rows = [...byAgent.entries()].sort((a, b) => b[1].n - a[1].n);
@@ -460,7 +489,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   }
   // Grouped sections instead of per-row v/- markers: the reader should not
   // need a legend to see what ran cheap and what ran at the session tier.
-  const groups = { down: [], top: [], up: [], unknown: [] };
+  const groups = { down: [], top: [], up: [], underPin: [], unknown: [] };
   for (const [agent, s] of rows) {
     const judged = s.n - s.unknown;
     const at = judged - s.down - s.up;
@@ -472,6 +501,10 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
       : (s.down > 0 && s.down < judged ? ` [${s.down} of ${s.n} down]` : "");
     const row = `${String(s.n).padStart(4)}  ${agent}${mixed}`;
     if (s.unknown === s.n) groups.unknown.push(row);
+    // Checked before the cheaper/at-tier split: these ARE cheaper than the
+    // session, which is exactly why they need their own section instead of
+    // sitting in the win column.
+    else if (underPinKeys.has(agent)) groups.underPin.push(row);
     else if (s.up >= s.down && s.up > at) groups.up.push(row);
     else if (s.down >= at) groups.down.push(row);
     else groups.top.push(row);
@@ -484,9 +517,11 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     "",
     `${down.length} of ${comparable}${unknownCount ? " comparable" : ""} dispatches (${pct}%) ran on a cheaper model than the session${unknownCount ? ` - ${unknownCount} not tier-comparable excluded` : ""}${todayPart ? ` (${todayPart.replace(" · ", "")})` : ""}.`,
     ...(upCount ? [`${upCount} ran ABOVE the session tier - a pin above the session model, uncapped; pins are ceilings only when the dispatch passes model=<session>.`] : []),
+    ...(underPinCount ? [`${underPinCount} of the cheaper ones went BELOW their agent's own pin, which is not a saving - the pin is the tier the role needs, and the session could afford it.`] : []),
     ...section("Ran cheaper (routed down):", groups.down),
     ...section("Ran at the session tier (deliberate top-tier work or inheritance):", groups.top),
     ...section("Ran ABOVE the session tier (uncapped pin - pass model=<session> to enforce the ceiling):", groups.up),
+    ...section("Ran BELOW the agent's pin (counted cheaper above, but the role was undercut - drop the model= override, or use an agent whose pin matches the work):", groups.underPin),
     ...section("Not tier-comparable (unrecognized model or unknown session family - extend TIER_PATTERNS):", groups.unknown),
     "",
     "By session model:",

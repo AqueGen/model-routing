@@ -97,6 +97,60 @@ test("bare pinned agents classify by their frontmatter pin", () => {
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
+test("a dispatch below its agent's pin is called out, not counted as a win", () => {
+  const cfg = freshConfigDir();
+  const now = Date.now();
+  writeLog(cfg, [
+    // reviewer pins opus and the session IS opus, so haiku undercuts the role by
+    // two tiers. Still cheaper than the session, which is why it would otherwise
+    // have padded the routed-down figure.
+    { ts: now, agent: "model-routing:reviewer", model: "haiku", session: "claude-opus-5" },
+    // implementer pins sonnet: haiku is one tier under.
+    { ts: now, agent: "model-routing:implementer", model: "haiku", session: "claude-opus-5" },
+    // A legitimate cheap dispatch for contrast: unpinned agent, no floor.
+    { ts: now, agent: "general-purpose", model: "haiku", session: "claude-opus-5" },
+  ]);
+  try {
+    const out = run(["report"], cfg);
+    assert.match(out, /2 of the cheaper ones went BELOW their agent's own pin/);
+    assert.match(out, /Ran BELOW the agent's pin[\s\S]*reviewer \(model=haiku, pin=opus\)/);
+    assert.match(out, /Ran BELOW the agent's pin[\s\S]*implementer \(model=haiku, pin=sonnet\)/);
+    // The unpinned one stays a legitimate saving.
+    assert.match(out, /Ran cheaper[\s\S]*general-purpose \(model=haiku\)/);
+    // All three are still cheaper than the session, so the headline does not move
+    // - the annotation qualifies it instead of redefining it.
+    assert.match(out, /3 of 3 dispatches \(100%\) ran on a cheaper model/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("capping a pin at a cheaper session model is not below-pin", () => {
+  const cfg = freshConfigDir();
+  const now = Date.now();
+  writeLog(cfg, [
+    // The pins-are-ceilings rule REQUIRES this: reviewer pins opus, the session
+    // is sonnet, so sonnet is the correct dispatch and must not be flagged.
+    { ts: now, agent: "model-routing:reviewer", model: "sonnet", session: "claude-sonnet-5" },
+    // Same for a bare dispatch of a haiku-pinned agent on a haiku session.
+    { ts: now, agent: "model-routing:verifier", model: null, session: "claude-haiku-4-5" },
+  ]);
+  try {
+    const out = run(["report"], cfg);
+    assert.doesNotMatch(out, /BELOW their agent's own pin/);
+    assert.doesNotMatch(out, /Ran BELOW the agent's pin/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("an unpinned agent has no floor to fall below", () => {
+  const cfg = freshConfigDir();
+  writeLog(cfg, [
+    { ts: Date.now(), agent: "general-purpose", model: "haiku", session: "claude-fable-5" },
+    { ts: Date.now(), agent: "Explore", model: null, session: "claude-fable-5" },
+  ]);
+  try {
+    assert.doesNotMatch(run(["report"], cfg), /BELOW/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
 test("--days and --ago window the report", () => {
   const cfg = freshConfigDir();
   const now = Date.now();

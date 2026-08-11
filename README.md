@@ -493,6 +493,24 @@ tool, so they are invisible to the dispatch report - but `tokens` reads
 their transcripts (nested under `subagents/workflows/`) and counts their
 volume against the parent session like any other subagent.
 
+### Below-pin dispatches
+
+An agent pin is a ceiling AND a floor. The ceiling is documented above: when the pin sits over your session model, cap the dispatch at the session model. The floor is the other half - the pin states how much reasoning the ROLE needs, so `reviewer` dispatched with `model=haiku` is not a cheaper review, it is a weaker one, and a missed bug costs more than the review did.
+
+The report calls these out because every other figure counts them as wins: they genuinely ran on a cheaper model than the session, so they pad the routed-down percentage while breaking the thing they were routed for.
+
+```text
+2 of the cheaper ones went BELOW their agent's own pin, which is not a saving - the pin is the tier the role needs, and the session could afford it.
+
+Ran BELOW the agent's pin (counted cheaper above, but the role was undercut - drop the model= override, or use an agent whose pin matches the work):
+   3  model-routing:reviewer (model=haiku, pin=opus)
+   1  model-routing:implementer (model=haiku, pin=sonnet)
+```
+
+The floor is `min(pin, session model)`, not the pin, so capping at a cheaper session is never flagged - `reviewer` running sonnet on a sonnet session is the rule being followed, not broken. Unpinned agent types have no floor. `CLAUDE_CODE_SUBAGENT_MODEL` is excluded too: it forces every subagent at once, which is a deliberate machine-wide setting rather than a per-dispatch decision, and the `env=` rows already say so.
+
+If the cheap tier really was right for that work, the fix is to pick an agent whose pin matches it - `test-runner` and `verifier` pin haiku for exactly that reason - rather than to override a role agent downward.
+
 ### The effort line
 
 `report` also prints how many dispatches ran on an agent type carrying no effort pin, and therefore inherited whatever the session was set to. That is the failure a tier-only report scores as a win: a mechanical errand sent to `general-purpose` with `model=sonnet` still thinks as hard as your session does, while `scout` would have run the same errand at `low`.
