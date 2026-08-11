@@ -249,7 +249,9 @@ actually ran with `/model-routing:stats`.
   `model=haiku` is a weaker review rather than a cheaper one, and it still
   counts as "cheaper than the session" in every cost figure - which is exactly
   why it is easy to do and hard to notice. The floor is the lower of the pin
-  and the session model, so capping at a cheaper session stays correct. When
+  and the session model, so capping at a cheaper session stays correct, and a
+  dispatch whose session model cannot be read is left unjudged rather than
+  guessed at. When
   the cheap tier genuinely fits the work, pick an agent pinned for it
   (`test-runner`, `verifier`) instead of overriding a role agent downward; the
   dispatch report lists below-pin dispatches in their own section.
