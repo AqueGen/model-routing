@@ -113,9 +113,14 @@ const ENV_EFFORTS = new Set([...SETTINGS_EFFORTS, "max"]);
 // therefore NOT the test - claude-3-5-sonnet ranks fine and has no effort knob
 // at all, and Haiku 4.5 is absent from the table entirely. Add a row when the
 // docs add a model; assert nothing for one that is not listed.
+// Deliberately a SECOND table rather than columns added to TIER_PATTERNS: tier
+// is a property of the family (every opus ranks 3) while effort support is a
+// property of the version, so one ordered list would have to repeat the tier
+// across every version row and add a family fallback carrying no efforts. A
+// consistency test pins the two together instead - every model named here must
+// be rankable there.
 const EFFORT_SUPPORT = [
-  [/fable-5/, ["low", "medium", "high", "xhigh", "max"]],
-  [/opus-5|sonnet-5|opus-4-8|opus-4-7/, ["low", "medium", "high", "xhigh", "max"]],
+  [/fable-5|opus-5|sonnet-5|opus-4-8|opus-4-7/, ["low", "medium", "high", "xhigh", "max"]],
   [/opus-4-6|sonnet-4-6/, ["low", "medium", "high", "max"]],
 ];
 const EFFORT_LADDER = ["low", "medium", "high", "xhigh", "max"];
@@ -132,13 +137,14 @@ function defaultEffortFor(sessionModel) {
 // "If you set a level the active model does not support, Claude Code falls back
 // to the highest supported level at or below the one you set. For example,
 // xhigh runs as high on Opus 4.6." So a configured level is not necessarily the
-// level that ran, and this log records what ran. When the session model is
-// unknown the clamp cannot be computed, and the configured level is recorded
-// unchanged - the one place this figure is a configuration rather than an
-// observation.
+// level that ran, and this log records what ran. No session model means the
+// clamp cannot be computed, so nothing is recorded: a configured `high` on a
+// session whose transcript could not be read might have been a Haiku 4.5
+// session, where the level does not exist at all. That matches how the rest of
+// this report treats an unknown session - excluded, never guessed.
 function clampEffort(level, sessionModel) {
   const levels = effortLevelsFor(sessionModel);
-  if (!levels) return sessionModel ? null : level;
+  if (!levels) return null;
   if (levels.includes(level)) return level;
   for (let i = EFFORT_LADDER.indexOf(level) - 1; i >= 0; i--) {
     if (levels.includes(EFFORT_LADDER[i])) return EFFORT_LADDER[i];

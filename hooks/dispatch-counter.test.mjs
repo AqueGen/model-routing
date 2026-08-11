@@ -599,15 +599,20 @@ function logEntries(cfg) {
 
 // One dispatch through the hook, returning the logged entry. `settings` maps a
 // rung to its JSON: "user" -> <cfg>/settings.json, "project" ->
-// <cwd>/.claude/settings.json, "local" -> <cwd>/.claude/settings.local.json.
-function dispatchWithSettings({ settings = {}, env, sessionModel }) {
+// <cwd>/.claude/settings.json, "local" -> <cwd>/.claude/settings.local.json; a
+// string value is written verbatim so a rung can hold unparseable content.
+// sessionModel defaults to a supported model so the precedence cases exercise
+// the real clamp path - with no model the clamp cannot run and every one of them
+// would assert against an early return instead. Pass null to test that.
+function dispatchWithSettings({ settings = {}, env, sessionModel = "claude-opus-5" }) {
   const cfg = freshConfigDir();
   const cwd = freshCwd();
+  const write = (p, v) => writeFileSync(p, typeof v === "string" ? v : JSON.stringify(v));
   try {
-    if (settings.user !== undefined) writeFileSync(join(cfg, "settings.json"), JSON.stringify(settings.user));
+    if (settings.user !== undefined) write(join(cfg, "settings.json"), settings.user);
     if (settings.project !== undefined || settings.local !== undefined) mkdirSync(join(cwd, ".claude"), { recursive: true });
-    if (settings.project !== undefined) writeFileSync(join(cwd, ".claude", "settings.json"), JSON.stringify(settings.project));
-    if (settings.local !== undefined) writeFileSync(join(cwd, ".claude", "settings.local.json"), JSON.stringify(settings.local));
+    if (settings.project !== undefined) write(join(cwd, ".claude", "settings.json"), settings.project);
+    if (settings.local !== undefined) write(join(cwd, ".claude", "settings.local.json"), settings.local);
     const event = { tool_name: "Agent", tool_input: { subagent_type: "x" }, cwd };
     if (sessionModel) {
       const sess = join(cfg, "sess.jsonl");
@@ -708,9 +713,30 @@ test("an unset effortLevel records the documented model default", () => {
   assert.equal(opus47.effort, "xhigh");
 });
 
-test("no default is invented for a session model this script cannot rank", () => {
+test("no default is invented for a model absent from the support table", () => {
+  // Named for the gate that actually fires: effort SUPPORT, not rankability.
+  // An unknown family fails both tests, which is why the claude-3-5-sonnet case
+  // above is the one that discriminates between them.
   const e = dispatchWithSettings({ sessionModel: "claude-zephyr-1" });
   assert.equal("effort" in e, false);
+});
+
+test("every model in the effort table is rankable by the tier table", () => {
+  // The two model tables answer different questions at different granularity -
+  // tier by family, effort support by version - so they stay separate, but they
+  // must not disagree about which models exist. A model with effort support and
+  // no tier would be excluded from the routed-down math while still reporting an
+  // effort, which is the drift this pins.
+  const src = readFileSync(SCRIPT, "utf-8");
+  const rows = src.match(/const EFFORT_SUPPORT = \[([\s\S]*?)^\];/m)[1];
+  const families = [...rows.matchAll(/\/([^/]+)\//g)].flatMap((m) => m[1].split("|"));
+  assert.ok(families.length >= 6, `expected the documented model list, parsed ${families.length}`);
+  const tiers = src.match(/const TIER_PATTERNS = \[(.*?)\];/)[1];
+  for (const family of families) {
+    const ranked = [...tiers.matchAll(/\/([^/]+)\//g)]
+      .some((m) => m[1].split("|").some((p) => new RegExp(p).test(`claude-${family}`)));
+    assert.ok(ranked, `${family} has effort support but no tier in TIER_PATTERNS`);
+  }
 });
 
 test("an effort value outside the ladder is ignored rather than logged", () => {
@@ -733,18 +759,19 @@ test("a bad value stops the walk instead of falling through to the next rung", (
 test("a malformed settings file defers to the next rung", () => {
   // A file the harness cannot parse is ignored wholesale, so the next rung
   // decides - unlike a parseable file carrying a bad value.
-  const cfg = freshConfigDir();
-  const cwd = freshCwd();
-  writeFileSync(join(cfg, "settings.json"), JSON.stringify({ effortLevel: "medium" }));
-  mkdirSync(join(cwd, ".claude"), { recursive: true });
-  writeFileSync(join(cwd, ".claude", "settings.local.json"), "{ not json");
-  try {
-    run([], cfg, JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: "x" }, cwd }));
-    assert.equal(logEntries(cfg)[0].effort, "medium");
-  } finally {
-    rmSync(cfg, { recursive: true, force: true });
-    rmSync(cwd, { recursive: true, force: true });
-  }
+  const e = dispatchWithSettings({ settings: { user: { effortLevel: "medium" }, local: "{ not json" } });
+  assert.equal(e.effort, "medium");
+});
+
+test("nothing is recorded when the session model could not be read", () => {
+  // The clamp needs the model: the same configured level means different things
+  // on different models, and on Haiku 4.5 it means nothing at all. So an
+  // unreadable session model records no effort rather than the configured value,
+  // matching how the rest of the report excludes an unknown session.
+  const fromSettings = dispatchWithSettings({ settings: { user: { effortLevel: "high" } }, sessionModel: null });
+  assert.equal("effort" in fromSettings, false);
+  const fromEnv = dispatchWithSettings({ env: { CLAUDE_CODE_EFFORT_LEVEL: "max" }, sessionModel: null });
+  assert.equal("effort" in fromEnv, false);
 });
 
 test("report separates inherited effort from pinned, and flags inferred levels", () => {

@@ -497,7 +497,7 @@ volume against the parent session like any other subagent.
 
 `report` also prints how many dispatches ran on an agent type carrying no effort pin, and therefore inherited whatever the session was set to. That is the failure a tier-only report scores as a win: a mechanical errand sent to `general-purpose` with `model=sonnet` still thinks as hard as your session does, while `scout` would have run the same errand at `low`.
 
-Effort is reconstructed rather than observed, because transcripts do not record it. The sources are read in the order Claude Code applies them: `CLAUDE_CODE_EFFORT_LEVEL` first (the only place `max` is accepted), then `effortLevel` from the settings cascade (local, then project, then user - these accept `low`/`medium`/`high`/`xhigh` only), then the documented model default described in [the effort ladder](#model-tiers-and-effort-ladder). Levels that came from that last rung are counted separately in the report, so an inferred default never reads as a setting somebody chose, and a level the session model does not support is recorded as the level that actually ran. A session on a model with no effort support contributes nothing to the line rather than a guess.
+Effort is reconstructed rather than observed, because transcripts do not record it. The sources are read in the order Claude Code applies them: `CLAUDE_CODE_EFFORT_LEVEL` first (the only place `max` is accepted), then `effortLevel` from the settings cascade (local, then project, then user - these accept `low`/`medium`/`high`/`xhigh` only), then the documented model default described in [the effort ladder](#model-tiers-and-effort-ladder). Levels that came from that last rung are counted separately in the report, so an inferred default never reads as a setting somebody chose, and a level the session model does not support is recorded as the level that actually ran. Two cases contribute nothing to the line rather than a guess: a session on a model the docs give no effort support, and a session whose model could not be read at all, since the same configured level means different things on different models.
 
 Two limits the line states rather than hides: a `/effort` or `--effort` change inside a running session is invisible to all three sources, and only the pins of the bundled agents are known here - an agent from another plugin may pin its own effort and will still be counted as inheriting.
 
@@ -529,10 +529,10 @@ There is deliberately no config subsystem - four override paths cover it:
   frontmatter pin when present, else from the session level.
 - **Permanent**: edit the `model:` / `effort:` frontmatter in
   `agents/*.md`. A directory-source install picks the change up next
-  session. Keep `PINNED_MODELS` and `PINNED_EFFORT` in
-  `hooks/dispatch-counter.mjs` in step - a CI sync test per table fails the
-  build when either drifts, because that drift silently corrupts the stats
-  (it happened once; see 0.7.1).
+  session. Keep `AGENT_PINS` in `hooks/dispatch-counter.mjs` in step - it
+  carries both the model and the effort column, and a CI sync test fails the
+  build when either drifts from the frontmatter, because that drift silently
+  corrupts the stats (it happened once; see 0.7.1).
 - **Reset**: `git checkout -- agents` in the plugin checkout, or
   reinstall from the marketplace.
 
