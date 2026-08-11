@@ -101,16 +101,45 @@ test("stays silent when up to date", async () => {
   }
 });
 
-test("uses a fresh cache without touching the network", () => {
-  const configDir = mkdtempSync(join(tmpdir(), "mr-upd-cfg-"));
-  mkdirSync(join(configDir, "model-routing"), { recursive: true });
-  writeFileSync(
-    join(configDir, "model-routing", "update-check.json"),
-    JSON.stringify({ checkedAt: Date.now(), latest: "2.0.0" })
-  );
-  // Dead port: the run fails loudly if the script ignores the fresh cache and fetches.
-  const out = run(makePluginRoot("1.0.0"), configDir, "http://127.0.0.1:1/plugin.json");
-  assert.match(out, /1\.0\.0 installed, 2\.0\.0 available/);
+test("uses a fresh cache without touching the network", async () => {
+  // A live server that answers DIFFERENTLY from the cache is what makes this
+  // test able to fail. A dead port cannot: the fetch would return null, the
+  // cached latest would be restored, and the output would be identical whether
+  // the freshness check ran or not - so the assertion held while the behaviour
+  // it names was gone. The untouched checkedAt is the second half of the proof.
+  const { url, close } = await serveOnce(JSON.stringify({ version: "9.9.9" }));
+  try {
+    const configDir = mkdtempSync(join(tmpdir(), "mr-upd-cfg-"));
+    mkdirSync(join(configDir, "model-routing"), { recursive: true });
+    const checkedAt = Date.now();
+    writeFileSync(
+      join(configDir, "model-routing", "update-check.json"),
+      JSON.stringify({ checkedAt, latest: "2.0.0" })
+    );
+    const out = await runAsync(makePluginRoot("1.0.0"), configDir, url);
+    assert.match(out, /1\.0\.0 installed, 2\.0\.0 available/);
+    assert.doesNotMatch(out, /9\.9\.9/, "a fresh cache must not be refreshed from the network");
+    assert.equal(readCache(configDir).checkedAt, checkedAt, "checkedAt must be left alone");
+  } finally {
+    close();
+  }
+});
+
+test("a stale cache is refreshed from the network", async () => {
+  const { url, close } = await serveOnce(JSON.stringify({ version: "9.9.9" }));
+  try {
+    const configDir = mkdtempSync(join(tmpdir(), "mr-upd-cfg-"));
+    mkdirSync(join(configDir, "model-routing"), { recursive: true });
+    writeFileSync(
+      join(configDir, "model-routing", "update-check.json"),
+      JSON.stringify({ checkedAt: Date.now() - 2 * DAY_MS, latest: "2.0.0" })
+    );
+    const out = await runAsync(makePluginRoot("1.0.0"), configDir, url);
+    assert.match(out, /1\.0\.0 installed, 9\.9\.9 available/);
+    assert.equal(readCache(configDir).latest, "9.9.9");
+  } finally {
+    close();
+  }
 });
 
 test("network failure is silent but still stamps the cache", () => {
