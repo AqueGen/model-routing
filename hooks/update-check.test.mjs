@@ -69,8 +69,22 @@ test("prints a notice and writes the cache when the remote is newer", async () =
   try {
     const configDir = mkdtempSync(join(tmpdir(), "mr-upd-cfg-"));
     const out = await runAsync(makePluginRoot("1.0.0"), configDir, url);
-    assert.match(out, /1\.0\.0 installed, 9\.9\.9 available/);
-    assert.match(out, /claude plugin update model-routing/);
+    // The notice has to reach the USER, and systemMessage is the only output
+    // field documented as doing that - plain stdout on SessionStart goes to
+    // Claude's context, where reaching the person depends on the model relaying
+    // it. Parsing here is the assertion: a bare string would throw.
+    const notice = JSON.parse(out).systemMessage;
+    assert.match(notice, /1\.0\.0 installed, 9\.9\.9 available/);
+    // Both commands in full, catalog refresh first: nothing refreshes the catalog
+    // on its own, so `plugin update` alone can reinstall the version already in a
+    // stale one. The `claude plugin ` prefix is part of what must be asserted -
+    // without it the assertion passes on a command nobody can paste.
+    assert.match(
+      notice,
+      /claude plugin marketplace update model-routing && claude plugin update model-routing/
+    );
+    // README promises the release notes link, so the notice owes it.
+    assert.match(notice, /https:\/\/github\.com\/AqueGen\/model-routing\/releases/);
     assert.equal(readCache(configDir).latest, "9.9.9");
   } finally {
     close();

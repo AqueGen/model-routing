@@ -13,6 +13,7 @@ const FETCH_TIMEOUT_MS = 3000;
 const MANIFEST_URL =
   process.env.MODEL_ROUTING_UPDATE_URL ??
   "https://raw.githubusercontent.com/AqueGen/model-routing/main/.claude-plugin/plugin.json";
+const RELEASES_URL = "https://github.com/AqueGen/model-routing/releases";
 
 function parseVersion(v) {
   const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(v ?? "");
@@ -79,7 +80,20 @@ if (stale) {
 }
 
 if (cache && isNewer(cache.latest, installed)) {
+  // systemMessage is the only hook output field documented as shown to the USER.
+  // Plain stdout on SessionStart is added to Claude's context instead: the model
+  // cannot update the plugin, and whether it relays the line is up to it - so a
+  // plain-text notice reaches the person only by luck. Valid JSON on stdout is
+  // parsed as hook output rather than injected as context.
+  // Both commands are needed and in this order: nothing refreshes the
+  // marketplace catalog on its own, so `plugin update` alone can reinstall the
+  // version already in the stale catalog.
   console.log(
-    `model-routing ${installed} installed, ${cache.latest} available - run: claude plugin update model-routing, then restart sessions.`
+    JSON.stringify({
+      systemMessage:
+        `model-routing ${installed} installed, ${cache.latest} available. ` +
+        `Update: claude plugin marketplace update model-routing && claude plugin update model-routing, then restart. ` +
+        `Changes: ${RELEASES_URL}`,
+    })
   );
 }
