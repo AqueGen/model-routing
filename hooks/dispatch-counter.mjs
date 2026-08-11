@@ -137,7 +137,12 @@ function defaultEffortFor(sessionModel) {
 // "If you set a level the active model does not support, Claude Code falls back
 // to the highest supported level at or below the one you set. For example,
 // xhigh runs as high on Opus 4.6." So a configured level is not necessarily the
-// level that ran, and this log records what ran. No session model means the
+// level that applies, and the clamp closes the gap this hook CAN see. Others it
+// cannot: an organization effort cap, and the model-default hold that Fable 5,
+// Opus 4.8 and Opus 4.7 apply on first run "even if you previously set a
+// different level", overriding a persisted setting until an explicit choice is
+// made. The report names both rather than claiming more than it knows. No
+// session model means the
 // clamp cannot be computed, so nothing is recorded: a configured `high` on a
 // session whose transcript could not be read might have been a Haiku 4.5
 // session, where the level does not exist at all. That matches how the rest of
@@ -403,7 +408,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
       `Effort: ${inherited.length} of ${withEffort.length} dispatches ran on an agent type carrying no pin this plugin knows about, and so inherited the session level${byLevel ? ` (${byLevel})` : ""}.`,
       `  The bundled agents pin theirs in frontmatter, so routing a mechanical errand through a role agent buys a cheaper effort as well as a cheaper tier. An agent from anywhere else may pin its own effort, which is invisible here and counted as inherited.`,
       ...(inferred ? [`  ${inferred} of these levels are the documented model default rather than an observed setting.`] : []),
-      `  Source order is CLAUDE_CODE_EFFORT_LEVEL, then settings effortLevel, then the model default - a /effort or --effort change inside a running session is not visible.`,
+      `  Source order is CLAUDE_CODE_EFFORT_LEVEL, then settings effortLevel, then the model default. Four states can override that and none are visible here: a /effort or --effort choice inside a running session, ultracode, an organization effort cap, and the model-default hold Fable 5 / Opus 4.8 / Opus 4.7 apply on first run over a previously set level.`,
     );
   }
   // Grouped sections instead of per-row v/- markers: the reader should not
