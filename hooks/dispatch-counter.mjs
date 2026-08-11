@@ -18,6 +18,10 @@
 // the agent's frontmatter pin) ranks below the recorded session model. Entries
 // missing either side fall back to a cheap-agent/cheap-tier heuristic. Counts
 // dispatches, not tokens - honest bookkeeping, no dollar fiction.
+// Each entry also records the session's effort level and which source it came
+// from - CLAUDE_CODE_EFFORT_LEVEL, else the settings cascade, else the model's
+// documented default - so the report can show the second knob: dispatches on
+// agent types with no known pin inherit it, pinned agents do not.
 // Log lives in <config>/model-routing/dispatches.jsonl and self-prunes to 30d.
 
 import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
@@ -50,28 +54,144 @@ function sessionFilterFromArgs(argv) {
   const i = argv.indexOf("--session");
   return i >= 0 && argv[i + 1] ? String(argv[i + 1]).toLowerCase() : null;
 }
-// Frontmatter pins of the bundled agents. A bare dispatch (no model param)
-// still runs on the pinned model, so classification must resolve through
-// this table or bare implementer dispatches (pin=sonnet since 0.6.0) get
-// miscounted as session-tier work. Keep in sync with agents/*.md.
-const PINNED_MODELS = {
-  "model-routing:scout": "sonnet",
-  "model-routing:test-runner": "haiku",
-  "model-routing:e2e-runner": "sonnet",
-  "model-routing:verifier": "haiku",
-  "model-routing:implementer": "sonnet",
-  "model-routing:reviewer": "opus",
+// Frontmatter pins of the bundled agents, model and effort together. A bare
+// dispatch (no model param) still runs on the pinned model, so classification
+// must resolve through this table or bare implementer dispatches (pin=sonnet
+// since 0.6.0) get miscounted as session-tier work; the effort column is the
+// second cost knob, which moves cost as hard as tier does. One table rather
+// than two because they are two columns of one fact - the agent's frontmatter -
+// and asking "is this agent pinned" through separate tables let them disagree.
+// Keep in sync with agents/*.md; one sync test guards both columns.
+const AGENT_PINS = {
+  "model-routing:scout": { model: "sonnet", effort: "low" },
+  "model-routing:test-runner": { model: "haiku", effort: "low" },
+  "model-routing:e2e-runner": { model: "sonnet", effort: "medium" },
+  "model-routing:verifier": { model: "haiku", effort: "low" },
+  "model-routing:implementer": { model: "sonnet", effort: "medium" },
+  "model-routing:reviewer": { model: "opus", effort: "high" },
 };
+const pinnedModel = (agent) => AGENT_PINS[agent]?.model ?? null;
+const pinnedEffort = (agent) => AGENT_PINS[agent]?.effort ?? null;
 // Unpinned agent types that are inherently cheap dispatch targets.
 const CHEAP_AGENTS = new Set(["Explore"]);
 
-function dataFile() {
-  const cfg = process.env.CLAUDE_CONFIG_DIR?.trim()
+function configDir() {
+  return process.env.CLAUDE_CONFIG_DIR?.trim()
     ? resolve(process.env.CLAUDE_CONFIG_DIR)
     : join(homedir(), ".claude");
-  const dir = join(cfg, "model-routing");
+}
+
+function dataFile() {
+  const dir = join(configDir(), "model-routing");
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   return join(dir, "dispatches.jsonl");
+}
+
+// The session's reasoning effort, and where it came from. Transcripts record no
+// effort at all, so it is reconstructed from the sources Claude Code documents,
+// in the precedence Claude Code itself applies:
+//   1. CLAUDE_CODE_EFFORT_LEVEL - overrides settings for the session, and is the
+//      only place `max` is accepted. `auto` means "use the model default".
+//   2. the settings cascade, local > project > user. Settings accept only
+//      low/medium/high/xhigh; `max` and `ultracode` are session-only there and
+//      are rejected in a settings file.
+//   3. the model default, which is what an unset key actually means - `high`
+//      wherever effort is supported, `xhigh` on Opus 4.7. Recording it beats
+//      omitting the most common configuration of all.
+// A `/effort` change or a `--effort` flag inside a running session is invisible
+// to all three, and an agent may carry its own effort pin this script cannot
+// see; the report states both limits rather than implying precision it lacks.
+// Reads one key and never emits anything else from these files, which routinely
+// hold secrets.
+const SETTINGS_EFFORTS = new Set(["low", "medium", "high", "xhigh"]);
+const ENV_EFFORTS = new Set([...SETTINGS_EFFORTS, "max"]);
+
+// Which levels each model offers, transcribed from the Claude Code docs (Model
+// configuration, "Adjust effort level") rather than inferred from version
+// numbers: that table is an explicit enumeration and it states "Models not
+// listed here do not support effort". Being rankable by TIER_PATTERNS is
+// therefore NOT the test - claude-3-5-sonnet ranks fine and has no effort knob
+// at all, and Haiku 4.5 is absent from the table entirely. Add a row when the
+// docs add a model; assert nothing for one that is not listed.
+// Deliberately a SECOND table rather than columns added to TIER_PATTERNS: tier
+// is a property of the family (every opus ranks 3) while effort support is a
+// property of the version, so one ordered list would have to repeat the tier
+// across every version row and add a family fallback carrying no efforts. A
+// consistency test pins the two together instead - every model named here must
+// be rankable there.
+const EFFORT_SUPPORT = [
+  [/fable-5|opus-5|sonnet-5|opus-4-8|opus-4-7/, ["low", "medium", "high", "xhigh", "max"]],
+  [/opus-4-6|sonnet-4-6/, ["low", "medium", "high", "max"]],
+];
+const EFFORT_LADDER = ["low", "medium", "high", "xhigh", "max"];
+const effortLevelsFor = (m) => (m ? EFFORT_SUPPORT.find(([re]) => re.test(m))?.[1] ?? null : null);
+
+// "The default effort is high on every model that supports effort, except Opus
+// 4.7, which defaults to xhigh." No support, no default - an unlisted or
+// unrecognized session model never receives a fabricated level.
+function defaultEffortFor(sessionModel) {
+  if (!effortLevelsFor(sessionModel)) return null;
+  return /opus-4-7/.test(sessionModel) ? "xhigh" : "high";
+}
+
+// "If you set a level the active model does not support, Claude Code falls back
+// to the highest supported level at or below the one you set. For example,
+// xhigh runs as high on Opus 4.6." So a configured level is not necessarily the
+// level that applies, and the clamp closes the gap this hook CAN see. Others it
+// cannot: an organization effort cap, and the model-default hold that Fable 5,
+// Opus 4.8 and Opus 4.7 apply on first run "even if you previously set a
+// different level", overriding a persisted setting until an explicit choice is
+// made. The report names both rather than claiming more than it knows.
+// No session model means the
+// clamp cannot be computed, so nothing is recorded: a configured `high` on a
+// session whose transcript could not be read might have been a Haiku 4.5
+// session, where the level does not exist at all. That matches how the rest of
+// this report treats an unknown session - excluded, never guessed.
+function clampEffort(level, sessionModel) {
+  const levels = effortLevelsFor(sessionModel);
+  if (!levels) return null;
+  if (levels.includes(level)) return level;
+  for (let i = EFFORT_LADDER.indexOf(level) - 1; i >= 0; i--) {
+    if (levels.includes(EFFORT_LADDER[i])) return EFFORT_LADDER[i];
+  }
+  return null;
+}
+
+function sessionEffort(cwd, sessionModel) {
+  const fromDefault = () => {
+    const def = defaultEffortFor(sessionModel);
+    return def ? { effort: def, effortFrom: "default" } : null;
+  };
+  const asRan = (level, from) => {
+    const ran = clampEffort(level, sessionModel);
+    return ran ? { effort: ran, effortFrom: from } : null;
+  };
+  const env = process.env.CLAUDE_CODE_EFFORT_LEVEL?.trim();
+  if (env) {
+    if (env === "auto") return fromDefault();
+    // An unrecognized override is still an override: settings were bypassed,
+    // and by what is unknown, so assert nothing rather than reporting the
+    // level the session did NOT run on.
+    return ENV_EFFORTS.has(env) ? asRan(env, "env") : null;
+  }
+  for (const f of [
+    join(cwd, ".claude", "settings.local.json"),
+    join(cwd, ".claude", "settings.json"),
+    join(configDir(), "settings.json"),
+  ]) {
+    let parsed;
+    // An unreadable or malformed file is ignored wholesale by the harness too,
+    // so deferring to the next rung matches what actually happens.
+    try { parsed = JSON.parse(readFileSync(f, "utf-8")); } catch { continue; }
+    if (!parsed || typeof parsed !== "object" || !Object.hasOwn(parsed, "effortLevel")) continue;
+    // A file that DEFINES the key ends the walk whether or not the value is
+    // usable. Falling through on a bad value would log the next rung's level,
+    // which is not the level this session ran on - a wrong data point is worse
+    // than a missing one.
+    const v = parsed.effortLevel;
+    return typeof v === "string" && SETTINGS_EFFORTS.has(v) ? asRan(v, "settings") : null;
+  }
+  return fromDefault();
 }
 
 function readEntries(file) {
@@ -122,6 +242,15 @@ function firstModelIn(file, bytes) {
   return m?.[1] ?? null;
 }
 
+// Session model for the tokens report. The head names the model the session
+// STARTED on, but a long session can push the first assistant message past the
+// head window (measured here: 6 of 60 transcripts, all multi-MB), and
+// returning null there dropped those sessions out of the routed-down math as
+// "session unknown" - and they are the biggest ones, so the loss was
+// concentrated exactly where it mattered. Fall back to the tail, accepting the
+// lower precision: a late-window model beats no model.
+const sessionModelOf = (file) => firstModelIn(file, 262144) ?? lastModelIn(file, 262144);
+
 function lastModelIn(file, bytes) {
   // Model in effect NOW: the last model named in the transcript tail. The
   // dispatch hook uses this so /model switches, opusplan's plan->execute
@@ -136,7 +265,7 @@ function lastModelIn(file, bytes) {
 // CLAUDE_CODE_SUBAGENT_MODEL env override (recorded by the hook as e.env),
 // else the explicit model param, else the agent's frontmatter pin, else
 // unknown (session-model inheritance).
-const effectiveModel = (e) => e.env ?? e.model ?? PINNED_MODELS[e.agent] ?? null;
+const effectiveModel = (e) => e.env ?? e.model ?? pinnedModel(e.agent) ?? null;
 
 function isRoutedDown(e) {
   // With the session model recorded (0.5.3+ entries), judge by tier: an
@@ -209,7 +338,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   for (const e of entries) {
     const key = e.env ? `${e.agent} (env=${e.env})`
       : e.model ? `${e.agent} (model=${e.model})`
-      : PINNED_MODELS[e.agent] ? `${e.agent} (pin=${PINNED_MODELS[e.agent]})`
+      : pinnedModel(e.agent) ? `${e.agent} (pin=${pinnedModel(e.agent)})`
       : e.agent;
     const s = byAgent.get(key) ?? { n: 0, down: 0, up: 0, unknown: 0 };
     s.n++;
@@ -244,7 +373,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   // routed-down tier would need rework >~20% of the time the price edge
   // is gone - here inverted, >20% of cheap-capable dispatches leaking UP
   // is the same signal that the tier assignment is not holding.
-  const BUNDLED = new Set([...Object.keys(PINNED_MODELS), ...CHEAP_AGENTS]);
+  const BUNDLED = new Set([...Object.keys(AGENT_PINS), ...CHEAP_AGENTS]);
   const capable = entries.filter((e) => !BUNDLED.has(e.agent));
   // An env override means the dispatch did NOT inherit the session model,
   // no matter that the call itself was bare - not a leak.
@@ -255,6 +384,32 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     const rate = leaks.length / capable.length;
     leakLines.push("", `Tier leaks: ${leaks.length} of ${capable.length} unpinned dispatches inherited a strong session model bare (${Math.round(rate * 100)}%).`);
     if (rate > LEAK_WARN) leakLines.push(`  ! above the 20% rework threshold - pass an explicit model= on general-purpose/custom dispatches (sonnet default).`);
+  }
+  // Effort, the knob the tier columns cannot show. A dispatch on an agent type
+  // with no known pin inherits the session level, so cheap-tier work can still
+  // think at the session's expense - the failure mode a tier-only report calls a
+  // success. Counted only over entries that recorded an effort: pre-0.15 logs
+  // have none, and neither does a session on a model the docs list as having no
+  // effort support at all.
+  const effortLines = [];
+  const withEffort = entries.filter((e) => e.effort);
+  if (withEffort.length) {
+    const inherited = withEffort.filter((e) => !pinnedEffort(e.agent));
+    const byLevel = [...inherited.reduce((m, e) => m.set(e.effort, (m.get(e.effort) ?? 0) + 1), new Map())]
+      .sort((a, b) => b[1] - a[1])
+      .map(([lvl, n]) => `${n} at ${lvl}`)
+      .join(", ");
+    // Scoped to `inherited`, not to `withEffort`: the sentence below reads as a
+    // subset of the count in the line above it, and a pinned agent on the model
+    // default would otherwise print "8 of these" under a total of 2.
+    const inferred = inherited.filter((e) => e.effortFrom === "default").length;
+    effortLines.push(
+      "",
+      `Effort: ${inherited.length} of ${withEffort.length} dispatches ran on an agent type carrying no pin this plugin knows about, and so inherited the session level${byLevel ? ` (${byLevel})` : ""}.`,
+      `  The bundled agents pin theirs in frontmatter, so routing a mechanical errand through a role agent buys a cheaper effort as well as a cheaper tier. An agent from anywhere else may pin its own effort, which is invisible here and counted as inherited.`,
+      ...(inferred ? [`  ${inferred} of these levels are the documented model default rather than an observed setting.`] : []),
+      `  Source order is CLAUDE_CODE_EFFORT_LEVEL, then settings effortLevel, then the model default. Four states can override that and none are visible here: a /effort or --effort choice inside a running session, ultracode, an organization effort cap, and the model-default hold Fable 5 / Opus 4.8 / Opus 4.7 apply on first run over a previously set level.`,
+    );
   }
   // Grouped sections instead of per-row v/- markers: the reader should not
   // need a legend to see what ran cheap and what ran at the session tier.
@@ -290,6 +445,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     "By session model:",
     ...sessionRows.map(([m, s]) => `  ${m}: ${s.down} of ${s.cmp} routed down (${s.cmp ? Math.round((s.down / s.cmp) * 100) : 0}%)${s.n > s.cmp ? ` - ${s.n - s.cmp} not comparable` : ""}`),
     ...leakLines,
+    ...effortLines,
     "",
     `Log: ${dataFile()} - history kept 30 days.`,
   ];
@@ -308,12 +464,7 @@ if (process.argv[2] === "tokens") {
   const sf = sessionFilterFromArgs(process.argv);
   const winLabel = (win.ago ? `${win.days}d ending ${win.ago}d ago` : `${win.days}d`)
     + (sf ? `, ${sf} sessions` : "");
-  const projRoot = (() => {
-    const cfg = process.env.CLAUDE_CONFIG_DIR?.trim()
-      ? resolve(process.env.CLAUDE_CONFIG_DIR)
-      : join(homedir(), ".claude");
-    return join(cfg, "projects");
-  })();
+  const projRoot = join(configDir(), "projects");
   const sessionModelCache = new Map();
   const perModel = new Map(); // model -> {agents, in, out, cr, cw, down}
   const perSession = new Map(); // session model -> {agents, vol, downVol}
@@ -399,7 +550,7 @@ if (process.argv[2] === "tokens") {
       if (isMainSession) {
         // Scoped by the same --session filter as the agents, so the denominator
         // always describes the same population as the headline above it.
-        if (!sessionModelCache.has(p)) sessionModelCache.set(p, firstModelIn(p, 262144));
+        if (!sessionModelCache.has(p)) sessionModelCache.set(p, sessionModelOf(p));
         const sessionModel = sessionModelCache.get(p);
         if (sf && !(sessionModel && shortModel(sessionModel).toLowerCase().includes(sf))) continue;
         mainSessions++;
@@ -414,7 +565,7 @@ if (process.argv[2] === "tokens") {
       const anchored = p.match(/^(.*?)[\\/]subagents[\\/]/);
       const sessionJsonl = anchored ? anchored[1] + ".jsonl" : null;
       if (sessionJsonl && !sessionModelCache.has(sessionJsonl)) {
-        sessionModelCache.set(sessionJsonl, firstModelIn(sessionJsonl, 262144));
+        sessionModelCache.set(sessionJsonl, sessionModelOf(sessionJsonl));
       }
       const sessionModel = sessionJsonl ? sessionModelCache.get(sessionJsonl) : null;
       const tsess = tierOf(sessionModel);
@@ -491,7 +642,7 @@ if (process.argv[2] === "tokens") {
     "",
     "By session model:",
     ...sessionRows.map(([m, s]) => `  ${m}: ${fmtN(s.vol)} across ${s.agents} agents - ${s.cmpVol ? `${Math.round((s.downVol / s.cmpVol) * 100)}% below session tier` : "not tier-comparable"}${s.cmpVol && s.vol > s.cmpVol ? ` (${fmtN(s.vol - s.cmpVol)} not comparable)` : ""}`),
-    ...(unknownAgents ? ["", `${unknownAgents} agents not tier-comparable (${fmtN(unknownVol)}) - unrecognized agent model or unknown session tier, excluded from routed-down math; extend TIER_PATTERNS in dispatch-counter.mjs.`] : []),
+    ...(unknownAgents ? ["", `${unknownAgents} agents not tier-comparable (${fmtN(unknownVol)}), excluded from routed-down math - either the agent ran an unrecognized model family (extend TIER_PATTERNS in dispatch-counter.mjs) or no model could be read from the parent session transcript, which happens when the transcript is gone or names no model anywhere.`] : []),
     ...(unreadable ? ["", `${unreadable} transcript(s) could not be read (too large to load as one string, or unreadable) - the totals below understate by whatever they held.`] : []),
     ...(mainVolTotal ? [
       "",
@@ -501,7 +652,7 @@ if (process.argv[2] === "tokens") {
     ] : []),
     "",
     "Volume = tokens the subagent processed; cache reads are billed at the subagent's model rate, which is where routing saves.",
-    "Session model is sampled at session START - a mid-session /model switch or fallback attributes later subagents to the start model (the dispatch report does not have this limit).",
+    "Session model is read from the head of each session transcript - the model it started on - so a mid-session /model switch or fallback attributes later subagents to the start model (the dispatch report does not have this limit). In a session long enough that its head names no model at all, the tail is read instead and that session is attributed to its LAST model, which is the opposite bias for those sessions.",
   ];
   process.stdout.write(out.join("\n"));
   process.exit(0);
@@ -518,6 +669,12 @@ try {
   const event = JSON.parse(raw);
   if (event.tool_name !== "Agent" && event.tool_name !== "Task") process.exit(0);
   const input = event.tool_input ?? {};
+  // Which main model this dispatch was routed FROM - the last model named in
+  // the session transcript, i.e. the one in effect at dispatch time (survives
+  // /model switches, opusplan handoffs, and quota fallbacks). Resolved before
+  // the entry because the effort default depends on it.
+  const session = event.transcript_path ? lastModelIn(event.transcript_path, 262144) : null;
+  const effort = sessionEffort(event.cwd ?? process.cwd(), session);
   const entry = {
     ts: Date.now(),
     agent: input.subagent_type ?? "general-purpose",
@@ -526,10 +683,11 @@ try {
     // frontmatter pin - when set, it is the model every subagent actually
     // ran on, so record it rather than guessing from pins.
     ...(process.env.CLAUDE_CODE_SUBAGENT_MODEL ? { env: process.env.CLAUDE_CODE_SUBAGENT_MODEL } : {}),
-    // Which main model this dispatch was routed FROM - the last model named
-    // in the session transcript, i.e. the one in effect at dispatch time
-    // (survives /model switches, opusplan handoffs, and quota fallbacks).
-    session: event.transcript_path ? lastModelIn(event.transcript_path, 262144) : null,
+    session,
+    // The session's effort level plus its source, so the report can separate an
+    // observed setting from the documented default it fell back to. Omitted
+    // entirely when neither could be established.
+    ...(effort ?? {}),
   };
   const file = dataFile();
   appendFileSync(file, JSON.stringify(entry) + "\n");

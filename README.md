@@ -339,9 +339,15 @@ which is why the medium pins survived the generation jump unchanged;
 the fable-class tier is built for long-horizon frontier work - a
 session-model choice, not a dispatch target.
 
-The effort ladder - the second knob. Unset effort means `high` on
-current models (not medium), and `xhigh` is absent on some models that
-support `max` (e.g. the 4.6 generation). The vendor recommendation is
+The effort ladder - the second knob. Unset effort means `high` on every
+model that supports effort, the one exception being Opus 4.7, which
+defaults to `xhigh`. Support itself is an explicit list rather than a
+version cutoff: Fable 5, Opus 5, Sonnet 5, Opus 4.8 and Opus 4.7 take the
+whole ladder, Opus 4.6 and Sonnet 4.6 take everything but `xhigh`, and a
+model absent from that list - Haiku 4.5 among them - has no effort knob at
+all. Setting a level a model does not support runs the highest supported
+level at or below it, so `xhigh` becomes `high` on Opus 4.6. The vendor
+recommendation is
 per-generation ([effort
 reference](https://platform.claude.com/docs/en/build-with-claude/effort)):
 Opus 4.7 and 4.8 start coding and agentic work at `xhigh`, while Opus 5
@@ -445,10 +451,11 @@ chapter for the full set of rules.
 
 ## Dispatch counter
 
-Every Agent dispatch is logged by a PostToolUse hook (agent name + model,
-nothing else) to `<config>/model-routing/dispatches.jsonl`, self-pruned to
-30 days. Stats show how much work routing actually kept off your session
-model - real counts, not invented dollar savings:
+Every Agent dispatch is logged by a PostToolUse hook (agent name, model, the
+session model, and the session effort level - nothing else) to
+`<config>/model-routing/dispatches.jsonl`, self-pruned to 30 days. Stats show
+how much work routing actually kept off your session model - real counts, not
+invented dollar savings:
 
 ```text
 /model-routing:stats
@@ -486,6 +493,14 @@ tool, so they are invisible to the dispatch report - but `tokens` reads
 their transcripts (nested under `subagents/workflows/`) and counts their
 volume against the parent session like any other subagent.
 
+### The effort line
+
+`report` also prints how many dispatches ran on an agent type carrying no effort pin, and therefore inherited whatever the session was set to. That is the failure a tier-only report scores as a win: a mechanical errand sent to `general-purpose` with `model=sonnet` still thinks as hard as your session does, while `scout` would have run the same errand at `low`.
+
+Effort is reconstructed rather than observed, because transcripts do not record it. The sources are read in the order Claude Code applies them: `CLAUDE_CODE_EFFORT_LEVEL` first (the only place `max` is accepted), then `effortLevel` from the settings cascade (local, then project, then user - these accept `low`/`medium`/`high`/`xhigh` only), then the documented model default described in [the effort ladder](#model-tiers-and-effort-ladder). Levels that came from that last rung are counted separately in the report, so an inferred default never reads as a setting somebody chose, and a level the session model does not support is recorded as the one Claude Code falls back to instead. Two cases contribute nothing to the line rather than a guess: a session on a model the docs give no effort support, and a session whose model could not be read at all, since the same configured level means different things on different models.
+
+The line states its limits rather than hiding them, and there are more than the sources suggest. Four documented states override the reconstruction and none of them are visible to a hook: a `/effort` or `--effort` choice made inside a running session, ultracode (which sends `xhigh`), an organization effort cap, and the model-default hold that Fable 5, Opus 4.8 and Opus 4.7 apply on first run over a level you previously set. Only the pins of the bundled agents are known here too - an agent from another plugin may pin its own effort and will still be counted as inheriting. Read the figure as what the visible sources resolve to, not as a measurement.
+
 Embed the one-liner in your status line by appending the command's output
 to whatever your `statusLine.command` already prints. Delete the `.jsonl`
 any time to reset; a missing file just means zero.
@@ -514,9 +529,10 @@ There is deliberately no config subsystem - four override paths cover it:
   frontmatter pin when present, else from the session level.
 - **Permanent**: edit the `model:` / `effort:` frontmatter in
   `agents/*.md`. A directory-source install picks the change up next
-  session. Keep `PINNED_MODELS` in `hooks/dispatch-counter.mjs` in step -
-  the CI sync test fails the build when the two drift, because that drift
-  silently corrupts the stats (it happened once; see 0.7.1).
+  session. Keep `AGENT_PINS` in `hooks/dispatch-counter.mjs` in step - it
+  carries both the model and the effort column, and a CI sync test fails the
+  build when either drifts from the frontmatter, because that drift silently
+  corrupts the stats (it happened once; see 0.7.1).
 - **Reset**: `git checkout -- agents` in the plugin checkout, or
   reinstall from the marketplace.
 
