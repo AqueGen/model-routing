@@ -688,11 +688,21 @@ if (process.argv[2] === "tokens") {
   // the difference goes negative whenever subagents deliberately ran ABOVE the
   // session tier, which is a documented move, not an error state.
   const fmtUsd = (n) => (n < 0 ? "-$" : "$") + (Math.abs(n) >= 1000 ? Math.round(Math.abs(n)).toLocaleString("en-US") : Math.abs(n).toFixed(2));
-  // Label width derived from the labels themselves, so renaming a row cannot
-  // silently break the column the way a hand-counted constant did.
-  const COST_ROWS = ["as it ran", "had every subagent inherited its session model", "difference", "main sessions, same rates (not routable)"];
-  const costW = Math.max(...COST_ROWS.map((l) => l.length)) + 2;
-  const costRow = (label, n) => label.padEnd(costW) + fmtUsd(n).padStart(12);
+  // One list of [label, amount], so the width is derived from the labels that
+  // are actually printed. A separate width table would only be right while
+  // somebody kept the two copies in step - the same failure as a hand-counted
+  // constant, one indirection further away.
+  const costRows = [
+    // The three subagent rows only mean something when some subagent volume was
+    // priceable; the main-session row stands on its own.
+    ...(costRan ? [
+      ["as it ran", costRan],
+      ["had every subagent inherited its session model", costInherited],
+      ["difference", costInherited - costRan],
+    ] : []),
+    ...(mainCost ? [["main sessions, same rates (not routable)", mainCost]] : []),
+  ];
+  const costW = Math.max(0, ...costRows.map(([l]) => l.length)) + 2;
   const mainRows = [...mainPerModel.entries()].sort((a, b) => b[1] - a[1]);
   const mainVolTotal = mainRows.reduce((a, [, v]) => a + v, 0);
   if (!perModel.size) {
@@ -741,18 +751,17 @@ if (process.argv[2] === "tokens") {
     ...(costRan || mainCost || unpricedVol || mainUnpricedVol ? [
       "",
       `At API list prices (rates as of ${PRICES_ASOF}), this is what the volume above would have cost on the Claude API:`,
-      // The three subagent rows only mean something when some subagent volume
-      // was priceable; the main-session row and the unpriced declaration stand
-      // on their own, so an all-unpriced window still says what it dropped.
+      ...costRows.map(([label, n]) => `  ${label.padEnd(costW)}${fmtUsd(n).padStart(12)}`),
+      ...(unpricedVol || mainUnpricedVol ? [`  ${fmtN(unpricedVol + mainUnpricedVol)} tokens ran on a model absent from the price table and could not be priced${costRows.length ? ", so they are excluded from every figure above" : ""}.`] : []),
+      // The counterfactual caveats belong to the counterfactual: in a window
+      // with no priceable subagent volume there is no difference row for them
+      // to qualify, and printing them anyway would describe a figure that is
+      // not on screen.
       ...(costRan ? [
-        `  ${costRow("as it ran", costRan)}`,
-        `  ${costRow("had every subagent inherited its session model", costInherited)}`,
-        `  ${costRow("difference", costInherited - costRan)}`,
+        "This is a counterfactual, not a bill: on a subscription you pay none of it, and the difference is the same upper bound the volume chart is - it assumes every subagent would otherwise have inherited the session model, which pinned agents from other plugins would not.",
+        "The difference is conservative for a documented reason. Models from Opus 4.7, Sonnet 5 and Fable 5 onward use a tokenizer producing about 30% more tokens for the same text than Sonnet 4.6 and earlier, so re-pricing a cheap model's token count at an expensive model's rate understates the inherited side, and with it the difference. It does not touch what actually ran.",
       ] : []),
-      ...(mainCost ? [`  ${costRow("main sessions, same rates (not routable)", mainCost)}`] : []),
-      ...(unpricedVol || mainUnpricedVol ? [`  ${fmtN(unpricedVol + mainUnpricedVol)} tokens ran on a model absent from the price table and are excluded from every figure above.`] : []),
-      "This is a counterfactual, not a bill: on a subscription you pay none of it, and the difference is the same upper bound the volume chart is - it assumes every subagent would otherwise have inherited the session model, which pinned agents from other plugins would not.",
-      "Several documented modifiers bias these figures DOWNWARD, so read them as conservative. Models from Opus 4.7, Sonnet 5 and Fable 5 onward use a tokenizer producing about 30% more tokens for the same text than Sonnet 4.6 and earlier, so re-pricing a cheap model's token count at an expensive model's rate understates what that work would really have cost there. Cache writes whose transcript line names no TTL are charged at the cheapest rate. And nothing in a usage line reveals whether fast mode (which doubles Opus 5 and Opus 4.8 rates) or US-only inference (1.1x on everything from 4.6) was in effect, so neither is applied.",
+      "Two more modifiers understate every figure here. Cache writes whose transcript line names no TTL are charged at the cheapest write rate. And nothing in a usage line reveals whether fast mode (which doubles Opus 5 and Opus 4.8 rates) or US-only inference (1.1x on everything from 4.6) was in effect, so neither is applied.",
       "Rates are first-party Claude API list prices - Bedrock and Google Cloud bill separately and are not modelled. They are transcribed from the Anthropic pricing page on the date above and will drift; a window straddling a price change is priced wholly at the rates in effect at its end. Re-check PRICES in dispatch-counter.mjs before quoting a figure.",
     ] : []),
     "",

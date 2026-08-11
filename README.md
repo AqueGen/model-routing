@@ -503,7 +503,7 @@ The line states its limits rather than hiding them, and there are more than the 
 
 ### The cost line
 
-`tokens` also prices the volume it just counted, because tokens need translating and dollars do not:
+`tokens` also prices the volume it just counted, because tokens need translating and dollars do not. Sample output - the window rolls daily, so your figures will differ:
 
 ```text
 At API list prices (rates as of 2026-08-11), this is what the volume above would have cost on the Claude API:

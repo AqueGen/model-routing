@@ -722,29 +722,15 @@ test("no default is invented for a model absent from the support table", () => {
 });
 
 test("every model in the effort table is rankable by the tier table", () => {
-  // The two model tables answer different questions at different granularity -
-  // tier by family, effort support by version - so they stay separate, but they
-  // must not disagree about which models exist. A model with effort support and
-  // no tier would be excluded from the routed-down math while still reporting an
-  // effort, which is the drift this pins.
-  const src = readFileSync(SCRIPT, "utf-8");
-  const rows = src.match(/const EFFORT_SUPPORT = \[([\s\S]*?)^\];/m)[1];
-  const families = [...rows.matchAll(/\/([^/]+)\//g)].flatMap((m) => m[1].split("|"));
-  assert.ok(families.length >= 6, `expected the documented model list, parsed ${families.length}`);
+  // A model with effort support and no tier would be excluded from the
+  // routed-down math while still reporting an effort.
+  const { src, rows } = assertRankable("EFFORT_SUPPORT", 6);
   // Every level named in a support row must exist on the ladder clampEffort
   // walks: a stray one would pass `levels.includes` and then fall out of the
   // downward walk silently, since indexOf returns -1 for it.
   const ladder = new Set([...src.match(/const EFFORT_LADDER = \[([^\]]*)\]/)[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]));
   for (const level of [...rows.matchAll(/"([^"]+)"/g)].map((m) => m[1])) {
     assert.ok(ladder.has(level), `${level} is in EFFORT_SUPPORT but not on EFFORT_LADDER`);
-  }
-  // [\s\S] rather than . so reformatting either table across lines fails this
-  // test on its subject, not on its own parsing.
-  const tiers = src.match(/const TIER_PATTERNS = \[([\s\S]*?)\];/)[1];
-  for (const family of families) {
-    const ranked = [...tiers.matchAll(/\/([^/]+)\//g)]
-      .some((m) => m[1].split("|").some((p) => new RegExp(p).test(`claude-${family}`)));
-    assert.ok(ranked, `${family} has effort support but no tier in TIER_PATTERNS`);
   }
 });
 
@@ -942,20 +928,29 @@ test("unpriced subagents still get their main-session cost and their declaration
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
-test("every model in the price table is rankable by the tier table", () => {
-  // PRICES is the third ordered regex over the model string. The same coupling
-  // the effort table has: a model that can be priced but not ranked would be
-  // counted in the cost figures while sitting outside the routed-down math.
+// Every model-keyed table must agree with TIER_PATTERNS about which models
+// exist. They stay separate tables on purpose - tier is a property of the
+// family, effort support and price are properties of the version - so this is
+// the coupling that replaces merging them. Returns the families it parsed so a
+// caller can make further assertions about the same rows.
+function assertRankable(tableName, minFamilies) {
   const src = readFileSync(SCRIPT, "utf-8");
-  const rows = src.match(/const PRICES = \[([\s\S]*?)^\];/m)[1];
+  const rows = src.match(new RegExp(`const ${tableName} = \\[([\\s\\S]*?)^\\];`, "m"))[1];
   const families = [...rows.matchAll(/\[\/([^/]+)\//g)].flatMap((m) => m[1].split("|"));
-  assert.ok(families.length >= 8, `expected the transcribed price list, parsed ${families.length}`);
+  assert.ok(families.length >= minFamilies, `expected the documented ${tableName} list, parsed ${families.length}`);
   const tiers = src.match(/const TIER_PATTERNS = \[([\s\S]*?)\];/)[1];
   for (const family of families) {
     const ranked = [...tiers.matchAll(/\/([^/]+)\//g)]
       .some((m) => m[1].split("|").some((p) => new RegExp(p).test(`claude-${family}`)));
-    assert.ok(ranked, `${family} has a price but no tier in TIER_PATTERNS`);
+    assert.ok(ranked, `${family} is in ${tableName} but has no tier in TIER_PATTERNS`);
   }
+  return { src, rows };
+}
+
+test("every model in the price table is rankable by the tier table", () => {
+  // A model that can be priced but not ranked would be counted in the cost
+  // figures while sitting outside the routed-down math.
+  assertRankable("PRICES", 8);
 });
 
 test("a cache write with no TTL breakdown is charged at the cheaper rate", () => {
