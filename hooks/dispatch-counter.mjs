@@ -25,11 +25,28 @@
 // Log lives in <config>/model-routing/dispatches.jsonl and self-prunes to 30d.
 
 import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RETENTION_MS = 30 * DAY_MS;
+
+// Stamped on every report so a pasted screenshot answers "which version wrote
+// this" without a second round trip - the question that costs the most time
+// when someone reports a report that looks wrong. Read from the manifest next
+// to this script rather than CLAUDE_PLUGIN_ROOT, which the hook sets but a
+// direct `node hooks/dispatch-counter.mjs report` does not. Unreadable manifest
+// degrades to an unlabelled header; a version stamp must never break a report.
+const PLUGIN_VERSION = (() => {
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    return JSON.parse(readFileSync(join(here, "..", ".claude-plugin", "plugin.json"), "utf-8")).version ?? null;
+  } catch {
+    return null;
+  }
+})();
+const versionSuffix = PLUGIN_VERSION ? ` - model-routing ${PLUGIN_VERSION}` : "";
 
 // Window flags: --days N (size, default 7) and --ago M (shift back M days).
 // Bad values fall back to the default rather than erroring - a stats tool
@@ -369,7 +386,9 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     // report is indistinguishable from a broken node/shell run.
     process.stdout.write(process.argv[2] === "stats"
       ? `routed-down: no data (${winLabel})`
-      : `No dispatches logged in the window (${winLabel}).\nLog: ${dataFile()} - history kept 30 days.\nEntries appear after the first Agent dispatch once the plugin's PostToolUse hook is active (plugin enabled + session restarted).`);
+      // The version belongs here most of all: an empty report is the one people
+      // screenshot, and "which version" is the first thing it has to answer.
+      : `No dispatches logged in the window (${winLabel})${versionSuffix}.\nLog: ${dataFile()} - history kept 30 days.\nEntries appear after the first Agent dispatch once the plugin's PostToolUse hook is active (plugin enabled + session restarted).`);
     process.exit(0);
   }
   // Per-entry verdict: down / at / up / unknown. "up" = the effective model
@@ -537,7 +556,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   const pct = comparable ? Math.round((down.length / comparable) * 100) : 0;
   const section = (title, rows2) => rows2.length ? ["", title, ...rows2] : [];
   const lines = [
-    `Model routing report - ${winLabel}`,
+    `Model routing report - ${winLabel}${versionSuffix}`,
     "",
     `${down.length} of ${comparable}${unknownCount ? " comparable" : ""} dispatches (${pct}%) ran on a cheaper model than the session${unknownCount ? ` - ${unknownCount} not tier-comparable excluded` : ""}${todayPart ? ` (${todayPart.replace(" · ", "")})` : ""}.`,
     ...(upCount ? [`${upCount} ran ABOVE the session tier - a pin above the session model, uncapped; pins are ceilings only when the dispatch passes model=<session>.`] : []),
@@ -785,7 +804,7 @@ if (process.argv[2] === "tokens") {
     const mainNote = mainVolTotal
       ? `\n\nMain sessions in this window: ${fmtN(mainVolTotal)} across ${mainSessions} sessions, with no subagent volume counted against them.`
       : "";
-    process.stdout.write(`No subagent transcripts found under ${projRoot} (${winLabel}).\nToken stats read Claude Code agent-*.jsonl transcript files; they appear after subagent dispatches. If your config lives elsewhere, set CLAUDE_CONFIG_DIR.${mainNote}`);
+    process.stdout.write(`No subagent transcripts found under ${projRoot} (${winLabel})${versionSuffix}.\nToken stats read Claude Code agent-*.jsonl transcript files; they appear after subagent dispatches. If your config lives elsewhere, set CLAUDE_CONFIG_DIR.${mainNote}`);
     process.exit(0);
   }
   const rows = [...perModel.entries()].map(([m, s]) => ({ m, vol: volOf(s), ...s }))
@@ -799,7 +818,7 @@ if (process.argv[2] === "tokens") {
   const bar = (v) => "#".repeat(Math.max(1, Math.round((v / total) * 24)));
   const sessionRows = [...perSession.entries()].sort((a, b) => b[1].vol - a[1].vol);
   const out = [
-    `Subagent token volume - ${winLabel} (input + cache):`,
+    `Subagent token volume - ${winLabel} (input + cache)${versionSuffix}:`,
     "",
     `${fmtN(downTotal)} of ${fmtN(total - unknownVol)} ${unknownVol ? "comparable " : ""}tokens (${Math.round((downTotal / comparableVol) * 100)}%) processed on a cheaper model than their session - judged per session (fable/opus days both count fairly).`,
     // A --session filter selects the sessions with the most room to route down,
