@@ -1227,3 +1227,53 @@ test("a model in the tier table also has an effort row", () => {
   assert.equal(e.effort, "high");
   assert.equal(e.effortFrom, "default");
 });
+
+const manifestVersion = () =>
+  JSON.parse(
+    readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", ".claude-plugin", "plugin.json"), "utf-8")
+  ).version;
+
+test("both reports stamp the plugin version from the manifest", () => {
+  const cfg = freshConfigDir();
+  writeLog(cfg, [{ ts: Date.now(), agent: "general-purpose", model: "sonnet", session: "claude-opus-5" }]);
+  // Read the version rather than hardcoding it: this asserts the WIRING - that
+  // the script resolves the manifest next to itself - and cannot go stale at the
+  // next release the way a literal would.
+  const stamp = "model-routing " + manifestVersion();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), usageLine("claude-opus-5", 1) + "\n");
+  writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-sonnet-5", 1000) + "\n");
+  try {
+    assert.ok(run(["report"], cfg).split("\n")[0].endsWith(stamp), "report header must end with the version stamp");
+    assert.ok(run(["tokens"], cfg).split("\n")[0].endsWith(stamp + ":"), "tokens header must end with the version stamp");
+    // The three empty-data paths matter most: they are what people screenshot
+    // when something looks wrong, and "which version wrote this" is the first
+    // question those reports have to answer.
+    assert.ok(run(["report", "--days", "1", "--ago", "9000"], cfg).includes(stamp), "empty report must carry it");
+    const noTranscripts = run(["tokens"], freshConfigDir());
+    assert.ok(noTranscripts.includes(stamp), "the no-transcripts message must carry it too");
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("an unreadable manifest costs the stamp, not the report", () => {
+  // The script copied away from its manifest: the version cannot be resolved,
+  // and the report must still print - not crash, and not say "undefined".
+  const dir = mkdtempSync(join(tmpdir(), "mr-noman-"));
+  const script = join(dir, "dispatch-counter.mjs");
+  writeFileSync(script, readFileSync(join(dirname(fileURLToPath(import.meta.url)), "dispatch-counter.mjs")));
+  const cfg = freshConfigDir();
+  writeLog(cfg, [{ ts: Date.now(), agent: "general-purpose", model: "sonnet", session: "claude-opus-5" }]);
+  try {
+    const out = execFileSync(process.execPath, [script, "report"], {
+      env: { ...process.env, CLAUDE_CONFIG_DIR: cfg, CLAUDE_CODE_SUBAGENT_MODEL: "", CLAUDE_CODE_EFFORT_LEVEL: "" },
+      cwd: cfg,
+      encoding: "utf-8",
+    });
+    assert.match(out, /^Model routing report - 7d\n/);
+    assert.doesNotMatch(out, /undefined|null/);
+  } finally {
+    rmSync(cfg, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
