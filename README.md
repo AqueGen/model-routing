@@ -191,7 +191,7 @@ For local development: clone the repo and
    plan offers). The plugin never changes it - the main session is where
    planning and decisions happen, so give it the strongest tier you are
    willing to pay for. Session effort: left unset, you get the model's own
-   default - high on most models, xhigh on Opus 4.7, and some models have no
+   default - high on every model that has the knob, and some models have no
    effort knob at all (see [the effort ladder](#model-tiers-and-effort-ladder));
    dropping the session to medium is the cost-conscious pick when the main
    session mostly coordinates - the bundled agents pin their own either way.
@@ -342,8 +342,10 @@ the fable-class tier is built for long-horizon frontier work - a
 session-model choice, not a dispatch target.
 
 The effort ladder - the second knob. Unset effort means `high` on every
-model that supports effort, the one exception being Opus 4.7, which
-defaults to `xhigh`. Support itself is an explicit list rather than a
+model that supports effort, with no exception: Opus 4.7 and 4.8 recommend
+starting at `xhigh` for coding and agentic work, but a recommendation is
+a value you pass, not the level that runs when you pass nothing. Support
+itself is an explicit list rather than a
 version cutoff: Fable 5, Opus 5, Sonnet 5, Opus 4.8 and Opus 4.7 take the
 whole ladder, Opus 4.6 and Sonnet 4.6 take everything but `xhigh`, and a
 model absent from that list - Haiku 4.5 among them - has no effort knob at

@@ -28,9 +28,12 @@ of `max` and still clear a task that was never hard - a strong model
 thinking lightly often beats a weaker model thinking hard. Pick both:
 which model, and how hard it thinks.
 
-The full ladder is `low / medium / high / xhigh / max`. On current
-models the default is `high` - an unset effort IS high effort, not
-medium - with one documented exception: Opus 4.7 defaults to `xhigh`.
+The full ladder is `low / medium / high / xhigh / max`. On every model
+that supports effort the default is `high` - an unset effort IS high
+effort, not medium, and there is no exception. Opus 4.7 and 4.8 are
+often misread as one: they RECOMMEND starting at `xhigh` for coding and
+agentic work, which is a value you have to pass, not what runs when you
+pass nothing.
 Which levels exist at all is a per-model list rather than a version
 cutoff, and setting a level the model does not support runs the highest
 supported level at or below it. The per-model recommendation moves with the generation: Opus
@@ -170,16 +173,15 @@ actually earns its cost:
   effort the first control on a fable session, not the tier: a routine
   phase left at the default is paying top-tier rates for depth it did
   not need. Sweep Workflow `effort` opts the same way.
-- **A refusal is not a failure to escalate around.** Fable 5 and Opus 5
-  both ship safety classifiers that can decline a request; the reply is
-  a normal 200 carrying `stop_reason: "refusal"` and the name of the
-  classifier that declined. Two consequences for routing. Retrying the
-  same request one tier up does NOT clear it, because the tier above has
-  the same classifiers - the documented remedy is a fallback to a
-  different model, not a climb. And a refusal before any output is not
-  billed, so the cost is a wasted round trip rather than wasted spend:
-  do not treat it as the weak-result case that the escalation ladder
-  exists for.
+- **A refusal is a different mechanism from a weak result.** Fable 5 and
+  Opus 5 both ship safety classifiers that can decline a request; the
+  reply is a normal 200 carrying `stop_reason: "refusal"` and the name
+  of the classifier that declined. It has its own documented remedy -
+  retry on one of the refused model's permitted fallback targets, which
+  for Fable 5 are Opus 4.8 and Opus 5 - so treat it as a redirect, not
+  as the weak-result case the escalation ladder exists for. A refusal
+  that arrives before any output is not billed, so the cost is a wasted
+  round trip; a mid-stream refusal bills what was already streamed.
 
 Research backing: task-type routing outperforms complexity-score routing
 (RouteLLM, ICLR 2025); benchmark tier gaps confirm sonnet as the
@@ -270,9 +272,9 @@ actually ran with `/model-routing:stats`.
   handback above: stuck agents hand back BEFORE producing a result and
   continue via SendMessage; failed results re-dispatch fresh one tier up,
   because the failed attempt's context is part of the problem. One case
-  the ladder does not fix: a `stop_reason: "refusal"` is a classifier
-  declining, not a model falling short, and every tier above has the
-  same classifiers - see the Fable caveats above.
+  is not on this ladder at all: a `stop_reason: "refusal"` is a
+  classifier declining rather than a model falling short, and it has its
+  own retry path - see the Fable caveats above.
 - Against a manual override, the same pin is a FLOOR, and undercutting it is
   not a saving. The two readings do not conflict because they answer different
   questions: the ceiling asks what the session should pay, the floor asks what

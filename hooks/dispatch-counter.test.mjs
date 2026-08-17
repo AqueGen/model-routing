@@ -824,9 +824,14 @@ test("an unset effortLevel records the documented model default", () => {
   const opus5 = dispatchWithSettings({ sessionModel: "claude-opus-5" });
   assert.equal(opus5.effort, "high");
   assert.equal(opus5.effortFrom, "default");
-  // Opus 4.7 is the documented exception.
+  // Opus 4.7 is NOT an exception, however much its guidance reads like one.
+  // The docs recommend starting it at xhigh for coding and agentic work and
+  // state in the same breath that "the API default is high". Recording the
+  // recommendation here labelled every unset 4.7 session with a level it never
+  // ran, which is the one thing this reconstruction must not do.
   const opus47 = dispatchWithSettings({ sessionModel: "claude-opus-4-7" });
-  assert.equal(opus47.effort, "xhigh");
+  assert.equal(opus47.effort, "high");
+  assert.equal(opus47.effortFrom, "default");
 });
 
 test("no default is invented for a model absent from the support table", () => {
