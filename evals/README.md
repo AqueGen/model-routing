@@ -55,25 +55,46 @@ Opus main session, 3 runs per arm, 2026-08-17:
 | delegated to a subagent | 3/3 | 0/3 | +1.00 |
 | answer is correct | 3/3 | 3/3 | 0.00 |
 | scout was the agent (indicator) | 3/3 | 0/3 | - |
-| cost / wall clock per run | $0.310 / 32s | $0.136 / 11s | +$0.174 / +21s |
 
-Two things are true at once and both matter. The guidance does change what the
-session does, cleanly and every time - the arms separate perfectly, and the
-baseline had `Explore` available and still chose to grep inline. That is the
-control-group number the README did not have.
+The guidance does change what the session does, cleanly and every time - the
+arms separate perfectly, and the baseline is not a straw man: it had `Explore`
+available and still chose to grep inline. That is the control-group number the
+README did not have.
 
-And on this fixture the change is a net loss: same answer, 2.3x the money, 3x
-the wall clock. The plugin's own anchor says a dispatch costs more than the
-answer for anything trivial, and four files is trivial - so the honest reading
-is that the routing fired where its own rule says it should not have. What the
-fixture cannot show is the other side of the trade: delegation exists to keep
-file contents out of the main context, and a four-file project has no context
-worth protecting.
+What it costs, per run, split by tier because the total hides the point:
+
+| | With | Without |
+| --- | ---: | ---: |
+| opus (the expensive tier) | $0.140, 59k in | $0.135, 90k in |
+| the subagent | sonnet-5 $0.065, 94k in | - |
+| total | $0.206 | $0.136 |
+| wall clock | 31s | 11s |
+
+Opus cost is flat and opus read 34% fewer tokens: the file contents went to
+sonnet instead, which is exactly the mechanism the plugin exists for, visible
+even at this size. The whole increase in the total is the second model - you now
+pay two models for a question one of them could answer alone.
+
+On a four-file fixture that is overhead and nothing else. The plugin's own anchor
+says a dispatch costs more than the answer for anything trivial, and four files
+is trivial, so the routing fired where its own rule says it should not have.
+
+The deeper limitation is structural, not a matter of fixture size: a `-p` run is
+one shot. The 31k opus tokens that did not enter the main context have no later
+turn to be re-read in, so the saving has nowhere to accumulate and the eval
+measures the cost of delegation without the return. A real session re-reads its
+context every turn, which is where the trade is supposed to flip. Any case
+written here under-measures the plugin by construction, and a case that claims
+otherwise is misreading its own numbers.
+
+(First run of a batch pays a cold prompt cache - it came in at $0.518 against
+$0.206 for the two that followed. The figures above are the two warm runs; the
+cold one is in the traces.)
 
 So the next case wants a fixture big enough that reading it inline actually
-floods the session - that is where the trade is supposed to pay - and the case
-after that wants the mirror of this one: a genuinely trivial question, where
-dispatching at all is the failure being measured.
+floods the session, and a multi-turn prompt so the saved context gets re-read at
+least once. The case after that wants the mirror of this one: a genuinely
+trivial question, where dispatching at all is the failure being measured.
 
 ## Writing another case
 

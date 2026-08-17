@@ -56,6 +56,7 @@ for (const kase of cases) {
         costUsd: run.costUsd,
         durationMs: run.durationMs,
         turns: run.turns,
+        modelUsage: run.modelUsage,
         scores,
       });
       const passed = scores.filter((s) => s.pass).length;
@@ -121,6 +122,7 @@ async function runOnce(kase, arm, timeoutMs) {
     costUsd: result?.total_cost_usd ?? null,
     durationMs: result?.duration_ms ?? null,
     turns: result?.num_turns ?? null,
+    modelUsage: result?.modelUsage ?? {},
   };
 }
 
@@ -169,6 +171,26 @@ function printCase(kase, armResults) {
     return `${arm} $${cost.toFixed(3)} / ${seconds.toFixed(0)}s`;
   });
   console.log(`  cost per run: ${price.join(" | ")}`);
+
+  // The total hides the thing the plugin is actually for. Whether work left the
+  // expensive tier only shows in the per-model split: a total that went up while
+  // the top-tier line held flat is the plugin working, not the plugin costing.
+  for (const [arm, runs] of Object.entries(armResults)) {
+    const perModel = new Map();
+    for (const run of runs) {
+      for (const [model, usage] of Object.entries(run.modelUsage ?? {})) {
+        const acc = perModel.get(model) ?? { cost: 0, read: 0, n: 0 };
+        acc.cost += usage.costUSD ?? 0;
+        acc.read += (usage.cacheReadInputTokens ?? 0) + (usage.inputTokens ?? 0);
+        acc.n = runs.length;
+        perModel.set(model, acc);
+      }
+    }
+    const parts = [...perModel.entries()]
+      .sort((a, b) => b[1].cost - a[1].cost)
+      .map(([model, a]) => `${model} $${(a.cost / a.n).toFixed(3)} / ${Math.round(a.read / a.n / 1000)}k in`);
+    console.log(`  ${arm} by model: ${parts.join(" | ")}`);
+  }
 }
 
 function mean(values) {
