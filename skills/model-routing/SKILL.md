@@ -28,9 +28,12 @@ of `max` and still clear a task that was never hard - a strong model
 thinking lightly often beats a weaker model thinking hard. Pick both:
 which model, and how hard it thinks.
 
-The full ladder is `low / medium / high / xhigh / max`. On current
-models the default is `high` - an unset effort IS high effort, not
-medium - with one documented exception: Opus 4.7 defaults to `xhigh`.
+The full ladder is `low / medium / high / xhigh / max`. On every model
+that supports effort the default is `high` - an unset effort IS high
+effort, not medium, and there is no exception. Opus 4.7 and 4.8 are
+often misread as one: they RECOMMEND starting at `xhigh` for coding and
+agentic work, which is a value you have to pass, not what runs when you
+pass nothing.
 Which levels exist at all is a per-model list rather than a version
 cutoff, and setting a level the model does not support runs the highest
 supported level at or below it. The per-model recommendation moves with the generation: Opus
@@ -154,6 +157,33 @@ actually earns its cost:
   low/medium punch well above their weight - when a dispatch feels too
   expensive, step the EFFORT down before the tier; when a result is too
   shallow, step effort up before tier up.
+- **The fable-to-opus price gap is exactly the sticker.** The documented
+  ~30% token inflation is measured against models from BEFORE Opus 4.7,
+  which is the generation whose tokenizer Fable 5 uses - it is not a gap
+  between Fable and opus, and the model table lists the same token
+  density for both. So budget the fable-to-opus gap as the sticker 2x
+  rather than something wider.
+  Where the inflation does bite is any comparison against a Sonnet
+  4.6-era baseline: re-pricing today's token counts at yesterday's rates
+  understates the difference.
+- **Step effort DOWN on Fable before stepping the tier down.** The
+  documented guidance for Fable is to start at `high` (the default),
+  use `xhigh` only for the most capability-sensitive work, and step down
+  to `medium` or `low` for routine work - lower effort on Fable still
+  performs well and often exceeds `xhigh` on prior models. So effort is
+  a real control on a fable session and not a rounding error: a routine
+  phase left at the default pays top-tier rates for depth it did not
+  need. It does not replace the tier decision - dispatching that phase
+  to sonnet is cheaper still. Sweep Workflow `effort` opts the same way.
+- **A refusal is a redirect, not a weak result.** Fable 5 and Opus 5
+  both ship safety classifiers that can decline a request outright
+  rather than answer it badly. A declined dispatch is the one failure
+  the escalation ladder below does not fix: the documented remedy is
+  another model family, and opus is the named destination for a declined
+  fable request - a step sideways, not up. The machinery underneath
+  (stop reasons, which classifier declined, fallback credit) is API-level
+  and invisible from inside a dispatch, so this is the whole of the
+  routing rule.
 
 Research backing: task-type routing outperforms complexity-score routing
 (RouteLLM, ICLR 2025); benchmark tier gaps confirm sonnet as the
@@ -243,8 +273,14 @@ actually ran with `/model-routing:stats`.
   take it to the main session. Distinguish this from the stuck-on-approach
   handback above: stuck agents hand back BEFORE producing a result and
   continue via SendMessage; failed results re-dispatch fresh one tier up,
-  because the failed attempt's context is part of the problem.
-- A pin is also a FLOOR, and undercutting it is not a saving. The pin states
+  because the failed attempt's context is part of the problem. One case
+  is not on this ladder at all: a `stop_reason: "refusal"` is a
+  classifier declining rather than a model falling short, and it has its
+  own retry path - see the Fable caveats above.
+- Against a manual override, the same pin is a FLOOR, and undercutting it is
+  not a saving. The two readings do not conflict because they answer different
+  questions: the ceiling asks what the session should pay, the floor asks what
+  the role needs. The pin states
   how much reasoning the role needs, so `reviewer` dispatched with
   `model=haiku` is a weaker review rather than a cheaper one, and it still
   counts as "cheaper than the session" in every cost figure - which is exactly
@@ -255,8 +291,8 @@ actually ran with `/model-routing:stats`.
   the cheap tier genuinely fits the work, pick an agent pinned for it
   (`test-runner`, `verifier`) instead of overriding a role agent downward; the
   dispatch report lists below-pin dispatches in their own section.
-- Agent pins are ceilings, not floors. A pin says "this task never needs
-  more than X"; the session model says what the user is willing to pay.
+- Against the session model, a pin is a ceiling. A pin says "this task never
+  needs more than X"; the session model says what the user is willing to pay.
   When a pin sits above the session model, cap the dispatch at the
   session model via the Agent `model` param - on a sonnet session,
   implementer and reviewer run on sonnet. This cap is behavioral, not

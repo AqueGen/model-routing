@@ -146,12 +146,16 @@ const EFFORT_SUPPORT = [
 const EFFORT_LADDER = ["low", "medium", "high", "xhigh", "max"];
 const effortLevelsFor = (m) => (m ? EFFORT_SUPPORT.find(([re]) => re.test(m))?.[1] ?? null : null);
 
-// "The default effort is high on every model that supports effort, except Opus
-// 4.7, which defaults to xhigh." No support, no default - an unlisted or
-// unrecognized session model never receives a fabricated level.
+// "The API default is high" - on every model that supports effort, with no
+// exception. Opus 4.7 and 4.8 RECOMMEND starting at xhigh for coding and
+// agentic work, and this table used to record that recommendation as if it were
+// the default, which mislabelled every unset 4.7 session as xhigh when it ran
+// high. A recommendation is what you should pass; a default is what runs when
+// you pass nothing, and only the second one can be inferred from an empty
+// config. No support, no default - an unlisted or unrecognized session model
+// never receives a fabricated level.
 function defaultEffortFor(sessionModel) {
-  if (!effortLevelsFor(sessionModel)) return null;
-  return /opus-4-7/.test(sessionModel) ? "xhigh" : "high";
+  return effortLevelsFor(sessionModel) ? "high" : null;
 }
 
 // "If you set a level the active model does not support, Claude Code falls back
