@@ -154,31 +154,32 @@ actually earns its cost:
   low/medium punch well above their weight - when a dispatch feels too
   expensive, step the EFFORT down before the tier; when a result is too
   shallow, step effort up before tier up.
-- **The Fable price gap is exactly the sticker, and the tokenizer does
-  not widen it.** Fable 5 uses the tokenizer introduced with Opus 4.7,
-  and so do Opus 5 and Sonnet 5: the documented ~30% token inflation is
-  against models from BEFORE Opus 4.7, not between Fable and opus. Two
-  models on the same tokenizer count the same text the same way, so
-  fable costs twice opus per token and no more. Where the inflation does
-  bite is any comparison against a Sonnet 4.6-era baseline - re-pricing
-  today's token counts at yesterday's rates understates the difference.
-- **Work that needed `xhigh` on the previous generation runs at `high`
-  on Fable.** The migration guide's baseline is explicit: start at
-  `high` for most tasks, including workloads that ran at `xhigh` on Opus
-  4.8. Read that as one step down from the old setting, not as licence
-  to sweep everything to `low` - effort still tracks task shape, per the
-  bullet above. The default level on a Fable session is not documented
-  either way, so set it deliberately rather than assuming it.
-- **Security work caps at opus, never fable.** Fable 5 ships safety
-  classifiers that can decline a request; Mythos 5 is the same model
-  without them, offered separately for defensive cybersecurity work. A
-  declined request comes back as `stop_reason: "refusal"` on a 200, and
-  the response names the classifier that declined it. The cost of
-  landing there is a wasted round trip and a dispatch that returns
-  nothing, not a wasted spend - a refusal before any output is not
-  billed. Cap security-sensitive dispatches at `model=opus` even when
-  the session runs Fable; for this work the escalation ladder tops out
-  at opus.
+- **The fable-to-opus price gap is exactly the sticker.** The documented
+  ~30% token inflation is measured against models from BEFORE Opus 4.7,
+  which is the generation whose tokenizer Fable 5 uses - it is not a gap
+  between Fable and opus, and the model table lists the same token
+  density for both. So fable costs twice opus per token and no more.
+  Where the inflation does bite is any comparison against a Sonnet
+  4.6-era baseline: re-pricing today's token counts at yesterday's rates
+  understates the difference.
+- **Step effort DOWN on Fable before stepping the tier down.** The
+  documented guidance for Fable is to start at `high` (the default),
+  use `xhigh` only for the most capability-sensitive work, and step down
+  to `medium` or `low` for routine work - lower effort on Fable still
+  performs well and often exceeds `xhigh` on prior models. That makes
+  effort the first control on a fable session, not the tier: a routine
+  phase left at the default is paying top-tier rates for depth it did
+  not need. Sweep Workflow `effort` opts the same way.
+- **A refusal is not a failure to escalate around.** Fable 5 and Opus 5
+  both ship safety classifiers that can decline a request; the reply is
+  a normal 200 carrying `stop_reason: "refusal"` and the name of the
+  classifier that declined. Two consequences for routing. Retrying the
+  same request one tier up does NOT clear it, because the tier above has
+  the same classifiers - the documented remedy is a fallback to a
+  different model, not a climb. And a refusal before any output is not
+  billed, so the cost is a wasted round trip rather than wasted spend:
+  do not treat it as the weak-result case that the escalation ladder
+  exists for.
 
 Research backing: task-type routing outperforms complexity-score routing
 (RouteLLM, ICLR 2025); benchmark tier gaps confirm sonnet as the
@@ -268,9 +269,10 @@ actually ran with `/model-routing:stats`.
   take it to the main session. Distinguish this from the stuck-on-approach
   handback above: stuck agents hand back BEFORE producing a result and
   continue via SendMessage; failed results re-dispatch fresh one tier up,
-  because the failed attempt's context is part of the problem. One
-  ceiling on the climb: security-sensitive work never escalates onto
-  fable (see the Fable caveats above) - its ladder tops out at opus.
+  because the failed attempt's context is part of the problem. One case
+  the ladder does not fix: a `stop_reason: "refusal"` is a classifier
+  declining, not a model falling short, and every tier above has the
+  same classifiers - see the Fable caveats above.
 - Against a manual override, the same pin is a FLOOR, and undercutting it is
   not a saving. The two readings do not conflict because they answer different
   questions: the ceiling asks what the session should pay, the floor asks what
