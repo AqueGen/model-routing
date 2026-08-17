@@ -346,8 +346,8 @@ model that supports effort, with no exception: Opus 4.7 and 4.8 recommend
 starting at `xhigh` for coding and agentic work, but a recommendation is
 a value you pass, not the level that runs when you pass nothing. Support
 itself is an explicit list rather than a
-version cutoff: Fable 5, Opus 5, Sonnet 5, Opus 4.8 and Opus 4.7 take the
-whole ladder, Opus 4.6 and Sonnet 4.6 take everything but `xhigh`, and a
+version cutoff: Fable 5, Mythos 5, Opus 5, Sonnet 5, Opus 4.8 and Opus 4.7
+take the whole ladder, Opus 4.6 and Sonnet 4.6 take everything but `xhigh`, and a
 model absent from that list - Haiku 4.5 among them - has no effort knob at
 all. Setting a level a model does not support runs the highest supported
 level at or below it, so `xhigh` becomes `high` on Opus 4.6. The vendor

@@ -161,7 +161,8 @@ actually earns its cost:
   ~30% token inflation is measured against models from BEFORE Opus 4.7,
   which is the generation whose tokenizer Fable 5 uses - it is not a gap
   between Fable and opus, and the model table lists the same token
-  density for both. So fable costs twice opus per token and no more.
+  density for both. So budget the fable-to-opus gap as the sticker 2x
+  rather than something wider.
   Where the inflation does bite is any comparison against a Sonnet
   4.6-era baseline: re-pricing today's token counts at yesterday's rates
   understates the difference.
@@ -169,19 +170,20 @@ actually earns its cost:
   documented guidance for Fable is to start at `high` (the default),
   use `xhigh` only for the most capability-sensitive work, and step down
   to `medium` or `low` for routine work - lower effort on Fable still
-  performs well and often exceeds `xhigh` on prior models. That makes
-  effort the first control on a fable session, not the tier: a routine
-  phase left at the default is paying top-tier rates for depth it did
-  not need. Sweep Workflow `effort` opts the same way.
-- **A refusal is a different mechanism from a weak result.** Fable 5 and
-  Opus 5 both ship safety classifiers that can decline a request; the
-  reply is a normal 200 carrying `stop_reason: "refusal"` and the name
-  of the classifier that declined. It has its own documented remedy -
-  retry on one of the refused model's permitted fallback targets, which
-  for Fable 5 are Opus 4.8 and Opus 5 - so treat it as a redirect, not
-  as the weak-result case the escalation ladder exists for. A refusal
-  that arrives before any output is not billed, so the cost is a wasted
-  round trip; a mid-stream refusal bills what was already streamed.
+  performs well and often exceeds `xhigh` on prior models. So effort is
+  a real control on a fable session and not a rounding error: a routine
+  phase left at the default pays top-tier rates for depth it did not
+  need. It does not replace the tier decision - dispatching that phase
+  to sonnet is cheaper still. Sweep Workflow `effort` opts the same way.
+- **A refusal is a redirect, not a weak result.** Fable 5 and Opus 5
+  both ship safety classifiers that can decline a request outright
+  rather than answer it badly. A declined dispatch is the one failure
+  the escalation ladder below does not fix: the documented remedy is
+  another model family, and opus is the named destination for a declined
+  fable request - a step sideways, not up. The machinery underneath
+  (stop reasons, which classifier declined, fallback credit) is API-level
+  and invisible from inside a dispatch, so this is the whole of the
+  routing rule.
 
 Research backing: task-type routing outperforms complexity-score routing
 (RouteLLM, ICLR 2025); benchmark tier gaps confirm sonnet as the
