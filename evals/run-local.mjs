@@ -9,7 +9,7 @@
 // graders over `trace` and `last_message`. Anything else is reported as skipped
 // rather than silently scored.
 
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -17,9 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const EVALS_DIR = dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = resolve(EVALS_DIR, "..");
-// The real harness gets its workspace from case.yaml `context.scaffold_script`.
-// Until a run can verify that field, every case here shares one fixture.
-const FIXTURE = join(EVALS_DIR, "fixtures", "mini-app");
+const FIXTURES_DIR = join(EVALS_DIR, "fixtures");
 
 const args = parseArgs(process.argv.slice(2));
 const cases = discoverCases().filter((c) => !args.case || c.name.includes(args.case));
@@ -73,13 +71,73 @@ console.log(`\nTraces and aggregate.json: ${resultsDir}`);
 
 // --- running -------------------------------------------------------------
 
+// The real harness gets its workspace from case.yaml `context.scaffold_script`,
+// which needs a run to verify. Until then a case names its fixture directory
+// under evals/fixtures; a fixture too large to commit ships as `<name>.gen.mjs`
+// next to it and is generated on first use.
+function fixtureFor(kase) {
+  const name = args.fixture ?? kase.frontmatter.fixture ?? "mini-app";
+  const dir = join(FIXTURES_DIR, name);
+  if (isDir(dir)) return dir;
+
+  const generator = join(FIXTURES_DIR, `${name}.gen.mjs`);
+  if (!isFile(generator)) throw new Error(`No fixture "${name}" and no ${name}.gen.mjs to build one`);
+  execFileSync(process.execPath, [generator], { stdio: "inherit" });
+  if (!isDir(dir)) throw new Error(`${name}.gen.mjs ran but produced no ${dir}`);
+  return dir;
+}
+
+// One turn measures the cost of delegating and none of the return: the context
+// a subagent kept out of the main session only pays off when a later turn would
+// have re-read it. A case with follow-ups runs them in the same session so that
+// re-reading actually happens.
 async function runOnce(kase, arm, timeoutMs) {
   const workspace = mkdtempSync(join(tmpdir(), "model-routing-eval-"));
-  cpSync(FIXTURE, workspace, { recursive: true });
+  cpSync(fixtureFor(kase), workspace, { recursive: true });
 
+  const turns = [];
+  for (const [index, prompt] of [kase.prompt, ...kase.followups].entries()) {
+    turns.push(await runTurn(prompt, arm, workspace, timeoutMs, index > 0));
+  }
+
+  try {
+    rmSync(workspace, { recursive: true, force: true });
+  } catch {
+    // A file left open by the child is not worth failing a run over.
+  }
+
+  return {
+    trace: turns.map((t) => t.trace).join("\n"),
+    stderr: turns.map((t) => t.stderr).join("\n"),
+    exitCode: turns.find((t) => t.exitCode !== 0)?.exitCode ?? 0,
+    lastMessage: turns.map((t) => t.lastMessage).join("\n\n"),
+    costUsd: sum(turns.map((t) => t.costUsd)),
+    durationMs: sum(turns.map((t) => t.durationMs)),
+    turns: sum(turns.map((t) => t.turns)),
+    modelUsage: mergeModelUsage(turns.map((t) => t.modelUsage)),
+  };
+}
+
+function sum(values) {
+  return values.reduce((a, b) => a + (b ?? 0), 0);
+}
+
+function mergeModelUsage(all) {
+  const merged = {};
+  for (const usage of all) {
+    for (const [model, u] of Object.entries(usage ?? {})) {
+      const acc = (merged[model] ??= { costUSD: 0, inputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, outputTokens: 0 });
+      for (const key of Object.keys(acc)) acc[key] += u[key] ?? 0;
+    }
+  }
+  return merged;
+}
+
+async function runTurn(prompt, arm, workspace, timeoutMs, isFollowup) {
   const argv = [
     "-p",
-    kase.prompt,
+    prompt,
+    ...(isFollowup ? ["--continue"] : []),
     "--output-format",
     "stream-json",
     "--verbose",
@@ -106,12 +164,6 @@ async function runOnce(kase, arm, timeoutMs) {
   const timer = setTimeout(() => child.kill(), timeoutMs);
   const exitCode = await new Promise((res) => child.on("close", res));
   clearTimeout(timer);
-
-  try {
-    rmSync(workspace, { recursive: true, force: true });
-  } catch {
-    // A file left open by the child is not worth failing a run over.
-  }
 
   const result = extractResult(stdout);
   return {
@@ -222,7 +274,19 @@ function loadCase(dir) {
           ...splitFrontmatter(readFileSync(join(gradersDir, f), "utf-8")).frontmatter,
         }))
     : [];
-  return { name: frontmatter.name ?? dir.split(/[\\/]/).pop(), frontmatter, prompt: body.trim(), graders };
+  // followup-1.md, followup-2.md ... are further turns of the same session.
+  const followups = readdirSync(dir)
+    .filter((f) => /^followup-\d+\.md$/.test(f))
+    .sort()
+    .map((f) => splitFrontmatter(readFileSync(join(dir, f), "utf-8")).body.trim());
+
+  return {
+    name: frontmatter.name ?? dir.split(/[\\/]/).pop(),
+    frontmatter,
+    prompt: body.trim(),
+    followups,
+    graders,
+  };
 }
 
 // Enough YAML for this format: scalars, quoted scalars, and inline lists. A
@@ -254,12 +318,13 @@ function parseScalar(raw) {
 }
 
 function parseArgs(argv) {
-  const out = { runs: null, model: "sonnet", arm: "both", case: null };
+  const out = { runs: null, model: "sonnet", arm: "both", case: null, fixture: null };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--runs") out.runs = Number(argv[++i]);
     else if (argv[i] === "--model") out.model = argv[++i];
     else if (argv[i] === "--arm") out.arm = argv[++i];
     else if (argv[i] === "--case") out.case = argv[++i];
+    else if (argv[i] === "--fixture") out.fixture = argv[++i];
     else throw new Error(`Unknown option: ${argv[i]}`);
   }
   return out;

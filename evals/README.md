@@ -91,10 +91,64 @@ otherwise is misreading its own numbers.
 $0.206 for the two that followed. The figures above are the two warm runs; the
 cold one is in the traces.)
 
-So the next case wants a fixture big enough that reading it inline actually
-floods the session, and a multi-turn prompt so the saved context gets re-read at
-least once. The case after that wants the mirror of this one: a genuinely
-trivial question, where dispatching at all is the failure being measured.
+## The second case, and what it took to make the numbers mean something
+
+`traces-a-flow-end-to-end` is the case that can answer "does this save money".
+Three things had to be true before it could, and each one started out false:
+
+**The question has to be wide.** A needle question is answered by one grep, and a
+grep costs the same in any session. The fixture is a twelve-stage pipeline where
+each stage hands off to exactly one other and no file states the order, so the
+chain has to be walked - and the stage modules are fat, so walking it costs
+something. The first fixture was four small files and could never have shown
+anything.
+
+**The session has to continue.** A single `-p` turn measures the cost of
+delegating and none of the return. Follow-up turns (`followup-*.md`, run through
+`--continue` in the same session) are where a main session pays again for the
+context it carries: on one run the baseline re-wrote 80k of context to cache on
+its third turn.
+
+**The subagent's tier has to be cheap enough.** This is the one that decided the
+result, and it is arithmetic rather than judgement. A fresh subagent pays cache
+*write* for everything it reads; a main session pays cache *read* for what it
+already has, and read is 12.5x cheaper than write at the same tier. Delegation
+converts cheap re-reads into expensive first-reads, so only a large tier discount
+pays for the conversion.
+
+Opus main session, 4 turns, 3 runs per configuration. Per-run totals are shown
+rather than only means, because with three runs a mean can hide an overlap:
+
+| Configuration | opus | subagent | total per run |
+| --- | ---: | ---: | --- |
+| no plugin | $1.358 | - | $1.339 $1.382 $1.356 |
+| `scout` pinned sonnet (shipped) | $1.169 | sonnet-5 $0.506 | $1.559 $1.998 $1.468 |
+| `scout` pinned haiku | $1.042 | haiku-4.5 $0.198 | $1.142 $1.260 $1.315 |
+
+Both configurations separate cleanly from the baseline, in opposite directions.
+Every haiku run came in under the cheapest baseline run; every sonnet run came in
+over the dearest. Correctness held at 3/3 throughout, and the plugin dispatched
+exactly once per run - the follow-ups were answered from `scout`'s summary rather
+than by dispatching again, which is what the guidance asks for.
+
+So the shipped configuration costs 23% more than not having the plugin on this
+workload, and pinning `scout` to haiku costs 9% less. The expensive tier drops
+either way - opus down 14% with sonnet, 23% with haiku - which is the mechanism
+working in both cases. What differs is whether the subagent's bill comes to less
+than the saving it produces.
+
+Two things this does not license. One case is no mandate to re-pin `scout`: this
+question rewards breadth over judgement, haiku's answer quality on a subtle
+question is untested, and a wrong answer that sends the main session back to
+re-read is the expensive failure mode nothing here measures. And the largest
+single line in every run is opus *output* tokens, $0.33 to $0.43, which no amount
+of tier routing touches.
+
+What the eval still cannot see is context-window pressure. Four turns never
+compact; a real session does, and a compaction costs a full re-read plus lost
+fidelity. That is a cost the baseline dodges here and would not dodge in
+practice, so read these numbers as the floor of the plugin's case rather than the
+whole of it.
 
 ## Writing another case
 
@@ -107,6 +161,20 @@ tell them. `run-local.mjs` supports `type: regex` over `target: trace` and
 `tool_order`, `file_exists`, `llm`, and `baseline`. Prefer the deterministic
 ones: a judge model scoring prose is one more thing that can be wrong.
 
-Cases share one fixture, `evals/fixtures/mini-app`. Keep it boring. A fixture
-that is interesting to read is a fixture the model answers from memory of
-something similar.
+A case names its fixture directory under `evals/fixtures` with a `fixture:` key,
+defaulting to `mini-app`. A fixture too large to commit ships as
+`<name>.gen.mjs` beside it and is generated on first use - `order-service` is 85
+modules and 122k of source, which nobody installing this plugin should have to
+download. Keep fixtures boring: one that is interesting to read is one the model
+answers from memory of something similar.
+
+Add `followup-1.md`, `followup-2.md` and so on to turn a case into a session
+rather than a single question. That is not decoration - it is the only way the
+context a subagent kept out of the main session gets a chance to pay for itself.
+
+## Next
+
+A case that stresses answer *quality* rather than breadth, run against both
+`scout` pins, so re-pinning has evidence behind it instead of one workload. Then
+the mirror of the small case: a genuinely trivial question, where dispatching at
+all is the failure being measured.
