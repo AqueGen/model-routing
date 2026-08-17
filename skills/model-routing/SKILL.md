@@ -154,23 +154,31 @@ actually earns its cost:
   low/medium punch well above their weight - when a dispatch feels too
   expensive, step the EFFORT down before the tier; when a result is too
   shallow, step effort up before tier up.
-- **Fable-class sessions shift two constants.** The Fable 5 tokenizer
-  produces ~30% more tokens than Opus for the same content (Sonnet 5
-  shares the new tokenizer, with the same gap vs Sonnet 4.6), so the
-  effective price gap vs opus is wider than the per-token sticker -
-  one more reason dispatches on a fable session default to an explicit
-  cheaper `model` rather than inheriting. And effort punches above
-  prior generations: `low` on Fable often matches or beats `max` on
-  earlier models, so sweep Workflow `effort` opts downward and suggest
-  a `low`/`medium` session effort for routine phases - an unset session
-  effort is `high`, the most expensive default on the priciest tier.
-- **Security work caps at opus, never fable.** Fable's cyber safety
-  classifiers can refuse security scanning and offensive-security
-  analysis (a `refusal` stop reason) - a security-review dispatch or
-  escalation that lands on fable can burn the turn and return nothing.
-  Cap security-sensitive dispatches at `model=opus` even when the
-  session runs Fable; for this work the escalation ladder tops out at
-  opus.
+- **The Fable price gap is exactly the sticker, and the tokenizer does
+  not widen it.** Fable 5 uses the tokenizer introduced with Opus 4.7,
+  and so do Opus 5 and Sonnet 5: the documented ~30% token inflation is
+  against models from BEFORE Opus 4.7, not between Fable and opus. Two
+  models on the same tokenizer count the same text the same way, so
+  fable costs twice opus per token and no more. Where the inflation does
+  bite is any comparison against a Sonnet 4.6-era baseline - re-pricing
+  today's token counts at yesterday's rates understates the difference.
+- **Work that needed `xhigh` on the previous generation runs at `high`
+  on Fable.** The migration guide's baseline is explicit: start at
+  `high` for most tasks, including workloads that ran at `xhigh` on Opus
+  4.8. Read that as one step down from the old setting, not as licence
+  to sweep everything to `low` - effort still tracks task shape, per the
+  bullet above. The default level on a Fable session is not documented
+  either way, so set it deliberately rather than assuming it.
+- **Security work caps at opus, never fable.** Fable 5 ships safety
+  classifiers that can decline a request; Mythos 5 is the same model
+  without them, offered separately for defensive cybersecurity work. A
+  declined request comes back as `stop_reason: "refusal"` on a 200, and
+  the response names the classifier that declined it. The cost of
+  landing there is a wasted round trip and a dispatch that returns
+  nothing, not a wasted spend - a refusal before any output is not
+  billed. Cap security-sensitive dispatches at `model=opus` even when
+  the session runs Fable; for this work the escalation ladder tops out
+  at opus.
 
 Research backing: task-type routing outperforms complexity-score routing
 (RouteLLM, ICLR 2025); benchmark tier gaps confirm sonnet as the
@@ -263,7 +271,10 @@ actually ran with `/model-routing:stats`.
   because the failed attempt's context is part of the problem. One
   ceiling on the climb: security-sensitive work never escalates onto
   fable (see the Fable caveats above) - its ladder tops out at opus.
-- A pin is also a FLOOR, and undercutting it is not a saving. The pin states
+- Against a manual override, the same pin is a FLOOR, and undercutting it is
+  not a saving. The two readings do not conflict because they answer different
+  questions: the ceiling asks what the session should pay, the floor asks what
+  the role needs. The pin states
   how much reasoning the role needs, so `reviewer` dispatched with
   `model=haiku` is a weaker review rather than a cheaper one, and it still
   counts as "cheaper than the session" in every cost figure - which is exactly
@@ -274,8 +285,8 @@ actually ran with `/model-routing:stats`.
   the cheap tier genuinely fits the work, pick an agent pinned for it
   (`test-runner`, `verifier`) instead of overriding a role agent downward; the
   dispatch report lists below-pin dispatches in their own section.
-- Agent pins are ceilings, not floors. A pin says "this task never needs
-  more than X"; the session model says what the user is willing to pay.
+- Against the session model, a pin is a ceiling. A pin says "this task never
+  needs more than X"; the session model says what the user is willing to pay.
   When a pin sits above the session model, cap the dispatch at the
   session model via the Agent `model` param - on a sonnet session,
   implementer and reviewer run on sonnet. This cap is behavioral, not
