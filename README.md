@@ -110,7 +110,9 @@ Attribution over the same week, across all 266 dispatches, 199 of which ran belo
 | An explicit `model=` on the dispatch | 127 | Behavioural. This is the routing rules being applied, and nothing enforces them |
 | Claude Code's built-in `Explore` | 4 | Not this plugin at all |
 
-The honest reading: the automatic half is fully attributable, the behavioural half depends on the session actually following the anchor, and there is no control group - this is the author's own workload measured with the author's own tool, with no before-install baseline. `CLAUDE_CODE_SUBAGENT_MODEL` was not set in this window, which the report would otherwise have annotated per row.
+The honest reading: the automatic half is fully attributable, the behavioural half depends on the session actually following the anchor, and these numbers have no control group of their own - this is the author's own workload measured with the author's own tool, with no before-install baseline. `CLAUDE_CODE_SUBAGENT_MODEL` was not set in this window, which the report would otherwise have annotated per row.
+
+For the behavioural half there is now a control group, just a much smaller one: [`evals/`](evals/README.md) runs the same question with and without the plugin loaded. On the first case the arms separate completely - the plugin arm delegated a codebase question to `scout` in 3 of 3 runs, the plugin-free arm delegated in 0 of 3 and grepped inline despite having `Explore` available - and the same run shows the other side of the trade: identical answers for 2.3x the money and 3x the wall clock on a four-file fixture. Guidance that changes behaviour is not automatically guidance that pays; the eval is there to keep both halves visible.
 
 Where that volume actually ran with routing active:
 
