@@ -97,7 +97,17 @@ async function runOnce(kase, arm, timeoutMs) {
 
   const turns = [];
   for (const [index, prompt] of [kase.prompt, ...kase.followups].entries()) {
-    turns.push(await runTurn(prompt, arm, workspace, timeoutMs, index > 0));
+    turns.push(
+      await runTurn(
+        prompt,
+        arm,
+        workspace,
+        timeoutMs,
+        index > 0,
+        kase.frontmatter.append_system_prompt,
+        toList(kase.frontmatter.tools),
+      ),
+    );
   }
 
   try {
@@ -118,6 +128,11 @@ async function runOnce(kase, arm, timeoutMs) {
   };
 }
 
+function toList(value) {
+  if (value == null) return null;
+  return Array.isArray(value) ? value : [value];
+}
+
 function sum(values) {
   return values.reduce((a, b) => a + (b ?? 0), 0);
 }
@@ -133,11 +148,22 @@ function mergeModelUsage(all) {
   return merged;
 }
 
-async function runTurn(prompt, arm, workspace, timeoutMs, isFollowup) {
+async function runTurn(prompt, arm, workspace, timeoutMs, isFollowup, appendSystemPrompt, tools) {
   const argv = [
     "-p",
     prompt,
     ...(isFollowup ? ["--continue"] : []),
+    // Whether a session chooses to delegate is a coin the model flips - observed
+    // 3/3, 3/3, 2/3, 2/3 and 0/3 across otherwise identical batches. A case that
+    // means to measure the price of a tier cannot also be measuring that coin,
+    // so it takes the decision away here and leaves the user prompt untouched.
+    ...(appendSystemPrompt ? ["--append-system-prompt", appendSystemPrompt] : []),
+    // "Do not read the files yourself" has to be enforced, not asked for, and it
+    // took two attempts to enforce it. Denying Read/Grep/Glob moved the reading
+    // into Bash; denying those too left ToolSearch, which loads a deferred Read
+    // back in. An allowlist is the only version that holds - name the tools the
+    // main session may have and everything else is simply absent.
+    ...(tools ? ["--tools", ...tools] : []),
     "--output-format",
     "stream-json",
     "--verbose",
