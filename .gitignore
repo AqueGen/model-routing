@@ -1,3 +1,5 @@
 docs/superpowers/
 .superpowers/
+evals/results/
+evals/fixtures/order-service/
 nul

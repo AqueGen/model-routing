@@ -1,0 +1,115 @@
+{
+  "model": "sonnet",
+  "runs": 3,
+  "arms": [
+    "with"
+  ],
+  "cases": [
+    {
+      "name": "subagent-answer-quality",
+      "arms": {
+        "with": [
+          {
+            "exitCode": 0,
+            "costUsd": 0.2570082,
+            "durationMs": 47556,
+            "turns": 13,
+            "modelUsage": {
+              "claude-sonnet-5": {
+                "costUSD": 0.2570082,
+                "inputTokens": 24,
+                "cacheReadInputTokens": 449914,
+                "cacheCreationInputTokens": 12132,
+                "outputTokens": 3278
+              }
+            },
+            "scores": [
+              {
+                "grader": "policy-returns-null",
+                "pass": true
+              },
+              {
+                "grader": "policy-spots-the-key-mismatch",
+                "pass": true
+              },
+              {
+                "grader": "retry-count-is-one",
+                "pass": true
+              },
+              {
+                "grader": "retry-reason-cites-retryable",
+                "pass": true
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 0.21288810000000002,
+            "durationMs": 80459,
+            "turns": 14,
+            "modelUsage": {
+              "claude-sonnet-5": {
+                "costUSD": 0.21288810000000002,
+                "inputTokens": 20,
+                "cacheReadInputTokens": 379817,
+                "cacheCreationInputTokens": 7233,
+                "outputTokens": 3699
+              }
+            },
+            "scores": [
+              {
+                "grader": "policy-returns-null",
+                "pass": true
+              },
+              {
+                "grader": "policy-spots-the-key-mismatch",
+                "pass": true
+              },
+              {
+                "grader": "retry-count-is-one",
+                "pass": true
+              },
+              {
+                "grader": "retry-reason-cites-retryable",
+                "pass": true
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 0.1648107,
+            "durationMs": 72206,
+            "turns": 11,
+            "modelUsage": {
+              "claude-sonnet-5": {
+                "costUSD": 0.1648107,
+                "inputTokens": 14,
+                "cacheReadInputTokens": 259949,
+                "cacheCreationInputTokens": 6549,
+                "outputTokens": 3166
+              }
+            },
+            "scores": [
+              {
+                "grader": "policy-returns-null",
+                "pass": true
+              },
+              {
+                "grader": "policy-spots-the-key-mismatch",
+                "pass": true
+              },
+              {
+                "grader": "retry-count-is-one",
+                "pass": true
+              },
+              {
+                "grader": "retry-reason-cites-retryable",
+                "pass": true
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -81,6 +81,7 @@ function sessionFilterFromArgs(argv) {
 // Keep in sync with agents/*.md; one sync test guards both columns.
 const AGENT_PINS = {
   "model-routing:scout": { model: "sonnet", effort: "low" },
+  "model-routing:surveyor": { model: "haiku", effort: "low" },
   "model-routing:test-runner": { model: "haiku", effort: "low" },
   "model-routing:e2e-runner": { model: "sonnet", effort: "medium" },
   "model-routing:verifier": { model: "haiku", effort: "low" },

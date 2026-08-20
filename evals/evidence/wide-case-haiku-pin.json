@@ -1,0 +1,112 @@
+{
+  "model": "opus",
+  "runs": 3,
+  "arms": [
+    "with"
+  ],
+  "cases": [
+    {
+      "name": "traces-a-flow-end-to-end",
+      "arms": {
+        "with": [
+          {
+            "exitCode": 0,
+            "costUsd": 1.1419868999999998,
+            "durationMs": 257314,
+            "turns": 19,
+            "modelUsage": {
+              "claude-opus-5": {
+                "costUSD": 0.9878954999999999,
+                "inputTokens": 28,
+                "cacheReadInputTokens": 605231,
+                "cacheCreationInputTokens": 35424,
+                "outputTokens": 13236
+              },
+              "claude-haiku-4-5-20251001": {
+                "costUSD": 0.1540914,
+                "inputTokens": 162,
+                "cacheReadInputTokens": 583094,
+                "cacheCreationInputTokens": 58540,
+                "outputTokens": 4489
+              }
+            },
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "delegated-to-a-subagent",
+                "pass": true
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 1.2602386,
+            "durationMs": 291175,
+            "turns": 22,
+            "modelUsage": {
+              "claude-opus-5": {
+                "costUSD": 1.0320255,
+                "inputTokens": 24,
+                "cacheReadInputTokens": 546781,
+                "cacheCreationInputTokens": 42319,
+                "outputTokens": 13413
+              },
+              "claude-haiku-4-5-20251001": {
+                "costUSD": 0.22821309999999997,
+                "inputTokens": 234,
+                "cacheReadInputTokens": 1211291,
+                "cacheCreationInputTokens": 53708,
+                "outputTokens": 7943
+              }
+            },
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "delegated-to-a-subagent",
+                "pass": true
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 1.31517195,
+            "durationMs": 332643,
+            "turns": 24,
+            "modelUsage": {
+              "claude-opus-5": {
+                "costUSD": 1.1048195,
+                "inputTokens": 24,
+                "cacheReadInputTokens": 538489,
+                "cacheCreationInputTokens": 40183,
+                "outputTokens": 17345
+              },
+              "claude-haiku-4-5-20251001": {
+                "costUSD": 0.21035245000000002,
+                "inputTokens": 218,
+                "cacheReadInputTokens": 1070882,
+                "cacheCreationInputTokens": 50537,
+                "outputTokens": 7975
+              }
+            },
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "delegated-to-a-subagent",
+                "pass": true
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

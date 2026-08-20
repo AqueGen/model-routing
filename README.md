@@ -23,7 +23,57 @@ instead of thrashing.
 Everything stays inside Anthropic models. No proxy, no third-party
 gateway, nothing extra in the request path.
 
-**Quick links:** [Overview](#whats-inside) | [Example](#example) |
+## When this saves you money, and when it does not
+
+Read this before installing, because the honest answer has two halves and
+[`evals/`](evals/README.md) measured both.
+
+**A subagent is not free.** It starts with an empty context, so everything it
+reads is a cache *write*, while your main session pays cache *read* - 12.5x
+cheaper - for what it already has. Delegation converts cheap re-reads into
+expensive first-reads, and that bill lands whether or not this plugin is
+installed.
+
+What the plugin changes is the price per token, not that penalty. So:
+
+| Your situation | What this plugin does |
+| --- | --- |
+| You already dispatch subagents - Superpowers, workflows, any delegation-heavy practice | **Saves**, by roughly a sixth. $1.68 with the tier routed down, against $2.01 for the same subagent work at your session's tier |
+| You work mostly in one session and rarely delegate | **Costs**, by roughly a fifth. $1.36 doing it inline against $1.68 routed |
+
+One workload, three runs an arm, on a four-turn session that never had to
+compact - so read the direction as solid and the exact percentage as not.
+The $2.01 is the measured subagent tokens repriced at the session tier, not
+a run of its own; the pricing model reproduces the billed figure it was
+checked against to the cent, but a live top-tier subagent might well read
+less and narrow the gap.
+
+An unpinned subagent inherits the session model, so on an opus session
+Superpowers dispatches opus subagents by default. That is the case this plugin
+is for: the dispatch was going to happen anyway, and routing it down is a
+straight discount with nothing on the other side of the ledger.
+
+Note what the surcharge is and is not. The plugin costs about 1.6k tokens a
+session to carry - ~700 for the skill and agent listings, plus a ~900-token
+routing anchor at session start - which is a couple of cents against sessions
+billing $1.40 to $2.00. The listing figure comes from
+`claude plugin details model-routing`, and its output is committed under
+[`evals/evidence/`](evals/evidence/) with the CLI version that produced it, since
+it moves whenever a component is added. That is not where the 23% comes from. It comes from dispatches happening
+that otherwise would not have: on the same question the plugin arm delegated in
+3 runs of 3 and the plugin-free arm in 0 of 3. Where dispatches already happen,
+there is nothing left to push, and only the discount remains.
+
+If you rarely delegate, install it for the context headroom or not at all. The
+expensive tier does read measurably less either way - opus input volume down
+about 25% on the same test, and opus spend with it by 14% - but headroom is a
+different thing from a smaller bill, and this README used to blur the two.
+
+(The A/B that would replace the repricing with a run is still blocked, for the
+reason written down in `evals/forced-dispatch-tier/NOTES.md`.)
+
+**Quick links:** [Does this save money?](#when-this-saves-you-money-and-when-it-does-not) |
+[Overview](#whats-inside) | [Example](#example) |
 [Install](#install) | [Getting started](#getting-started) |
 [Usage](#usage) | [Tiers](#model-tiers-and-effort-ladder) |
 [Settings](#recommended-settings) | [Workflows](#dynamic-workflows) |
@@ -34,6 +84,7 @@ gateway, nothing extra in the request path.
 | Component | Model | Effort | Purpose |
 | --------- | ----- | ------ | ------- |
 | `agents/scout.md` | sonnet | low | Read-only codebase exploration: conclusions and file:line refs come back, file dumps stay out. |
+| `agents/surveyor.md` | haiku | low | Read-only breadth: enumerate, list, trace a chain end to end. Measured correct on the cheap tier where `scout`'s judgement work is not. |
 | `agents/test-runner.md` | haiku | low | Run tests/builds/linters, report failures compactly. Never fixes anything. |
 | `agents/e2e-runner.md` | sonnet | medium | Drive Playwright/E2E scenarios, interpret failures (product bug vs test bug vs flake). |
 | `agents/implementer.md` | sonnet | medium | Implement one well-defined task from an approved plan. Verifies its own work. Dispatch with `model=opus` for multi-file/architectural/subtle work. |
@@ -110,7 +161,13 @@ Attribution over the same week, across all 266 dispatches, 199 of which ran belo
 | An explicit `model=` on the dispatch | 127 | Behavioural. This is the routing rules being applied, and nothing enforces them |
 | Claude Code's built-in `Explore` | 4 | Not this plugin at all |
 
-The honest reading: the automatic half is fully attributable, the behavioural half depends on the session actually following the anchor, and there is no control group - this is the author's own workload measured with the author's own tool, with no before-install baseline. `CLAUDE_CODE_SUBAGENT_MODEL` was not set in this window, which the report would otherwise have annotated per row.
+The honest reading: the automatic half is fully attributable, the behavioural half depends on the session actually following the anchor, and these numbers have no control group of their own - this is the author's own workload measured with the author's own tool, with no before-install baseline. `CLAUDE_CODE_SUBAGENT_MODEL` was not set in this window, which the report would otherwise have annotated per row.
+
+For the behavioural half there is now a control group, just a much smaller one: [`evals/`](evals/README.md) runs the same question with and without the plugin loaded. The behavioural claim holds - on a codebase question the plugin arm delegated to `scout` in 3 of 3 runs and the plugin-free arm in 0 of 3, grepping inline despite having `Explore` available.
+
+The money is a more interesting answer than "it saves". On a wide-reading question across a four-turn session, the expensive tier drops either way - opus spend down 14%, its input volume down about 25% - but the shipped configuration ends up **23% more expensive in total than not having the plugin at all**, because a fresh subagent pays cache *write* for everything it reads while a main session pays cache *read*, 12.5x cheaper, for what it already has. So what this plugin reliably buys is room in the expensive model's context, not a smaller bill; where the bill also falls is a narrower claim, and it depends on the tier.
+
+Running that same question with `scout` pinned to haiku lands about a tenth *below* the no-plugin baseline - which looked like the fix until the tier was asked something subtler. On a question whose code contains a confident-looking wrong answer, haiku took the bait once in three runs and sonnet in none. Three runs cannot pin a failure rate, and the pin did not stay on sonnet because of the rate: it stayed because the failure is asymmetric, since a wrong answer sends the main session back to read the files itself and costs more than the cheaper tier saves. What the two results together support is a split rather than a pin change - breadth to `surveyor` (haiku), judgement to `scout` (sonnet). [`evals/README.md`](evals/README.md) carries the numbers, the arithmetic, and the three isolation attempts that produced numbers worth throwing away.
 
 Where that volume actually ran with routing active:
 
@@ -200,6 +257,7 @@ For local development: clone the repo and
    | You ask | Who runs it | Model / effort |
    | ------- | ----------- | -------------- |
    | "Where is X handled?" | `scout` | sonnet / low |
+   | "List every stage this order goes through" | `surveyor` | haiku / low |
    | "Run the tests" | `test-runner` | haiku / low |
    | "Implement tasks from the plan" | `implementer` | sonnet / medium (`model=opus` for complex work) |
    | "Review the diff" | `reviewer` | opus / high |

@@ -1,0 +1,121 @@
+{
+  "model": "opus",
+  "runs": 3,
+  "arms": [
+    "with",
+    "without"
+  ],
+  "cases": [
+    {
+      "name": "delegates-codebase-question",
+      "arms": {
+        "with": [
+          {
+            "exitCode": 0,
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "delegated-to-a-subagent",
+                "pass": true
+              },
+              {
+                "grader": "scout-was-the-agent",
+                "pass": true
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "delegated-to-a-subagent",
+                "pass": true
+              },
+              {
+                "grader": "scout-was-the-agent",
+                "pass": true
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "delegated-to-a-subagent",
+                "pass": true
+              },
+              {
+                "grader": "scout-was-the-agent",
+                "pass": true
+              }
+            ]
+          }
+        ],
+        "without": [
+          {
+            "exitCode": 0,
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "delegated-to-a-subagent",
+                "pass": false
+              },
+              {
+                "grader": "scout-was-the-agent",
+                "pass": false
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "delegated-to-a-subagent",
+                "pass": false
+              },
+              {
+                "grader": "scout-was-the-agent",
+                "pass": false
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "delegated-to-a-subagent",
+                "pass": false
+              },
+              {
+                "grader": "scout-was-the-agent",
+                "pass": false
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

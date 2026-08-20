@@ -1,0 +1,115 @@
+{
+  "model": "haiku",
+  "runs": 3,
+  "arms": [
+    "with"
+  ],
+  "cases": [
+    {
+      "name": "subagent-answer-quality",
+      "arms": {
+        "with": [
+          {
+            "exitCode": 0,
+            "costUsd": 0.12713370000000002,
+            "durationMs": 42717,
+            "turns": 14,
+            "modelUsage": {
+              "claude-haiku-4-5-20251001": {
+                "costUSD": 0.12713370000000002,
+                "inputTokens": 5201,
+                "cacheReadInputTokens": 279557,
+                "cacheCreationInputTokens": 38196,
+                "outputTokens": 3517
+              }
+            },
+            "scores": [
+              {
+                "grader": "policy-returns-null",
+                "pass": true
+              },
+              {
+                "grader": "policy-spots-the-key-mismatch",
+                "pass": true
+              },
+              {
+                "grader": "retry-count-is-one",
+                "pass": true
+              },
+              {
+                "grader": "retry-reason-cites-retryable",
+                "pass": true
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 0.09728060000000001,
+            "durationMs": 50436,
+            "turns": 22,
+            "modelUsage": {
+              "claude-haiku-4-5-20251001": {
+                "costUSD": 0.09728060000000001,
+                "inputTokens": 100,
+                "cacheReadInputTokens": 381276,
+                "cacheCreationInputTokens": 16109,
+                "outputTokens": 5367
+              }
+            },
+            "scores": [
+              {
+                "grader": "policy-returns-null",
+                "pass": true
+              },
+              {
+                "grader": "policy-spots-the-key-mismatch",
+                "pass": true
+              },
+              {
+                "grader": "retry-count-is-one",
+                "pass": true
+              },
+              {
+                "grader": "retry-reason-cites-retryable",
+                "pass": true
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 0.08500869999999999,
+            "durationMs": 59118,
+            "turns": 12,
+            "modelUsage": {
+              "claude-haiku-4-5-20251001": {
+                "costUSD": 0.08500869999999999,
+                "inputTokens": 60,
+                "cacheReadInputTokens": 213647,
+                "cacheCreationInputTokens": 14292,
+                "outputTokens": 7000
+              }
+            },
+            "scores": [
+              {
+                "grader": "policy-returns-null",
+                "pass": true
+              },
+              {
+                "grader": "policy-spots-the-key-mismatch",
+                "pass": true
+              },
+              {
+                "grader": "retry-count-is-one",
+                "pass": false
+              },
+              {
+                "grader": "retry-reason-cites-retryable",
+                "pass": true
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

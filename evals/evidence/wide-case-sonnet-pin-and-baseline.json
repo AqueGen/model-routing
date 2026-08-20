@@ -1,0 +1,211 @@
+{
+  "model": "opus",
+  "runs": 3,
+  "arms": [
+    "with",
+    "without"
+  ],
+  "cases": [
+    {
+      "name": "traces-a-flow-end-to-end",
+      "arms": {
+        "with": [
+          {
+            "exitCode": 0,
+            "costUsd": 1.5592256,
+            "durationMs": 190898,
+            "turns": 14,
+            "modelUsage": {
+              "claude-opus-5": {
+                "costUSD": 1.0736555,
+                "inputTokens": 24,
+                "cacheReadInputTokens": 469291,
+                "cacheCreationInputTokens": 58509,
+                "outputTokens": 10152
+              },
+              "claude-sonnet-5": {
+                "costUSD": 0.4855701,
+                "inputTokens": 36,
+                "cacheReadInputTokens": 460632,
+                "cacheCreationInputTokens": 65130,
+                "outputTokens": 6869
+              }
+            },
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "delegated-to-a-subagent",
+                "pass": true
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 1.9984075499999998,
+            "durationMs": 300231,
+            "turns": 28,
+            "modelUsage": {
+              "claude-opus-5": {
+                "costUSD": 1.3613790000000001,
+                "inputTokens": 34,
+                "cacheReadInputTokens": 791958,
+                "cacheCreationInputTokens": 46058,
+                "outputTokens": 20186
+              },
+              "claude-sonnet-5": {
+                "costUSD": 0.63702855,
+                "inputTokens": 18,
+                "cacheReadInputTokens": 341761,
+                "cacheCreationInputTokens": 117811,
+                "outputTokens": 6177
+              }
+            },
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "delegated-to-a-subagent",
+                "pass": true
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 1.4679628000000002,
+            "durationMs": 291462,
+            "turns": 24,
+            "modelUsage": {
+              "claude-opus-5": {
+                "costUSD": 1.0716640000000002,
+                "inputTokens": 30,
+                "cacheReadInputTokens": 661468,
+                "cacheCreationInputTokens": 38838,
+                "outputTokens": 14096
+              },
+              "claude-sonnet-5": {
+                "costUSD": 0.3962988,
+                "inputTokens": 38,
+                "cacheReadInputTokens": 550441,
+                "cacheCreationInputTokens": 38338,
+                "outputTokens": 5819
+              }
+            },
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "delegated-to-a-subagent",
+                "pass": true
+              }
+            ]
+          }
+        ],
+        "without": [
+          {
+            "exitCode": 0,
+            "costUsd": 1.3390605,
+            "durationMs": 277983,
+            "turns": 29,
+            "modelUsage": {
+              "claude-haiku-4-5-20251001": {
+                "costUSD": 0.000629,
+                "inputTokens": 549,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "outputTokens": 16
+              },
+              "claude-opus-5": {
+                "costUSD": 1.3384315,
+                "inputTokens": 107,
+                "cacheReadInputTokens": 782453,
+                "cacheCreationInputTokens": 48142,
+                "outputTokens": 18610
+              }
+            },
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "delegated-to-a-subagent",
+                "pass": false
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 1.3821754999999998,
+            "durationMs": 272155,
+            "turns": 29,
+            "modelUsage": {
+              "claude-haiku-4-5-20251001": {
+                "costUSD": 0.000629,
+                "inputTokens": 549,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "outputTokens": 16
+              },
+              "claude-opus-5": {
+                "costUSD": 1.3815464999999998,
+                "inputTokens": 263,
+                "cacheReadInputTokens": 897893,
+                "cacheCreationInputTokens": 48361,
+                "outputTokens": 17907
+              }
+            },
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "delegated-to-a-subagent",
+                "pass": false
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 1.355927,
+            "durationMs": 246303,
+            "turns": 28,
+            "modelUsage": {
+              "claude-haiku-4-5-20251001": {
+                "costUSD": 0.000629,
+                "inputTokens": 549,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "outputTokens": 16
+              },
+              "claude-opus-5": {
+                "costUSD": 1.355298,
+                "inputTokens": 3831,
+                "cacheReadInputTokens": 863726,
+                "cacheCreationInputTokens": 46123,
+                "outputTokens": 17722
+              }
+            },
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "delegated-to-a-subagent",
+                "pass": false
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
