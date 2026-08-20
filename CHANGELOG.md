@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.15.0](https://github.com/AqueGen/model-routing/compare/v0.14.0...v0.15.0) (2026-08-20)
+
+The release where the central claim got measured instead of asserted, and did not entirely survive. A new eval harness runs the same question with and without the plugin loaded and prices the difference: routing takes roughly a sixth off a dispatch that was going to happen anyway, and adds roughly a fifth when it talks a session into dispatching that would not have. A fresh subagent pays cache write for everything it reads while a main session pays cache read, 12.5x cheaper, for what it already holds - so this is a plugin for sessions that already delegate, through Superpowers, workflows, or any unpinned agent inheriting the session model. The README says that at the top now instead of implying the opposite throughout.
+
+The routing change that came out of it: breadth work - a complete list, a verified ordering, everything that imports X - goes to a new haiku-pinned `surveyor`, measured right every run at about a third of `scout`'s price, while judgement about what code actually does stays on `scout`, which answered a deliberately trapped question correctly where haiku did not. The split is by what the question demands rather than by what it costs, and it is a pinned agent rather than a `model=` override because the plugin's own floor rule forbids pushing a role agent below its pin.
+
+### Features
+
+* route breadth work to a haiku surveyor, measured against a control arm ([#33](https://github.com/AqueGen/model-routing/issues/33)) ([07e5e2c](https://github.com/AqueGen/model-routing/commit/07e5e2c6918953a975b72b88a3964740bbf93ec6))
+* stamp the plugin version on every report ([#31](https://github.com/AqueGen/model-routing/issues/31)) ([7812703](https://github.com/AqueGen/model-routing/commit/7812703a97fab1b26ac0b84eb0ef7414e9307b43))
+
+
+### Bug Fixes
+
+* correct the Fable caveats in routing guidance against primary sources ([#23](https://github.com/AqueGen/model-routing/issues/23)) ([537999d](https://github.com/AqueGen/model-routing/commit/537999dfdb594257c9fa2f4b63099146bc0fbd33))
+
 ## [0.14.0](https://github.com/AqueGen/model-routing/compare/v0.13.2...v0.14.0) (2026-08-11)
 
 Makes the report answer three things it could not answer before - what effort ran, what the volume would have cost in dollars, and which dispatches went below their own agent's pin - then stops it scoring the cases it cannot judge. No pin or routing-rule changes: what the plugin asks a session to do is unchanged, what it can tell you about the result is not.
