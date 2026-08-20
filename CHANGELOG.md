@@ -2,6 +2,9 @@
 
 ## [0.15.0](https://github.com/AqueGen/model-routing/compare/v0.14.0...v0.15.0) (2026-08-20)
 
+The release where the central claim got measured instead of asserted, and did not entirely survive. A new eval harness runs the same question with and without the plugin loaded and prices the difference: routing takes roughly a sixth off a dispatch that was going to happen anyway, and adds roughly a fifth when it talks a session into dispatching that would not have. A fresh subagent pays cache write for everything it reads while a main session pays cache read, 12.5x cheaper, for what it already holds - so this is a plugin for sessions that already delegate, through Superpowers, workflows, or any unpinned agent inheriting the session model. The README says that at the top now instead of implying the opposite throughout.
+
+The routing change that came out of it: breadth work - a complete list, a verified ordering, everything that imports X - goes to a new haiku-pinned `surveyor`, measured right every run at about a third of `scout`'s price, while judgement about what code actually does stays on `scout`, which answered a deliberately trapped question correctly where haiku did not. The split is by what the question demands rather than by what it costs, and it is a pinned agent rather than a `model=` override because the plugin's own floor rule forbids pushing a role agent below its pin.
 
 ### Features
 
