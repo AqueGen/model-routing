@@ -223,10 +223,15 @@ actually ran with `/model-routing:stats`.
   `test-runner` and consume its compact report.
 - Route codebase exploration to `scout` - conclusions and file:line refs
   come back, file dumps stay in the subagent.
-- For locate-only sweeps ("which files mention X") the harness's built-in
-  Explore agent, when present, is cheaper than `scout`. Use `scout` when
-  the answer needs verification - tracing real code paths and confirming
-  file:line - not just finding candidates.
+- Three exploration routes, told apart by what has to come back rather
+  than by how the question is phrased. Unverified candidates to look at
+  next ("which files mention X"): the harness's built-in Explore agent,
+  cheaper than both bundled ones. A complete list or an ordering, verified
+  by following the code ("every stage in order", "everything that imports
+  X"): `surveyor`. A judgement about behaviour ("how does Y work", "does
+  this retry"): `scout`. "Which files import X" and "which files mention
+  X" look alike and are not: one is answered by grep and may be wrong at
+  the edges, the other has to be right.
 - Split exploration by what the question demands, not by what it costs.
   Enumerating and tracing - list these stages in order, which files import
   X, where does this chain end - is breadth, and breadth runs correctly a
