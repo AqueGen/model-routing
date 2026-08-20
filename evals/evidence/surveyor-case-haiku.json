@@ -1,0 +1,79 @@
+{
+  "model": "sonnet",
+  "runs": 3,
+  "arms": [
+    "with"
+  ],
+  "cases": [
+    {
+      "name": "surveyor-traces-the-chain",
+      "arms": {
+        "with": [
+          {
+            "exitCode": 0,
+            "costUsd": 0.1793826,
+            "durationMs": 54029,
+            "turns": 20,
+            "modelUsage": {
+              "claude-haiku-4-5-20251001": {
+                "costUSD": 0.1793826,
+                "inputTokens": 162,
+                "cacheReadInputTokens": 798076,
+                "cacheCreationInputTokens": 40454,
+                "outputTokens": 3701
+              }
+            },
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 0.14531750000000002,
+            "durationMs": 45688,
+            "turns": 17,
+            "modelUsage": {
+              "claude-haiku-4-5-20251001": {
+                "costUSD": 0.14531750000000002,
+                "inputTokens": 285,
+                "cacheReadInputTokens": 614175,
+                "cacheCreationInputTokens": 33945,
+                "outputTokens": 3145
+              }
+            },
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 0.1434974,
+            "durationMs": 61965,
+            "turns": 26,
+            "modelUsage": {
+              "claude-haiku-4-5-20251001": {
+                "costUSD": 0.1434974,
+                "inputTokens": 357,
+                "cacheReadInputTokens": 877604,
+                "cacheCreationInputTokens": 16650,
+                "outputTokens": 4416
+              }
+            },
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

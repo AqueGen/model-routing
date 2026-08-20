@@ -68,6 +68,11 @@ function cap(word) {
   return word[0].toUpperCase() + word.slice(1);
 }
 
+// Most helpers export `<helper><Stage>`; retry is the one that does not.
+function helperExport(helper, S) {
+  return helper === "retry" ? `withRetry${S}` : `${helper}${S}`;
+}
+
 // Every other stage name, so that grepping for one stage hits many files and
 // the chain still has to be read rather than pattern-matched.
 function otherStages(stage) {
@@ -77,7 +82,10 @@ function otherStages(stage) {
 function stageSource(stage, fn, subject, nextStage) {
   const S = cap(stage);
   const imports = [
-    ...HELPERS.map((h) => `import { ${h}${S} } from "./${h}.js";`),
+    // The retry helper exports `withRetry<Stage>`, not `retry<Stage>` - importing
+    // it by the pattern name left every stage module unlinkable, which made the
+    // fixture unrunnable while still reading correctly.
+    ...HELPERS.map((h) => `import { ${helperExport(h, S)} } from "./${h}.js";`),
     nextStage ? `import { ${nextStage[1]} } from "../${nextStage[0]}/index.js";` : "",
   ]
     .filter(Boolean)

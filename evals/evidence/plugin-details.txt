@@ -1,0 +1,29 @@
+model-routing 0.14.0
+  Tiered model routing for token economy: the strongest model thinks, cheaper models grind. Ready-made subagents (sonnet scout, implementer and E2E runner, haiku test-runner and verifier, opus reviewer) plus a routing skill and dispatch stats.
+  Source: model-routing@model-routing
+
+Component inventory
+  Skills (2)  model-routing, stats
+  Agents (7)  e2e-runner, implementer, reviewer, scout, surveyor, test-runner, verifier
+  Hooks (2)  SessionStart, PostToolUse  (harness-only — no model context cost)
+  MCP servers (0)
+  LSP servers (0)
+
+Projected token cost
+  Always-on:   ~700 tok   added to every session
+
+Per-component (rounded)
+  component      always-on  on-invoke
+  model-routing       ~100      ~9.3k
+  e2e-runner           ~60       ~350
+  implementer          ~80       ~710
+  reviewer             ~60       ~420
+  scout                ~60       ~610
+  surveyor            ~110       ~760
+  test-runner          ~70       ~330
+  verifier             ~80       ~640
+  stats                ~80       ~410
+
+  On-invoke cost is paid each time a skill or agent fires.
+  Token counts are estimates and may differ from actual usage.
+2.1.236 (Claude Code)

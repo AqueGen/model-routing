@@ -68,6 +68,6 @@ Superpowers-by-default question stays open.
 
 ## Also open
 
-`scout` is still pinned sonnet, as it ships. The wide case says haiku is 9%
-cheaper on that workload with correctness held; that is one workload, and the
-quality case that would justify re-pinning has not been written.
+Nothing about the `scout` pin: `subagent-answer-quality` settled that in this
+same branch. It stays sonnet, and breadth work goes to `surveyor` (haiku)
+instead.

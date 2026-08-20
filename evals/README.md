@@ -44,7 +44,8 @@ the baseline's list must not contain any `model-routing:*` entry.
 
 Runs are real sessions against the real API, so they cost real tokens. Traces
 and an `aggregate.json` land in `evals/results/<timestamp>/`, which is
-gitignored.
+gitignored; the aggregates behind every number published here are copied into
+[`evidence/`](evidence/README.md), which is not.
 
 ## The first result
 
@@ -125,15 +126,29 @@ rather than only means, because with three runs a mean can hide an overlap:
 | `scout` pinned sonnet (shipped) | $1.169 | sonnet-5 $0.506 | $1.559 $1.998 $1.468 |
 | `scout` pinned haiku | $1.042 | haiku-4.5 $0.198 | $1.142 $1.260 $1.315 |
 
+The haiku and sonnet rows come from re-running the arm with `agents/scout.md`
+edited to that pin - there is no flag for it, and the runner takes the tier from
+the agent's frontmatter unless `--model` overrides the whole session. To
+reproduce a row, change the pin, run the arm, change it back.
+
 Both configurations separate cleanly from the baseline, in opposite directions.
 Every haiku run came in under the cheapest baseline run; every sonnet run came in
-over the dearest. Correctness held at 3/3 throughout, and the plugin dispatched
-exactly once per run - the follow-ups were answered from `scout`'s summary rather
-than by dispatching again, which is what the guidance asks for.
+over the dearest. Read the direction as solid and the exact percentage as not:
+three runs per arm, one workload, and the sonnet arm's own spread ($1.468 to
+$1.998) is wider than the gap it is being compared across.
+
+The stage-order answer was right in every run of every arm. The three follow-up
+turns were not scored - this case carries two graders, ordering and delegation -
+so "correctness held" covers the breadth question only, and follow-up 1 in
+particular ("what happens to an order when payment throws a non-retryable
+error") is exactly the kind of question the quality case below shows the cheap
+tier failing. The plugin dispatched exactly once per run and answered the
+follow-ups from `scout`'s summary rather than dispatching again, which is what
+the guidance asks for.
 
 So the shipped configuration costs 23% more than not having the plugin on this
 workload, and pinning `scout` to haiku costs 9% less. The expensive tier drops
-either way - opus down 14% with sonnet, 23% with haiku - which is the mechanism
+either way - opus spend down 14% with sonnet, 23% with haiku - which is the mechanism
 working in both cases. What differs is whether the subagent's bill comes to less
 than the saving it produces.
 
@@ -176,7 +191,8 @@ context a subagent kept out of the main session gets a chance to pay for itself.
 
 The table above answers "should this session have delegated at all", and on a
 wide-reading question the answer is no - delegating cost more than doing it
-inline, on either pin. That is a real finding and it is not the question most
+inline with the shipped sonnet pin - though not with haiku, which came in under
+the baseline. That is a real finding and it is not the question most
 users are in.
 
 The question most users are in is "the dispatch is happening anyway - Superpowers
@@ -238,12 +254,20 @@ haiku's miss was substantive, not formatting: it answered **3**, having read the
 `maxRetries` line and not the loop. Once in three runs, on the question the
 fixture was built to trap.
 
-That settled the pin: it stays sonnet. Nine percent off the bill is not worth a
-confidently wrong answer in a third of subtle questions, because the wrong answer
-sends the main session back to read the files itself and that costs more than the
-tier ever saved. What the two cases together do support is a routing rule rather
-than a pin - breadth to haiku, judgement to sonnet - which is what the anchor and
-the skill now say.
+One miss in three runs of one question cannot pin a failure rate - 1/3 against
+0/3 is not a distinguishable difference at this sample size, and anyone quoting
+"fails a third of the time" from this table is quoting noise. What decides the
+pin is not the rate but the shape of the failure: it is asymmetric. A cheap
+correct answer saves cents; a cheap wrong one sends the main session back to read
+the files itself, which costs more than the tier ever saved, and it arrives
+looking exactly like a right one. That asymmetry does not need a tight estimate
+to act on.
+
+So the pin stays sonnet, and what the two cases together support is a split
+rather than a re-pin: breadth to `surveyor` (haiku), judgement to `scout`
+(sonnet). Overriding `scout` downward with `model=haiku` would have been the
+smaller diff and is what the first draft did - the plugin's own floor rule
+forbids exactly that, and prescribes a pinned agent instead.
 
 The case runs the tier directly with `agent: scout` in frontmatter, which makes
 the session *be* `scout` and grades what comes back. That is the instrument this

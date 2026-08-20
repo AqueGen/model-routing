@@ -19,8 +19,17 @@ const EVALS_DIR = dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = resolve(EVALS_DIR, "..");
 const FIXTURES_DIR = join(EVALS_DIR, "fixtures");
 
+// Frontmatter this runner reads: name, tags, fixture, agent, runs,
+// timeout_seconds, tools, append_system_prompt. `max_turns` is part of the real
+// harness's format and is carried in the case files, but the `claude` CLI has no
+// flag for it - only `timeout_seconds` actually bounds a run here.
 const args = parseArgs(process.argv.slice(2));
-const cases = discoverCases().filter((c) => !args.case || c.name.includes(args.case));
+// A case tagged `unfinished` has a reason not to be trusted written down beside
+// it, so it does not get to burn real tokens just for sitting in the directory.
+// Naming it with --case opts back in.
+const cases = discoverCases().filter((c) =>
+  args.case ? c.name.includes(args.case) : !toList(c.frontmatter.tags)?.includes("unfinished"),
+);
 if (cases.length === 0) {
   console.error("No eval cases found.");
   process.exit(1);
@@ -39,6 +48,13 @@ for (const kase of cases) {
   const armResults = {};
 
   for (const arm of arms) {
+    // A case that runs AS a bundled agent has nothing to say without the plugin
+    // that defines the agent - the baseline arm would dispatch a name that does
+    // not exist and bill for the failure.
+    if (arm === "without" && kase.frontmatter.agent) {
+      console.log(`${kase.name}: skipping the without arm - agent "${kase.frontmatter.agent}" only exists with the plugin`);
+      continue;
+    }
     armResults[arm] = [];
     for (let i = 0; i < runs; i++) {
       process.stderr.write(`${kase.name} [${arm}] run ${i + 1}/${runs} ... `);
@@ -48,7 +64,14 @@ for (const kase of cases) {
         writeFileSync(join(resultsDir, `${kase.name}.${arm}.${i + 1}.stderr.txt`), run.stderr, "utf-8");
         process.stderr.write(`exit ${run.exitCode}: ${run.stderr.trim().split("\n").pop() ?? ""}\n`);
       }
-      const scores = kase.graders.map((g) => ({ grader: g.name, ...grade(g, run) }));
+      // A run that died is not a run that scored zero - it is a run with no
+      // result. Grading its truncated trace would let an empty transcript pass
+      // every `not_contains` grader, and averaging its missing cost as absent
+      // rather than as failure would flatter the arm it belongs to.
+      const scores =
+        run.exitCode === 0
+          ? kase.graders.map((g) => ({ grader: g.name, ...grade(g, run) }))
+          : kase.graders.map((g) => ({ grader: g.name, pass: false, notRun: true }));
       armResults[arm].push({
         exitCode: run.exitCode,
         costUsd: run.costUsd,
@@ -62,6 +85,7 @@ for (const kase of cases) {
     }
   }
 
+  if (Object.keys(armResults).length === 0) continue;
   report.cases.push({ name: kase.name, arms: armResults });
   printCase(kase, armResults);
 }
@@ -78,11 +102,19 @@ console.log(`\nTraces and aggregate.json: ${resultsDir}`);
 function fixtureFor(kase) {
   const name = args.fixture ?? kase.frontmatter.fixture ?? "mini-app";
   const dir = join(FIXTURES_DIR, name);
-  if (isDir(dir)) return dir;
-
   const generator = join(FIXTURES_DIR, `${name}.gen.mjs`);
-  if (!isFile(generator)) throw new Error(`No fixture "${name}" and no ${name}.gen.mjs to build one`);
-  execFileSync(process.execPath, [generator], { stdio: "inherit" });
+
+  if (!isFile(generator)) {
+    if (isDir(dir)) return dir;
+    throw new Error(`No fixture "${name}" and no ${name}.gen.mjs to build one`);
+  }
+
+  // Regenerate whenever the generator is newer than what it produced. A stale
+  // fixture kept because the directory happened to exist is how a fixed
+  // generator quietly fails to reach the runs that report on it.
+  if (!isDir(dir) || statSync(generator).mtimeMs > statSync(dir).mtimeMs) {
+    execFileSync(process.execPath, [generator], { stdio: "inherit" });
+  }
   if (!isDir(dir)) throw new Error(`${name}.gen.mjs ran but produced no ${dir}`);
   return dir;
 }
@@ -120,13 +152,25 @@ async function runOnce(kase, arm, timeoutMs) {
   return {
     trace: turns.map((t) => t.trace).join("\n"),
     stderr: turns.map((t) => t.stderr).join("\n"),
-    exitCode: turns.find((t) => t.exitCode !== 0)?.exitCode ?? 0,
+    // A killed child closes with code null, and `null ?? 0` would report a
+    // timed-out run as clean - its truncated trace graded, its null cost quietly
+    // dropped from the mean. Anything that is not a clean 0 counts as a failure.
+    exitCode: turns.find((t) => t.exitCode !== 0) ? (turns.find((t) => t.exitCode !== 0).exitCode ?? 1) : 0,
     lastMessage: turns.map((t) => t.lastMessage).join("\n\n"),
+    // Graded per turn as well as joined: an ordered regex run over the
+    // concatenation can assemble a passing match out of pieces of several
+    // answers, which is a pass the run did not earn.
+    turnMessages: turns.map((t) => t.lastMessage),
     costUsd: sum(turns.map((t) => t.costUsd)),
     durationMs: sum(turns.map((t) => t.durationMs)),
     turns: sum(turns.map((t) => t.turns)),
     modelUsage: mergeModelUsage(turns.map((t) => t.modelUsage)),
   };
+}
+
+function sessionModelFor(agent) {
+  if (args.modelGiven) return args.model;
+  return agent ? null : args.model;
 }
 
 function toList(value) {
@@ -182,13 +226,21 @@ async function runTurn(prompt, arm, workspace, timeoutMs, isFollowup, appendSyst
     "",
     "--permission-mode",
     "dontAsk",
-    "--model",
-    args.model,
+    // `--model` outranks an agent's frontmatter pin, so a case that runs AS an
+    // agent must not be handed the default or it silently measures the wrong
+    // tier. Pass one only when the caller asked for it by name.
+    ...(sessionModelFor(agent) ? ["--model", sessionModelFor(agent)] : []),
   ];
   if (arm === "with") argv.push("--plugin-dir", PLUGIN_ROOT);
 
+  // CLAUDE_CODE_SUBAGENT_MODEL overrides the tier of every subagent, which is
+  // the thing several of these cases exist to measure. Whatever the operator has
+  // set for their own work must not reach the experiment.
+  const env = { ...process.env };
+  delete env.CLAUDE_CODE_SUBAGENT_MODEL;
+
   // No `shell: true` - it concatenates argv, which mangles the prompt.
-  const child = spawn(process.platform === "win32" ? "claude.exe" : "claude", argv, { cwd: workspace });
+  const child = spawn(process.platform === "win32" ? "claude.exe" : "claude", argv, { cwd: workspace, env });
   let stdout = "";
   let stderr = "";
   child.stdout.on("data", (d) => (stdout += d));
@@ -228,9 +280,20 @@ function extractResult(stdout) {
 
 function grade(grader, run) {
   if (grader.type !== "regex") return { pass: false, skipped: `unsupported grader type: ${grader.type}` };
-  const haystack = grader.target === "last_message" ? run.lastMessage : run.trace;
-  const hit = new RegExp(grader.pattern, grader.flags ?? "").test(haystack);
+  const pattern = new RegExp(grader.pattern, grader.flags ?? "");
   const wanted = grader.match ?? "contains";
+
+  // `last_message` is graded turn by turn: one turn has to satisfy the pattern
+  // on its own. Matching the joined text instead would let a multi-part regex
+  // straddle two answers and pass on neither.
+  if (grader.target === "last_message") {
+    const messages = run.turnMessages ?? [run.lastMessage];
+    return wanted === "not_contains"
+      ? { pass: messages.every((m) => !pattern.test(m)) }
+      : { pass: messages.some((m) => pattern.test(m)) };
+  }
+
+  const hit = pattern.test(run.trace);
   return { pass: wanted === "not_contains" ? !hit : hit };
 }
 
@@ -251,9 +314,14 @@ function printCase(kase, armResults) {
   // main session buys context back and pays for it in dollars and latency, so
   // print the price next to the score rather than letting the score stand alone.
   const price = Object.entries(armResults).map(([arm, runs]) => {
+    const priced = runs.filter((r) => typeof r.costUsd === "number");
     const cost = mean(runs.map((r) => r.costUsd));
     const seconds = mean(runs.map((r) => r.durationMs)) / 1000;
-    return `${arm} $${cost.toFixed(3)} / ${seconds.toFixed(0)}s`;
+    // Say how many runs are behind the mean. A run that died has no cost to
+    // contribute, and a mean over two runs that looks like a mean over three is
+    // the kind of quiet thing that gets published.
+    const basis = priced.length === runs.length ? "" : ` (${priced.length}/${runs.length} runs)`;
+    return `${arm} $${cost.toFixed(3)} / ${seconds.toFixed(0)}s${basis}`;
   });
   console.log(`  cost per run: ${price.join(" | ")}`);
 
@@ -351,10 +419,13 @@ function parseScalar(raw) {
 }
 
 function parseArgs(argv) {
-  const out = { runs: null, model: "sonnet", arm: "both", case: null, fixture: null };
+  const out = { runs: null, model: "sonnet", modelGiven: false, arm: "both", case: null, fixture: null };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--runs") out.runs = Number(argv[++i]);
-    else if (argv[i] === "--model") out.model = argv[++i];
+    else if (argv[i] === "--model") {
+      out.model = argv[++i];
+      out.modelGiven = true;
+    }
     else if (argv[i] === "--arm") out.arm = argv[++i];
     else if (argv[i] === "--case") out.case = argv[++i];
     else if (argv[i] === "--fixture") out.fixture = argv[++i];

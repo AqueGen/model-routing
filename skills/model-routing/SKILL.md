@@ -15,10 +15,12 @@ A subagent starts empty, so everything it reads is a cache write, while
 the main session pays cache read - 12.5x less - for context it already
 holds. That penalty is paid whether or not the tier is routed down, so the
 rules below only pay off on work that was going to be delegated anyway.
-Measured on a wide-reading session: doing it inline cost $1.36, delegating
-with the tier routed down $1.68, delegating at the session tier $2.01.
-Route every dispatch - that is a 17% discount on work already leaving the
-session - and do not manufacture dispatches to collect it.
+On one wide-reading session, three runs: doing it inline cost $1.36 and
+delegating with the tier routed down $1.68, both measured; delegating at
+the session tier comes to $2.01, which is those same measured subagent
+tokens repriced at the higher tier rather than a run of its own. Route
+every dispatch - roughly a sixth off work already leaving the session -
+and do not manufacture dispatches to collect it.
 
 ## Tiers
 
@@ -107,6 +109,7 @@ carries no effort param:
 |------|-------|---------------|--------|
 | Planning, brainstorming, specs, docs, architecture | main session | strongest (user's /model choice) | high |
 | Codebase exploration ("where is X", "how does Y work") | subagent | `scout` (sonnet) | low |
+| Breadth sweeps: enumerate, list, trace a chain end to end | subagent | `surveyor` (haiku) | low |
 | Implementing an approved plan/spec (ordinary: single-file, clear shape) | subagent | `implementer` (sonnet) | medium |
 | Complex implementation: multi-file refactor, subtle concurrency/security | subagent | `implementer` with `model=opus` | medium (pinned) |
 | Trivial mechanical tasks: renames, boilerplate, mirrored constants | subagent | sonnet | low |
@@ -224,18 +227,24 @@ actually ran with `/model-routing:stats`.
   Explore agent, when present, is cheaper than `scout`. Use `scout` when
   the answer needs verification - tracing real code paths and confirming
   file:line - not just finding candidates.
-- Pick `scout`'s tier by what the question demands, not by what it costs.
+- Split exploration by what the question demands, not by what it costs.
   Enumerating and tracing - list these stages in order, which files import
-  X, where does this chain end - is breadth, and breadth runs correctly on
-  haiku: dispatch with `model=haiku` and it comes back right for about half
-  the price. Working out what code actually does - does this loop retry,
-  what does this function return for that input - is not breadth, and the
-  cheap tier fails it in a way that looks confident. Leave the sonnet pin
-  there. Both halves are measured, in `evals/`: on a twelve-stage tracing
-  question haiku scored 3 of 3 and cut the session bill 9%; on a question
-  whose code contains an obvious wrong answer, haiku took the bait in 1 run
-  of 3 while sonnet took it in none. A wrong answer sends the main session
-  back to read the files itself, which costs more than the tier ever saved.
+  X, where does this chain end - is breadth, and breadth runs correctly a
+  tier down: that is `surveyor` (haiku). Working out what code actually
+  does - does this loop retry, what does this function return for that
+  input - is not breadth, and the cheap tier fails it in a way that looks
+  confident: that is `scout` (sonnet). Both halves are measured in `evals/`,
+  on one generated fixture at three runs each: on a twelve-stage tracing
+  question haiku answered correctly every run at a third of sonnet's price;
+  on a question whose code contains an obvious wrong answer, haiku took the
+  bait once in three runs while sonnet took it in none. Three runs on one
+  fixture cannot pin a failure rate, and the reason to keep judgement on
+  sonnet is not the rate but the asymmetry: a cheap right answer saves
+  cents, while a cheap wrong one arrives looking identical and sends the
+  main session back to read the files itself. That recovery was not
+  measured; it does not need to be, to be worth avoiding. Reach for the
+  pinned agent rather than overriding `scout` downward - the floor rule
+  below is not a formality.
 - Batch related plan tasks per subagent. Each subagent re-reads files from
   scratch; one tiny task per agent costs more than it saves.
 - Subagents cannot see the conversation. Write self-contained task
