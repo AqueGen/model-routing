@@ -23,7 +23,50 @@ instead of thrashing.
 Everything stays inside Anthropic models. No proxy, no third-party
 gateway, nothing extra in the request path.
 
-**Quick links:** [Overview](#whats-inside) | [Example](#example) |
+## When this saves you money, and when it does not
+
+Read this before installing, because the honest answer has two halves and
+[`evals/`](evals/README.md) measured both.
+
+**A subagent is not free.** It starts with an empty context, so everything it
+reads is a cache *write*, while your main session pays cache *read* - 12.5x
+cheaper - for what it already has. Delegation converts cheap re-reads into
+expensive first-reads, and that bill lands whether or not this plugin is
+installed.
+
+What the plugin changes is the price per token, not that penalty. So:
+
+| Your situation | What this plugin does |
+| --- | --- |
+| You already dispatch subagents - Superpowers, workflows, any delegation-heavy practice | **Saves.** Measured session: $2.01 with subagents inheriting your session model, $1.68 with them routed down. ~17% off |
+| You work mostly in one session and rarely delegate | **Costs.** $1.36 doing it inline against $1.68 routed. ~23% more |
+
+An unpinned subagent inherits the session model, so on an opus session
+Superpowers dispatches opus subagents by default. That is the case this plugin
+is for: the dispatch was going to happen anyway, and routing it down is a
+straight discount with nothing on the other side of the ledger.
+
+Note what the surcharge is and is not. The plugin costs about 1.5k tokens a
+session to carry - roughly 592 for the skill and agent listings
+(`claude plugin details model-routing`) plus a ~935-token routing anchor at
+session start - which is a couple of cents against sessions billing $1.40 to
+$2.00. That is not where the 23% comes from. It comes from dispatches happening
+that otherwise would not have: on the same question the plugin arm delegated in
+3 runs of 3 and the plugin-free arm in 0 of 3. Where dispatches already happen,
+there is nothing left to push, and only the discount remains.
+
+If you rarely delegate, install it for the context headroom or not at all. The
+expensive tier does read measurably less either way - opus down 14% on the same
+test - but headroom is a different thing from a smaller bill, and this README
+used to blur the two.
+
+(The $2.01 is the measured subagent token counts repriced at opus rates, not a
+separate run; a live opus subagent might read less. The pricing model reproduces
+the measured sonnet cost to the cent, and the outstanding A/B is noted in
+`evals/forced-dispatch-tier/NOTES.md`.)
+
+**Quick links:** [Does this save money?](#when-this-saves-you-money-and-when-it-does-not) |
+[Overview](#whats-inside) | [Example](#example) |
 [Install](#install) | [Getting started](#getting-started) |
 [Usage](#usage) | [Tiers](#model-tiers-and-effort-ladder) |
 [Settings](#recommended-settings) | [Workflows](#dynamic-workflows) |

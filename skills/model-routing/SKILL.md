@@ -10,6 +10,16 @@ cannot be switched by Claude - routing works through subagent delegation
 (the `model` param of the Agent tool, or the agents bundled with this
 plugin).
 
+**Routing makes a dispatch cheaper; it does not make dispatching cheap.**
+A subagent starts empty, so everything it reads is a cache write, while
+the main session pays cache read - 12.5x less - for context it already
+holds. That penalty is paid whether or not the tier is routed down, so the
+rules below only pay off on work that was going to be delegated anyway.
+Measured on a wide-reading session: doing it inline cost $1.36, delegating
+with the tier routed down $1.68, delegating at the session tier $2.01.
+Route every dispatch - that is a 17% discount on work already leaving the
+session - and do not manufacture dispatches to collect it.
+
 ## Tiers
 
 Think in tiers, not model names - names rot, tiers do not:

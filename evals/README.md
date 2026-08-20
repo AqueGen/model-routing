@@ -172,6 +172,44 @@ Add `followup-1.md`, `followup-2.md` and so on to turn a case into a session
 rather than a single question. That is not decoration - it is the only way the
 context a subagent kept out of the main session gets a chance to pay for itself.
 
+## The comparison the wide case was answering, and the one it was not
+
+The table above answers "should this session have delegated at all", and on a
+wide-reading question the answer is no - delegating cost more than doing it
+inline, on either pin. That is a real finding and it is not the question most
+users are in.
+
+The question most users are in is "the dispatch is happening anyway - Superpowers
+dispatches, workflows dispatch, an unpinned agent inherits the session model - so
+what does routing it down buy?" That arm has not been run: `forced-dispatch-tier`
+exists for it and is blocked. What can be said without running it is arithmetic
+on the token counts already measured, because the subagent's work is the same
+work at a different price:
+
+| | per run |
+| --- | ---: |
+| subagent tokens measured | 74k cache write, 451k cache read, 6k output |
+| billed at sonnet-5 (what ran) | $0.506 |
+| the same tokens at opus-5 rates | $0.844 |
+
+Which gives, against the $1.169 the opus main session cost in that arm:
+
+| | total |
+| --- | ---: |
+| no delegation | $1.359 |
+| delegate, tier routed down | $1.675 |
+| delegate, subagent inherits opus | $2.013 |
+
+So routing is roughly a 17% discount on a dispatch that was going to happen, and
+a 23% surcharge on one that did not need to. Both numbers belong in the README
+and now are.
+
+Two honest limits on the $2.013. It reprices measured tokens rather than
+reporting a run, and a live opus subagent might well read less - fewer loops,
+better first guesses - which would shrink the gap. The pricing model is not
+guesswork though: applied to the sonnet arm it reproduces the billed $0.506 to
+the cent, so the tier multiplier is right even if the token count would move.
+
 ## The third case, which stopped the re-pin
 
 `subagent-answer-quality` exists because the wide case made haiku look like a
