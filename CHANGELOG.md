@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.15.0](https://github.com/AqueGen/model-routing/compare/v0.14.0...v0.15.0) (2026-08-20)
+
+
+### Features
+
+* route breadth work to a haiku surveyor, measured against a control arm ([#33](https://github.com/AqueGen/model-routing/issues/33)) ([07e5e2c](https://github.com/AqueGen/model-routing/commit/07e5e2c6918953a975b72b88a3964740bbf93ec6))
+* stamp the plugin version on every report ([#31](https://github.com/AqueGen/model-routing/issues/31)) ([7812703](https://github.com/AqueGen/model-routing/commit/7812703a97fab1b26ac0b84eb0ef7414e9307b43))
+
+
+### Bug Fixes
+
+* correct the Fable caveats in routing guidance against primary sources ([#23](https://github.com/AqueGen/model-routing/issues/23)) ([537999d](https://github.com/AqueGen/model-routing/commit/537999dfdb594257c9fa2f4b63099146bc0fbd33))
+
 ## [0.14.0](https://github.com/AqueGen/model-routing/compare/v0.13.2...v0.14.0) (2026-08-11)
 
 Makes the report answer three things it could not answer before - what effort ran, what the volume would have cost in dollars, and which dispatches went below their own agent's pin - then stops it scoring the cases it cannot judge. No pin or routing-rule changes: what the plugin asks a session to do is unchanged, what it can tell you about the result is not.
