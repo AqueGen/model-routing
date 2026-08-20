@@ -106,6 +106,7 @@ async function runOnce(kase, arm, timeoutMs) {
         index > 0,
         kase.frontmatter.append_system_prompt,
         toList(kase.frontmatter.tools),
+        kase.frontmatter.agent,
       ),
     );
   }
@@ -148,7 +149,7 @@ function mergeModelUsage(all) {
   return merged;
 }
 
-async function runTurn(prompt, arm, workspace, timeoutMs, isFollowup, appendSystemPrompt, tools) {
+async function runTurn(prompt, arm, workspace, timeoutMs, isFollowup, appendSystemPrompt, tools, agent) {
   const argv = [
     "-p",
     prompt,
@@ -158,12 +159,18 @@ async function runTurn(prompt, arm, workspace, timeoutMs, isFollowup, appendSyst
     // means to measure the price of a tier cannot also be measuring that coin,
     // so it takes the decision away here and leaves the user prompt untouched.
     ...(appendSystemPrompt ? ["--append-system-prompt", appendSystemPrompt] : []),
-    // "Do not read the files yourself" has to be enforced, not asked for, and it
-    // took two attempts to enforce it. Denying Read/Grep/Glob moved the reading
-    // into Bash; denying those too left ToolSearch, which loads a deferred Read
-    // back in. An allowlist is the only version that holds - name the tools the
-    // main session may have and everything else is simply absent.
+    // "Do not read the files yourself" cannot be enforced through the tool set.
+    // Denying Read/Grep/Glob moves the reading into Bash; denying the shells too
+    // leaves ToolSearch to reload a deferred Read; and an allowlist finally
+    // stops the main session by ALSO starving every subagent it dispatches, so
+    // the answers come back empty and the run measures nothing. Kept only for
+    // cases that want a deliberately tool-less session.
     ...(tools ? ["--tools", ...tools] : []),
+    // Runs the session AS a bundled agent, on that agent's own pin. This is how
+    // a tier gets tested on its own merits: ask scout the question directly and
+    // grade what comes back, instead of asking a main session to delegate and
+    // then arguing about whether it really did.
+    ...(agent ? ["--agent", agent] : []),
     "--output-format",
     "stream-json",
     "--verbose",

@@ -172,9 +172,49 @@ Add `followup-1.md`, `followup-2.md` and so on to turn a case into a session
 rather than a single question. That is not decoration - it is the only way the
 context a subagent kept out of the main session gets a chance to pay for itself.
 
+## The third case, which stopped the re-pin
+
+`subagent-answer-quality` exists because the wide case made haiku look like a
+free 9%, and a tier that is cheaper on breadth is not therefore cheaper. It asks
+`scout` two questions whose code contains a confident wrong answer:
+
+- `withRetryIntake` loops `maxRetries` times, and `maxRetries` is 3. It also
+  breaks the moment `error?.retryable === false`, and every stage error is built
+  with `retryable: cause?.retryable ?? false`. So `validateOrder` is called
+  **once**, and the file has a 3 sitting in it for anyone who reads one line.
+- `applyTaxPolicy` looks up `TAX_POLICY[batch.outcome]` while the table is keyed
+  `onWarn`, `onFatal`, `onTimeout`, `onUnknown`. An outcome of `"warn"` misses,
+  falls through to `onUnknown: "abort"`, and returns **null** - not the
+  `continue` that the `onWarn` row appears to promise. That mismatch is a real
+  defect in the fixture and the question asks whether it was intended.
+
+Three runs per tier, four deterministic graders, no judge model:
+
+| Tier | Graders passed | Cost per run |
+| --- | ---: | ---: |
+| opus (reference, 1 run) | 4/4 | $0.715 |
+| sonnet - the shipped pin | **12/12** | $0.212 |
+| haiku | 11/12 | $0.103 |
+
+haiku's miss was substantive, not formatting: it answered **3**, having read the
+`maxRetries` line and not the loop. Once in three runs, on the question the
+fixture was built to trap.
+
+That settled the pin: it stays sonnet. Nine percent off the bill is not worth a
+confidently wrong answer in a third of subtle questions, because the wrong answer
+sends the main session back to read the files itself and that costs more than the
+tier ever saved. What the two cases together do support is a routing rule rather
+than a pin - breadth to haiku, judgement to sonnet - which is what the anchor and
+the skill now say.
+
+The case runs the tier directly with `agent: scout` in frontmatter, which makes
+the session *be* `scout` and grades what comes back. That is the instrument this
+question needed all along: no main session to argue with about whether it really
+delegated, and no way for it to contaminate the result by reading.
+
 ## Next
 
-A case that stresses answer *quality* rather than breadth, run against both
-`scout` pins, so re-pinning has evidence behind it instead of one workload. Then
-the mirror of the small case: a genuinely trivial question, where dispatching at
-all is the failure being measured.
+The mirror of the small case: a genuinely trivial question, where dispatching at
+all is the failure being measured. And `forced-dispatch-tier` still needs the fix
+described in its NOTES.md before it can price delegation at the session tier -
+the Superpowers-by-default question is still open.

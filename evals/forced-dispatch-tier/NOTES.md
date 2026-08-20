@@ -35,23 +35,36 @@ because each looked like it had worked:
 The `main-session-read-nothing` grader now covers the shells and is the thing to
 check before believing any cost number from this case.
 
-## The open problem
+## The open problem, and the wrong diagnosis it was first given
 
-With the allowlist in place the answer comes back **wrong** - on haiku and on
-opus alike, one dispatch and no way to check the result. A configuration that is
-cheap and wrong has saved nothing, so the tier comparison cannot be run until
-the case can produce correct answers.
+With the allowlist in place the answers come back **wrong**, on haiku and on opus
+alike. This was first written up as "one dispatch and no way to check the result",
+i.e. as evidence that forcing delegation costs quality. That was wrong, and the
+`subagent-answer-quality` case is what exposed it: **`--tools` propagates to
+subagents**. The allowlist did not merely stop the main session from reading - it
+starved `scout` of file tools too, so the dispatches came back with nothing and
+the main session correctly refused to invent an answer. One transcript says so in
+as many words: "two scout runs returned zero real tool executions".
 
-Two candidate fixes, untested:
+So the isolation problem is worse than attempt 4 suggested. Every mechanism tried
+so far either fails to stop the main session or disables the subagent as well:
 
-- Let the main session dispatch repeatedly and verify through further dispatches
-  rather than by reading. That is closer to what a real delegating session does
-  and may just need a longer `max_turns` plus a system prompt that says to check
-  the subagent's answer.
-- Put the verification burden on the grader instead: score the subagent's report
-  rather than the main session's final message.
+| Mechanism | Main session stopped | Subagent still able to read |
+| --- | --- | --- |
+| System-prompt request | no | yes |
+| Deny Read/Grep/Glob | no - moves to Bash | untested |
+| Deny the shells too | no - ToolSearch reloads Read | apparently not |
+| `--tools` allowlist | yes | **no** |
 
-The first is the honest one. The second measures a different thing.
+What is needed is a per-session tool restriction that does not reach the agents
+that session dispatches, and nothing tried yet does that. Candidates, untested:
+a settings-file `permissions.deny` passed with `--settings` (deny rules may scope
+differently from `--tools`), or accepting main-session reads and instead pricing
+the arms by which model did the reading, from the per-model split the runner
+already prints.
+
+Until then this case cannot price delegation at the session tier, and the
+Superpowers-by-default question stays open.
 
 ## Also open
 
