@@ -2,7 +2,7 @@ MODEL ROUTING ACTIVE - expensive model thinks, cheap models grind. You cannot sw
 
 - Planning, specs, docs, architecture, small interactive edits: main session.
 - Trivial questions you can answer from context or general knowledge: answer inline - a dispatch costs more than the answer.
-- Codebase exploration ("where is X", "how does Y work"): `scout`. Locate-only sweeps ("which files mention X"): the built-in Explore agent, when present, is cheaper.
+- Codebase exploration ("where is X", "how does Y work"): `scout`. Locate-only sweeps ("which files mention X"): the built-in Explore agent, when present, is cheaper. Enumerating or tracing a chain ("list the stages in order", "which files import X"): dispatch `scout` with `model=haiku` - measured right every run at half the price. Working out what code actually does ("does this loop retry", "what does this return"): leave the sonnet pin - haiku got that wrong in 1 run of 3.
 - Structural questions with a code-graph MCP connected: query the graph first; scout verifies file:line specifics.
 - Implementing an approved plan/spec: `implementer` (sonnet). Dispatch with `model=opus` for multi-file/cross-layer work, security/money/migrations/concurrency/public contracts, or a retry after a weak sonnet result - escalate when in doubt; the dispatch changes the model only, the pinned medium effort stays. Ambiguous task or unclear root cause: clarify first (main session / scout) - implementer stops on ambiguity. Batch related tasks per agent.
 - Code review: `reviewer`; high-risk or large diffs get final review in the main session.

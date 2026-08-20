@@ -214,6 +214,18 @@ actually ran with `/model-routing:stats`.
   Explore agent, when present, is cheaper than `scout`. Use `scout` when
   the answer needs verification - tracing real code paths and confirming
   file:line - not just finding candidates.
+- Pick `scout`'s tier by what the question demands, not by what it costs.
+  Enumerating and tracing - list these stages in order, which files import
+  X, where does this chain end - is breadth, and breadth runs correctly on
+  haiku: dispatch with `model=haiku` and it comes back right for about half
+  the price. Working out what code actually does - does this loop retry,
+  what does this function return for that input - is not breadth, and the
+  cheap tier fails it in a way that looks confident. Leave the sonnet pin
+  there. Both halves are measured, in `evals/`: on a twelve-stage tracing
+  question haiku scored 3 of 3 and cut the session bill 9%; on a question
+  whose code contains an obvious wrong answer, haiku took the bait in 1 run
+  of 3 while sonnet took it in none. A wrong answer sends the main session
+  back to read the files itself, which costs more than the tier ever saved.
 - Batch related plan tasks per subagent. Each subagent re-reads files from
   scratch; one tiny task per agent costs more than it saves.
 - Subagents cannot see the conversation. Write self-contained task
