@@ -24,3 +24,13 @@ volume stayed below the session model, how the per-session-model split
 compares (e.g. fable sessions routing down more than opus sessions), and
 anything that looks off (e.g. many subagents running AT the session tier).
 Do not re-run the commands, no extra tables, no dollar estimates.
+
+The two reports count different things, and where they disagree the token
+one is the measurement. A dispatch row is one line in a log whether it cost
+four thousand tokens or four million, while the "By agent" block in the
+token report reads the model each subagent actually ran on. So when a
+dispatch-side warning names an agent - a tier leak, or a dispatch below its
+pin - carry its volume from that block into the sentence, and when the
+volume is not there, say the count overstated it and name why the token
+report saw it differently (most often an agent from another plugin pinning
+its own model, which the dispatch log cannot see).

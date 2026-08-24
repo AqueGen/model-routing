@@ -359,7 +359,7 @@ test("tier-leak section: threshold boundary and bundled-only absence", () => {
   let cfg = mk(1, 4); // exactly 20%: strict > threshold means no warning line
   try {
     const out = run(["report"], cfg);
-    assert.match(out, /Tier leaks: 1 of 5 unpinned dispatches inherited a strong session model bare \(20%\)/);
+    assert.match(out, /Tier leaks: 1 of 5 dispatches on agent types with no pin this plugin knows \(20%\)/);
     assert.ok(!out.includes("rework threshold"));
   } finally { rmSync(cfg, { recursive: true, force: true }); }
   cfg = mk(2, 3); // 40%: above the threshold
@@ -553,7 +553,7 @@ test("CLAUDE_CODE_SUBAGENT_MODEL override is recorded and outranks the pin", () 
   const cfg3 = freshConfigDir();
   writeLog(cfg3, [{ ts: Date.now(), agent: "general-purpose", model: null, env: "sonnet", session: "claude-opus-4-8" }]);
   try {
-    assert.match(run(["report"], cfg3), /Tier leaks: 0 of 1 unpinned dispatches/);
+    assert.match(run(["report"], cfg3), /Tier leaks: 0 of 1 dispatches on agent types with no pin this plugin knows/);
   } finally { rmSync(cfg3, { recursive: true, force: true }); }
 });
 
@@ -1163,7 +1163,7 @@ test("tier leaks leave out dispatches whose session cannot be ranked", () => {
   ]);
   try {
     const out = run(["report"], cfg);
-    assert.match(out, /Tier leaks: 1 of 1 unpinned dispatches inherited a strong session model bare \(100%\)/);
+    assert.match(out, /Tier leaks: 1 of 1 dispatches on agent types with no pin this plugin knows \(100%\)/);
     assert.match(out, /2 unpinned dispatch\(es\) left out/);
     // The warning is the point of the fraction: 1 of 3 reads as 33% and stays
     // quiet, 1 of 1 is 100% and trips the threshold.
@@ -1281,4 +1281,81 @@ test("an unreadable manifest costs the stamp, not the report", () => {
     rmSync(cfg, { recursive: true, force: true });
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// --- By-agent attribution (agent-<id>.meta.json sidecars) -------------------
+
+const metaFor = (dir, id, agentType, model) =>
+  writeFileSync(join(dir, `agent-${id}.meta.json`), JSON.stringify({ agentType, ...(model ? { model } : {}), spawnDepth: 1 }));
+
+test("tokens attributes volume to the agent type that ran it", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-opus-5"}\n');
+  writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-sonnet-5", 3000) + "\n");
+  metaFor(dir, "a", "model-routing:implementer", "sonnet");
+  writeFileSync(join(dir, "agent-b.jsonl"), usageLine("claude-haiku-4-5", 1000) + "\n");
+  metaFor(dir, "b", "model-routing:test-runner");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /By agent - which role processed the volume:/);
+    assert.match(out, /model-routing:implementer\s+1 agent on sonnet-5/);
+    assert.match(out, /model-routing:test-runner\s+1 agent on haiku-4-5/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("below-pin volume is judged on the model the transcript actually ran", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-opus-5"}\n');
+  // reviewer pins opus; this one ran sonnet under an opus session - the pin was
+  // undercut, and the sidecar's own `model` field is not what decides that.
+  writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-sonnet-5", 4000) + "\n");
+  metaFor(dir, "a", "model-routing:reviewer", "sonnet");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /Below the agent's own pin: 4k \(100% of the volume seen here\) - model-routing:reviewer 4k/);
+    assert.doesNotMatch(out, /Inherited the session model bare/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("an agent pinning its own model in frontmatter is not counted as inherited", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-opus-5"}\n');
+  // The dispatch report can only see "bare dispatch, agent type unknown to this
+  // plugin" and has to allow that it inherited opus. The transcript shows it
+  // ran sonnet, so its own frontmatter pinned one: not a leak, and this is the
+  // case that made the count-based warning overstate leaks by 11 of 18.
+  writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-sonnet-5", 5000) + "\n");
+  metaFor(dir, "a", "other-plugin:relay");
+  // A genuinely bare inheritance, for contrast: unpinned type, ran the session model.
+  writeFileSync(join(dir, "agent-b.jsonl"), usageLine("claude-opus-5", 2000) + "\n");
+  metaFor(dir, "b", "general-purpose");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /Inherited the session model bare: 2k \(29%\) - general-purpose 2k\./);
+    assert.doesNotMatch(out, /other-plugin:relay \d/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a transcript with no sidecar keeps its volume and is declared", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-opus-5"}\n');
+  writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-sonnet-5", 1000) + "\n");
+  metaFor(dir, "a", "model-routing:scout", "sonnet");
+  writeFileSync(join(dir, "agent-b.jsonl"), usageLine("claude-sonnet-5", 1000) + "\n"); // no sidecar
+  writeFileSync(join(dir, "agent-c.jsonl"), usageLine("claude-sonnet-5", 1000) + "\n");
+  writeFileSync(join(dir, "agent-c.meta.json"), "{ not json");
+  try {
+    const out = run(["tokens"], cfg);
+    // Both unattributed transcripts stay in every total: 3k, three agents.
+    assert.match(out, /sonnet-5\s+#+\s+3k \(100%\)  3 agents/);
+    assert.match(out, /2 transcripts had no readable agent-<id>\.meta\.json sidecar/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
