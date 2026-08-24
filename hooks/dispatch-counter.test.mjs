@@ -1332,13 +1332,36 @@ test("an agent pinning its own model in frontmatter is not counted as inherited"
   // case that made the count-based warning overstate leaks by 11 of 18.
   writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-sonnet-5", 5000) + "\n");
   metaFor(dir, "a", "other-plugin:relay");
+  // The same false positive one tier up: a foreign pin can name a SIBLING of
+  // the session model, which a tier comparison cannot tell from inheritance.
+  // Only model identity can, so identity is what the verdict uses.
+  writeFileSync(join(dir, "agent-c.jsonl"), usageLine("claude-opus-4-8", 3000) + "\n");
+  metaFor(dir, "c", "other-plugin:thinker");
   // A genuinely bare inheritance, for contrast: unpinned type, ran the session model.
   writeFileSync(join(dir, "agent-b.jsonl"), usageLine("claude-opus-5", 2000) + "\n");
   metaFor(dir, "b", "general-purpose");
   try {
     const out = run(["tokens"], cfg);
-    assert.match(out, /Inherited the session model bare: 2k \(29%\) - general-purpose 2k\./);
+    assert.match(out, /Inherited the session model bare: 2k \(20% of the volume seen here\) - general-purpose 2k\./);
     assert.doesNotMatch(out, /other-plugin:relay \d/);
+    assert.doesNotMatch(out, /other-plugin:thinker \d/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("the by-agent section still prints when every sidecar is missing", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-opus-5"}\n');
+  writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-sonnet-5", 1000) + "\n");
+  writeFileSync(join(dir, "agent-b.jsonl"), usageLine("claude-sonnet-5", 1000) + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    // Total sidecar failure is the case this section most needs to announce:
+    // it means the undocumented file moved. Printing nothing would look
+    // identical to a build that never had the feature.
+    assert.match(out, /By agent - which role processed the volume:/);
+    assert.match(out, /2 transcripts had no readable agent-<id>\.meta\.json sidecar/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 

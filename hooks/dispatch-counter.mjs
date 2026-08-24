@@ -810,17 +810,29 @@ if (process.argv[2] === "tokens") {
         // Both verdicts are re-derived here from the model the transcript
         // actually ran on, not from the model the dispatch asked for. That is
         // the one thing this side of the report has and the dispatch log does
-        // not: an override the harness declined, a fallback mid-run, or
-        // CLAUDE_CODE_SUBAGENT_MODEL forcing every subagent at once all land in
-        // the usage lines, while the dispatch log can only record the request.
+        // not: an override the harness declined and a fallback mid-run both
+        // land in the usage lines, while the dispatch log can only record the
+        // request. One thing it does NOT see is CLAUDE_CODE_SUBAGENT_MODEL: the
+        // env var reaches the usage lines indistinguishably from a pin, so a
+        // machine forcing every subagent to haiku puts a pinned agent's volume
+        // in belowPinVol here while the dispatch report deliberately excludes
+        // it (there the remedy is unsetting one variable, not fixing one
+        // dispatch). The volume figure is right either way; only the remedy
+        // named beside it belongs to the other report.
         if (belowPin({ agent: meta.agentType, model, session: sessionModel })) pa.belowPinVol += vol;
         // Bare inheritance: an agent with no pin this plugin knows about, no
-        // model= on the dispatch, that ran ON its session's model above the
-        // sonnet line - the accidental-inheritance case the dispatch report
-        // counts. The "ran on the session model" clause is what keeps a
-        // machine-wide CLAUDE_CODE_SUBAGENT_MODEL out: that dispatch is bare in
-        // the sidecar too, but it did not inherit anything.
-        else if (!pinnedModel(meta.agentType) && meta.model == null && tm != null && tm === tsess && tsess > 2) pa.bareVol += vol;
+        // model= on the dispatch, that ran THE session's own model - the
+        // accidental-inheritance case the dispatch report counts, and the whole
+        // reason this section exists, so the test is deliberately the strict
+        // one. Same-tier is not enough: an agent from another plugin pinning
+        // opus-4-8 under an opus-5 session sits at the same tier and inherited
+        // nothing, which is the exact false positive that made the count-based
+        // warning overstate leaks. Identity misses one real case in exchange -
+        // a session that quota-fell to a sibling model after its transcript
+        // head was written, whose children then inherit a model the head does
+        // not name. That is an undercount in a case nothing here can resolve,
+        // and undercounting a warning beats accusing the wrong agent.
+        else if (!pinnedModel(meta.agentType) && meta.model == null && model === sessionModel && tsess > 2) pa.bareVol += vol;
       }
     }
   };
@@ -909,7 +921,12 @@ if (process.argv[2] === "tokens") {
     "",
     "By session model:",
     ...sessionRows.map(([m, s]) => `  ${m}: ${fmtN(s.vol)} across ${s.agents} agents - ${s.cmpVol ? `${Math.round((s.downVol / s.cmpVol) * 100)}% below session tier` : "not tier-comparable"}${s.cmpVol && s.vol > s.cmpVol ? ` (${fmtN(s.vol - s.cmpVol)} not comparable)` : ""}`),
-    ...(agentRows.length ? [
+    // `metaless` alone still opens the section. A window where EVERY sidecar is
+    // missing is the one this feature most needs to announce - it means the
+    // undocumented file moved or changed name - and gating the whole block on
+    // having rows made that case print nothing at all, indistinguishable from a
+    // build without the feature.
+    ...(agentRows.length || metaless ? [
       "",
       "By agent - which role processed the volume:",
       ...agentShown.map(([a, s]) => {
@@ -920,7 +937,10 @@ if (process.argv[2] === "tokens") {
       // Printed only when there IS volume to report: "0 below pin" reads as a
       // score, and this section is not one.
       ...(belowPinVol ? [`  Below the agent's own pin: ${fmtN(belowPinVol)} (${Math.round((belowPinVol / Math.max(1, agentVol)) * 100)}% of the volume seen here) - ${worst((s) => s.belowPinVol)}. Not a saving: the pin is the tier the role needs, so this is the same job done worse, and it counts as "routed down" in every other figure above.`] : []),
-      ...(bareVol ? [`  Inherited the session model bare: ${fmtN(bareVol)} (${Math.round((bareVol / Math.max(1, agentVol)) * 100)}%) - ${worst((s) => s.bareVol)}. Unpinned agent types with no model= on the dispatch; pass one (sonnet default) or give the type a pin.`] : []),
+      // Both callouts carry the same denominator label. Without it the share
+      // reads against the report total like the rows above it do, and the same
+      // volume appears twice under two different percentages.
+      ...(bareVol ? [`  Inherited the session model bare: ${fmtN(bareVol)} (${Math.round((bareVol / Math.max(1, agentVol)) * 100)}% of the volume seen here) - ${worst((s) => s.bareVol)}. Agent types with no pin, dispatched with no model=: pass one (sonnet default), give the type a pin, or - for a workflow-subagent row - set the model opt on the agent() call that spawned it.`] : []),
       ...(metaless ? [`  ${plural(metaless, "transcript")} had no readable agent-<id>.meta.json sidecar and are absent from this section only - every total elsewhere in this report still counts them.`] : []),
     ] : []),
     ...(unknownAgents ? ["", `${unknownAgents} agents not tier-comparable (${fmtN(unknownVol)}), excluded from routed-down math - either the agent ran an unrecognized model family (extend TIER_PATTERNS in dispatch-counter.mjs) or no model could be read from the parent session transcript, which happens when the transcript is gone or names no model anywhere.`] : []),
