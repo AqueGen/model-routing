@@ -1382,3 +1382,40 @@ test("a transcript with no sidecar keeps its volume and is declared", () => {
     assert.match(out, /2 transcripts had no readable agent-<id>\.meta\.json sidecar/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
+
+test("an oversized sidecar is skipped, not read", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-opus-5"}\n');
+  writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-sonnet-5", 1000) + "\n");
+  // Valid JSON naming a real agent type, but padded past the size cap: a
+  // sidecar is a few hundred bytes, and reading a huge one can exhaust memory
+  // before any catch preserves the report.
+  writeFileSync(join(dir, "agent-a.meta.json"), JSON.stringify({ agentType: "model-routing:scout", pad: "x".repeat(70000) }));
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /1 transcript had no readable agent-<id>\.meta\.json sidecar/);
+    assert.doesNotMatch(out, /model-routing:scout/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("the env-override caveat prints only in a window that contains one", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-opus-5"}\n');
+  // A pinned agent that ran below its pin - enough to print a callout.
+  writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-sonnet-5", 4000) + "\n");
+  metaFor(dir, "a", "model-routing:reviewer", "sonnet");
+  try {
+    // No dispatch log at all: the callout stands without the caveat.
+    assert.doesNotMatch(run(["tokens"], cfg), /CLAUDE_CODE_SUBAGENT_MODEL/);
+    // One env-forced dispatch inside the window: the caveat appears, because
+    // neither callout can tell a forced model from a chosen one.
+    writeLog(cfg, [{ ts: Date.now(), agent: "general-purpose", model: null, env: "haiku", session: "claude-opus-5" }]);
+    assert.match(run(["tokens"], cfg), /1 dispatch in it ran under CLAUDE_CODE_SUBAGENT_MODEL/);
+    // Same log, a window that ends before it: no caveat.
+    assert.doesNotMatch(run(["tokens", "--ago", "30"], cfg), /CLAUDE_CODE_SUBAGENT_MODEL/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});

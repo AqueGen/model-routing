@@ -500,7 +500,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   if (capable.length) {
     const rate = leaks.length / capable.length;
     leakLines.push("", `Tier leaks: ${leaks.length} of ${capable.length} dispatches on agent types with no pin this plugin knows (${Math.round(rate * 100)}%) went out bare on a strong session - each inherited that session model unless its own frontmatter pinned one.`);
-    if (rate > LEAK_WARN) leakLines.push(`  ! above the 20% rework threshold - pass an explicit model= on general-purpose/custom dispatches (sonnet default). Check "Inherited the session model bare" in \`tokens\` first: it reports the volume that actually ran at the session tier, and a foreign agent pinning its own model shows up here but not there.`);
+    if (rate > LEAK_WARN) leakLines.push(`  ! above the 20% rework threshold - pass an explicit model= on general-purpose/custom dispatches (sonnet default). Check "Inherited the session model bare" in \`tokens\` first: it reports the volume that actually ran, so a foreign agent pinning a model CHEAPER than the session drops out of it - one pinning the session's own model cannot, and is counted there too.`);
   }
   if (unrankable) {
     leakLines.push(
@@ -679,9 +679,16 @@ if (process.argv[2] === "tokens") {
   // type drops its transcript out of the per-agent section ONLY, and is
   // counted on its own line. Every total elsewhere in this report is computed
   // from the transcripts alone and is unaffected either way.
+  // A real sidecar is a few hundred bytes. The cap is not about legitimate
+  // growth, it is about not letting one corrupt or hostile file stall a report
+  // that would otherwise work: readFileSync on a multi-gigabyte file can exhaust
+  // memory BEFORE the catch below ever gets a chance to preserve anything.
+  const META_MAX = 64 * 1024;
   const readMeta = (p) => {
+    const f = p.replace(/\.jsonl$/, ".meta.json");
     try {
-      const m = JSON.parse(readFileSync(p.replace(/\.jsonl$/, ".meta.json"), "utf-8"));
+      if (statSync(f).size > META_MAX) return null;
+      const m = JSON.parse(readFileSync(f, "utf-8"));
       return m && typeof m.agentType === "string" && m.agentType ? m : null;
     } catch { return null; }
   };
@@ -904,6 +911,16 @@ if (process.argv[2] === "tokens") {
   const agentVol = agentRows.reduce((a, [, s]) => a + s.vol, 0);
   const belowPinVol = agentRows.reduce((a, [, s]) => a + s.belowPinVol, 0);
   const bareVol = agentRows.reduce((a, [, s]) => a + s.bareVol, 0);
+  // CLAUDE_CODE_SUBAGENT_MODEL forces every subagent at once and reaches the
+  // usage lines indistinguishably from a pin, so neither callout can tell a
+  // forced dispatch from a chosen one - a machine forcing haiku files a pinned
+  // agent under "below the pin", one forcing the session's own model files an
+  // unpinned agent under "inherited it bare". The dispatch log DOES record the
+  // variable, so the caveat is printed only in a window that actually contains
+  // forced dispatches instead of hedging every report against a rare setting.
+  const envForced = (() => {
+    try { return readEntries(dataFile()).filter((e) => e.env && e.ts >= win.start && e.ts < win.end).length; } catch { return 0; }
+  })();
   // Named worst-first, because the remedy differs per agent and an aggregate
   // ("40.1M below pin") tells you the size of a problem without telling you
   // whose it is.
@@ -941,6 +958,7 @@ if (process.argv[2] === "tokens") {
       // reads against the report total like the rows above it do, and the same
       // volume appears twice under two different percentages.
       ...(bareVol ? [`  Inherited the session model bare: ${fmtN(bareVol)} (${Math.round((bareVol / Math.max(1, agentVol)) * 100)}% of the volume seen here) - ${worst((s) => s.bareVol)}. Agent types with no pin, dispatched with no model=: pass one (sonnet default), give the type a pin, or - for a workflow-subagent row - set the model opt on the agent() call that spawned it.`] : []),
+      ...(envForced && (belowPinVol || bareVol) ? [`  Read both callouts with one caveat this window earns: ${plural(envForced, "dispatch")} in it ran under CLAUDE_CODE_SUBAGENT_MODEL, which forces every subagent at once and is indistinguishable from a pin in a usage line. Volume from those is classified by what ran, not by what chose it, and the remedy there is unsetting the variable rather than fixing a dispatch.`] : []),
       ...(metaless ? [`  ${plural(metaless, "transcript")} had no readable agent-<id>.meta.json sidecar and are absent from this section only - every total elsewhere in this report still counts them.`] : []),
     ] : []),
     ...(unknownAgents ? ["", `${unknownAgents} agents not tier-comparable (${fmtN(unknownVol)}), excluded from routed-down math - either the agent ran an unrecognized model family (extend TIER_PATTERNS in dispatch-counter.mjs) or no model could be read from the parent session transcript, which happens when the transcript is gone or names no model anywhere.`] : []),
