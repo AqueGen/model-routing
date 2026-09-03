@@ -88,7 +88,21 @@ const AGENT_PINS = {
   "model-routing:implementer": { model: "sonnet", effort: "medium" },
   "model-routing:reviewer": { model: "opus", effort: "high" },
 };
-const pinnedModel = (agent) => AGENT_PINS[agent]?.model ?? null;
+// Model pins for OTHER plugins' agents, curated by hand from their frontmatter
+// the same way AGENT_PINS is - the difference is these files live outside this
+// repo, so nothing here can assert they stay in sync, and there is no effort
+// column because an agent's effort pin is not visible from outside its own
+// plugin. Every entry exists because it showed up as noise: a bare dispatch of
+// that exact agent type, on a session strong enough to make "did this inherit
+// the session model" ambiguous, when the frontmatter already answers the
+// question. This is deliberately small - add an entry when one causes a false
+// positive in YOUR logs, not preemptively for every plugin that might.
+const FOREIGN_AGENT_PINS = {
+  "codex:codex-rescue": "sonnet",
+  "caveman:cavecrew-investigator": "haiku",
+  "caveman:cavecrew-reviewer": "haiku",
+};
+const pinnedModel = (agent) => AGENT_PINS[agent]?.model ?? FOREIGN_AGENT_PINS[agent] ?? null;
 const pinnedEffort = (agent) => AGENT_PINS[agent]?.effort ?? null;
 // Unpinned agent types that are inherently cheap dispatch targets.
 const CHEAP_AGENTS = new Set(["Explore"]);
@@ -471,17 +485,18 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   // Tier leaks: bare dispatches of an agent type carrying no pin THIS PLUGIN
   // knows about (general-purpose, custom types), made from a strong session
   // (> sonnet). Such a dispatch inherits the session model - unless the agent
-  // pins its own in frontmatter, which the dispatch log cannot see and which is
-  // common: an agent from another plugin can pin sonnet and still land here
-  // looking exactly like an inherited opus dispatch. So this section counts
-  // dispatches that COULD have inherited, and says so; the measured answer is
-  // in `tokens`, which reads the model each subagent actually ran on. Bundled
-  // agents are frontmatter-pinned and never leak; Explore is inherently cheap.
+  // pins its own in frontmatter, which the dispatch log cannot see UNLESS the
+  // agent is in FOREIGN_AGENT_PINS, a small hand-curated list of exactly the
+  // foreign agents that were seen causing this false positive. Everything else
+  // from another plugin is still invisible, so this section counts dispatches
+  // that COULD have inherited and says so; the measured answer is in `tokens`,
+  // which reads the model each subagent actually ran on. Bundled agents are
+  // frontmatter-pinned and never leak; Explore is inherently cheap.
   // Threshold is the research rework line: when a
   // routed-down tier would need rework >~20% of the time the price edge
   // is gone - here inverted, >20% of cheap-capable dispatches leaking UP
   // is the same signal that the tier assignment is not holding.
-  const BUNDLED = new Set([...Object.keys(AGENT_PINS), ...CHEAP_AGENTS]);
+  const BUNDLED = new Set([...Object.keys(AGENT_PINS), ...Object.keys(FOREIGN_AGENT_PINS), ...CHEAP_AGENTS]);
   const unpinned = entries.filter((e) => !BUNDLED.has(e.agent));
   // The question "did this inherit a STRONG session model" is only answerable
   // where the session model is both recorded and rankable. An entry without one

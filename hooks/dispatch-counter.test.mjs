@@ -97,6 +97,43 @@ test("bare pinned agents classify by their frontmatter pin", () => {
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
+test("a curated foreign agent pin classifies like a bundled one, not a leak", () => {
+  const cfg = freshConfigDir();
+  const now = Date.now();
+  // codex:codex-rescue pins sonnet in its own frontmatter (openai-codex
+  // plugin) - this plugin cannot see that file, but FOREIGN_AGENT_PINS
+  // records it by hand because it was the exact agent causing false leak
+  // warnings before this test existed. A bare dispatch on an opus session
+  // should route down on the strength of that known pin, the same as a
+  // bundled agent, and must not count toward "tier leaks" at all.
+  writeLog(cfg, [
+    { ts: now, agent: "codex:codex-rescue", model: null, session: "claude-opus-5" },
+    // A genuinely unpinned type, for contrast - this one SHOULD leak.
+    { ts: now, agent: "general-purpose", model: null, session: "claude-opus-5" },
+  ]);
+  try {
+    const out = run(["report"], cfg);
+    assert.match(out, /1 of 2 dispatches \(50%\) ran on a cheaper model/);
+    assert.match(out, /Ran cheaper[\s\S]*codex:codex-rescue \(pin=sonnet\)/);
+    assert.match(out, /Tier leaks: 1 of 1 dispatches on agent types with no pin this plugin knows \(100%\)/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a foreign-pinned agent dispatched below its own pin is still called out", () => {
+  const cfg = freshConfigDir();
+  const now = Date.now();
+  // Knowing a foreign pin has to cut both ways: if this plugin now credits
+  // codex:codex-rescue with a sonnet pin for the routed-down math, a
+  // dispatch that explicitly overrides it to haiku is undercutting a role
+  // this plugin claims to understand, same as it would flag for its own
+  // reviewer agent.
+  writeLog(cfg, [{ ts: now, agent: "codex:codex-rescue", model: "haiku", session: "claude-opus-5" }]);
+  try {
+    const out = run(["report"], cfg);
+    assert.match(out, /Ran BELOW the agent's pin[\s\S]*codex:codex-rescue \(model=haiku, pin=sonnet\)/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
 test("a dispatch below its agent's pin is called out, not counted as a win", () => {
   const cfg = freshConfigDir();
   const now = Date.now();
