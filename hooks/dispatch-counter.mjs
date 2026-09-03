@@ -97,6 +97,16 @@ const AGENT_PINS = {
 // the session model" ambiguous, when the frontmatter already answers the
 // question. This is deliberately small - add an entry when one causes a false
 // positive in YOUR logs, not preemptively for every plugin that might.
+//
+// A pin recorded here can go stale, and this is only about `report` (see
+// ownPinnedModel below for why `tokens` never trusts this table): the two
+// caveman entries ship a documented runtime override -
+// CAVECREW_REVIEWER_MODEL / CAVECREW_INVESTIGATOR_MODEL - that PATCHES the
+// installed agent's own frontmatter file, persisting until the plugin is
+// next updated or reinstalled. Set either on this machine and `report` keeps
+// crediting the OLD pin until this table is edited by hand to match. Nothing
+// here can detect that; it is a known, accepted gap in a table that never
+// claimed to be live.
 const FOREIGN_AGENT_PINS = {
   "codex:codex-rescue": "sonnet",
   "caveman:cavecrew-investigator": "haiku",
