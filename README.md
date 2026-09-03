@@ -595,7 +595,7 @@ By agent - which role processed the volume:
     59.8M (10%)  model-routing:reviewer     28 agents on sonnet-5, fable-5, opus-5
      15.3M (2%)  codex:codex-rescue         11 agents on sonnet-5
   Below the agent's own pin: 49.6M (8% of the volume seen here) - model-routing:reviewer 40.1M, model-routing:scout 9.5M.
-  Inherited the session model bare: 1.8M (0%) - Explore 1.7M, claude 86k, general-purpose 73k.
+  Inherited the session model bare: 1.8M (0% of the volume seen here) - Explore 1.7M, claude 86k, general-purpose 73k.
 ```
 
 The two callout lines are the same two problems the dispatch report flags, now with a size beside them. Both verdicts are re-derived from the model each transcript ACTUALLY ran on, which is the one thing this side of the report has and the dispatch log does not: an override the harness declined and a fallback mid-run both reach the usage lines, while the log can only ever record what was asked for.

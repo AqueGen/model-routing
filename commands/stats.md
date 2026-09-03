@@ -37,6 +37,7 @@ So when a dispatch-side warning names an agent - a tier leak, or a dispatch
 below its pin - carry its volume from the "By agent" block into the
 sentence. When that volume is not there, say the count overstated it and
 name why: most often an agent from another plugin pinning a model cheaper
-than the session, which the dispatch log cannot see. When the two disagree
+than the session, which the dispatch log cannot see unless that agent is in
+FOREIGN_AGENT_PINS. When the two disagree
 and the window contains a mid-session /model switch, say that instead - the
 token side attributes those subagents to the model the session started on.
