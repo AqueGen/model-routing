@@ -97,6 +97,43 @@ test("bare pinned agents classify by their frontmatter pin", () => {
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
+test("a curated foreign agent pin classifies like a bundled one, not a leak", () => {
+  const cfg = freshConfigDir();
+  const now = Date.now();
+  // codex:codex-rescue pins sonnet in its own frontmatter (openai-codex
+  // plugin) - this plugin cannot see that file, but FOREIGN_AGENT_PINS
+  // records it by hand because it was the exact agent causing false leak
+  // warnings before this test existed. A bare dispatch on an opus session
+  // should route down on the strength of that known pin, the same as a
+  // bundled agent, and must not count toward "tier leaks" at all.
+  writeLog(cfg, [
+    { ts: now, agent: "codex:codex-rescue", model: null, session: "claude-opus-5" },
+    // A genuinely unpinned type, for contrast - this one SHOULD leak.
+    { ts: now, agent: "general-purpose", model: null, session: "claude-opus-5" },
+  ]);
+  try {
+    const out = run(["report"], cfg);
+    assert.match(out, /1 of 2 dispatches \(50%\) ran on a cheaper model/);
+    assert.match(out, /Ran cheaper[\s\S]*codex:codex-rescue \(pin=sonnet\)/);
+    assert.match(out, /Tier leaks: 1 of 1 dispatches on agent types with no pin this plugin knows \(100%\)/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a foreign-pinned agent dispatched below its own pin is still called out", () => {
+  const cfg = freshConfigDir();
+  const now = Date.now();
+  // Knowing a foreign pin has to cut both ways: if this plugin now credits
+  // codex:codex-rescue with a sonnet pin for the routed-down math, a
+  // dispatch that explicitly overrides it to haiku is undercutting a role
+  // this plugin claims to understand, same as it would flag for its own
+  // reviewer agent.
+  writeLog(cfg, [{ ts: now, agent: "codex:codex-rescue", model: "haiku", session: "claude-opus-5" }]);
+  try {
+    const out = run(["report"], cfg);
+    assert.match(out, /Ran BELOW the agent's pin[\s\S]*codex:codex-rescue \(model=haiku, pin=sonnet\)/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
 test("a dispatch below its agent's pin is called out, not counted as a win", () => {
   const cfg = freshConfigDir();
   const now = Date.now();
@@ -1345,6 +1382,47 @@ test("an agent pinning its own model in frontmatter is not counted as inherited"
     assert.match(out, /Inherited the session model bare: 2k \(20% of the volume seen here\) - general-purpose 2k\./);
     assert.doesNotMatch(out, /other-plugin:relay \d/);
     assert.doesNotMatch(out, /other-plugin:thinker \d/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a FOREIGN_AGENT_PINS entry does not blind tokens' bare-inheritance detector", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-opus-5"}\n');
+  // codex:codex-rescue is curated in FOREIGN_AGENT_PINS as pinning sonnet - but
+  // that table is a hand-maintained guess `report` needs because it has no
+  // other way to know, not a measurement. If the guess ever goes stale
+  // (upstream drops the pin, or it was simply wrong), `tokens` is the one
+  // report that can still tell, because it reads what actually ran instead of
+  // trusting the table. This dispatch ran the SESSION'S OWN model bare -
+  // genuine inheritance - and must still be caught even though the agent type
+  // has a curated entry.
+  writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-opus-5", 5000) + "\n");
+  metaFor(dir, "a", "codex:codex-rescue");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /Inherited the session model bare: 5k \(100% of the volume seen here\) - codex:codex-rescue 5k\./);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("tokens flags a foreign agent running below ITS OWN measured model, using only the pin this plugin owns", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-opus-5"}\n');
+  // codex-rescue's curated pin (sonnet) is intentionally NOT consulted here -
+  // ownPinnedModel only knows this plugin's own AGENT_PINS, so a dispatch
+  // running below the curated guess is neither flagged as below-pin (this
+  // plugin does not own that policy) nor miscounted as bare inheritance
+  // (haiku is not the session's opus-5). It just contributes plain volume.
+  writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-haiku-4-5", 4000) + "\n");
+  metaFor(dir, "a", "codex:codex-rescue", "haiku");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.doesNotMatch(out, /Below the agent's own pin/);
+    assert.doesNotMatch(out, /Inherited the session model bare/);
+    assert.match(out, /codex:codex-rescue\s+1 agent on haiku-4-5/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 

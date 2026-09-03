@@ -88,7 +88,43 @@ const AGENT_PINS = {
   "model-routing:implementer": { model: "sonnet", effort: "medium" },
   "model-routing:reviewer": { model: "opus", effort: "high" },
 };
-const pinnedModel = (agent) => AGENT_PINS[agent]?.model ?? null;
+// Model pins for OTHER plugins' agents, curated by hand from their frontmatter
+// the same way AGENT_PINS is - the difference is these files live outside this
+// repo, so nothing here can assert they stay in sync, and there is no effort
+// column because an agent's effort pin is not visible from outside its own
+// plugin. Every entry exists because it showed up as noise: a bare dispatch of
+// that exact agent type, on a session strong enough to make "did this inherit
+// the session model" ambiguous, when the frontmatter already answers the
+// question. This is deliberately small - add an entry when one causes a false
+// positive in YOUR logs, not preemptively for every plugin that might.
+//
+// A pin recorded here can go stale, and this is only about `report` (see
+// ownPinnedModel below for why `tokens` never trusts this table): the two
+// caveman entries ship a documented runtime override -
+// CAVECREW_REVIEWER_MODEL / CAVECREW_INVESTIGATOR_MODEL - that PATCHES the
+// installed agent's own frontmatter file, persisting until the plugin is
+// next updated or reinstalled. Set either on this machine and `report` keeps
+// crediting the OLD pin until this table is edited by hand to match. Nothing
+// here can detect that; it is a known, accepted gap in a table that never
+// claimed to be live.
+const FOREIGN_AGENT_PINS = {
+  "codex:codex-rescue": "sonnet",
+  "caveman:cavecrew-investigator": "haiku",
+  "caveman:cavecrew-reviewer": "haiku",
+};
+const pinnedModel = (agent) => AGENT_PINS[agent]?.model ?? FOREIGN_AGENT_PINS[agent] ?? null;
+// AGENT_PINS only - no foreign fallback. This is the pin source for anything
+// that MEASURES rather than infers: `tokens` reads the model a subagent
+// actually ran on, so its verdicts about that agent's own type - did it dip
+// below its pin, did it inherit the session bare - should rest on a fact this
+// plugin can enforce (its own frontmatter, held to a sync test), never on an
+// unverifiable guess about someone else's. A FOREIGN_AGENT_PINS entry that
+// drifts from the truth (upstream changes the pin, or was simply guessed
+// wrong) would otherwise silently and permanently blind `tokens`' bare-
+// inheritance detector for that agent - the opposite of what "measured, not
+// inferred" is supposed to mean. `report` has no such option; it never
+// measures anything, so it may as well trust the best guess it has.
+const ownPinnedModel = (agent) => AGENT_PINS[agent]?.model ?? null;
 const pinnedEffort = (agent) => AGENT_PINS[agent]?.effort ?? null;
 // Unpinned agent types that are inherently cheap dispatch targets.
 const CHEAP_AGENTS = new Set(["Explore"]);
@@ -347,13 +383,17 @@ const effectiveModel = (e) => e.env ?? e.model ?? pinnedModel(e.agent) ?? null;
 // than the pin itself, because the pins-are-ceilings rule REQUIRES capping at
 // the session model: reviewer on a sonnet session correctly runs sonnet, and
 // that must not be flagged. Unpinned agent types have no floor at all.
-function belowPin(e) {
+// `pinLookup` defaults to the wide table (report's own callers, which never
+// had ground truth to lose). `tokens` passes `ownPinnedModel` explicitly at
+// its one call site, so its verdicts stay measurement-only - see the comment
+// on `ownPinnedModel` above.
+function belowPin(e, pinLookup = pinnedModel) {
   // CLAUDE_CODE_SUBAGENT_MODEL forces every subagent at once, so it is a
   // deliberate machine-wide setting rather than a judgement made per dispatch.
   // Flagging it would fill this section with rows whose only remedy is unsetting
   // the variable, which the env= rows already say plainly.
   if (e.env) return false;
-  const tp = tierOf(pinnedModel(e.agent));
+  const tp = tierOf(pinLookup(e.agent));
   const te = tierOf(effectiveModel(e));
   const ts = tierOf(e.session);
   // An unknown tier on ANY of the three sides means no verdict, the same rule
@@ -471,17 +511,18 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   // Tier leaks: bare dispatches of an agent type carrying no pin THIS PLUGIN
   // knows about (general-purpose, custom types), made from a strong session
   // (> sonnet). Such a dispatch inherits the session model - unless the agent
-  // pins its own in frontmatter, which the dispatch log cannot see and which is
-  // common: an agent from another plugin can pin sonnet and still land here
-  // looking exactly like an inherited opus dispatch. So this section counts
-  // dispatches that COULD have inherited, and says so; the measured answer is
-  // in `tokens`, which reads the model each subagent actually ran on. Bundled
-  // agents are frontmatter-pinned and never leak; Explore is inherently cheap.
+  // pins its own in frontmatter, which the dispatch log cannot see UNLESS the
+  // agent is in FOREIGN_AGENT_PINS, a small hand-curated list of exactly the
+  // foreign agents that were seen causing this false positive. Everything else
+  // from another plugin is still invisible, so this section counts dispatches
+  // that COULD have inherited and says so; the measured answer is in `tokens`,
+  // which reads the model each subagent actually ran on. Bundled agents are
+  // frontmatter-pinned and never leak; Explore is inherently cheap.
   // Threshold is the research rework line: when a
   // routed-down tier would need rework >~20% of the time the price edge
   // is gone - here inverted, >20% of cheap-capable dispatches leaking UP
   // is the same signal that the tier assignment is not holding.
-  const BUNDLED = new Set([...Object.keys(AGENT_PINS), ...CHEAP_AGENTS]);
+  const BUNDLED = new Set([...Object.keys(AGENT_PINS), ...Object.keys(FOREIGN_AGENT_PINS), ...CHEAP_AGENTS]);
   const unpinned = entries.filter((e) => !BUNDLED.has(e.agent));
   // The question "did this inherit a STRONG session model" is only answerable
   // where the session model is both recorded and rankable. An entry without one
@@ -826,7 +867,11 @@ if (process.argv[2] === "tokens") {
         // it (there the remedy is unsetting one variable, not fixing one
         // dispatch). The volume figure is right either way; only the remedy
         // named beside it belongs to the other report.
-        if (belowPin({ agent: meta.agentType, model, session: sessionModel })) pa.belowPinVol += vol;
+        // Pass ownPinnedModel explicitly: this section measures the model that
+        // actually ran, so its verdict about the agent's OWN pin must rest on
+        // a pin this plugin can vouch for, never on the FOREIGN_AGENT_PINS
+        // guess `report` uses (see the comment on ownPinnedModel above).
+        if (belowPin({ agent: meta.agentType, model, session: sessionModel }, ownPinnedModel)) pa.belowPinVol += vol;
         // Bare inheritance: an agent with no pin this plugin knows about, no
         // model= on the dispatch, that ran THE session's own model - the
         // accidental-inheritance case the dispatch report counts, and the whole
@@ -839,7 +884,12 @@ if (process.argv[2] === "tokens") {
         // head was written, whose children then inherit a model the head does
         // not name. That is an undercount in a case nothing here can resolve,
         // and undercounting a warning beats accusing the wrong agent.
-        else if (!pinnedModel(meta.agentType) && meta.model == null && model === sessionModel && tsess > 2) pa.bareVol += vol;
+        // Same reasoning as the belowPin call above: a FOREIGN_AGENT_PINS entry
+        // must never suppress this check. If the entry is stale or simply
+        // wrong, this is the only thing left that would still catch the agent
+        // genuinely inheriting the session model - ownPinnedModel keeps that
+        // possible no matter what the curated table claims.
+        else if (!ownPinnedModel(meta.agentType) && meta.model == null && model === sessionModel && tsess > 2) pa.bareVol += vol;
       }
     }
   };
