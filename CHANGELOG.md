@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.16.0](https://github.com/AqueGen/model-routing/compare/v0.15.0...v0.16.0) (2026-09-03)
+
+
+### Features
+
+* attribute subagent token volume to the agent that ran it ([#34](https://github.com/AqueGen/model-routing/issues/34)) ([ecc30c3](https://github.com/AqueGen/model-routing/commit/ecc30c3abb6ebb9e210e4de30ce7710402aa3f20))
+* recognize a curated set of foreign agent pins in report too ([#36](https://github.com/AqueGen/model-routing/issues/36)) ([b75da55](https://github.com/AqueGen/model-routing/commit/b75da558d916677fc3136e7e86320b7df23a136e))
+
+
+### Bug Fixes
+
+* scope the env caveat by --session, and say which pin each line means ([#37](https://github.com/AqueGen/model-routing/issues/37)) ([5ad0935](https://github.com/AqueGen/model-routing/commit/5ad09355334ca1b62ec67aa6054fde09247893e9))
+
 ## [0.15.0](https://github.com/AqueGen/model-routing/compare/v0.14.0...v0.15.0) (2026-08-20)
 
 The release where the central claim got measured instead of asserted, and did not entirely survive. A new eval harness runs the same question with and without the plugin loaded and prices the difference: routing takes roughly a sixth off a dispatch that was going to happen anyway, and adds roughly a fifth when it talks a session into dispatching that would not have. A fresh subagent pays cache write for everything it reads while a main session pays cache read, 12.5x cheaper, for what it already holds - so this is a plugin for sessions that already delegate, through Superpowers, workflows, or any unpinned agent inheriting the session model. The README says that at the top now instead of implying the opposite throughout.
