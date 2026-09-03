@@ -1385,6 +1385,47 @@ test("an agent pinning its own model in frontmatter is not counted as inherited"
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
+test("a FOREIGN_AGENT_PINS entry does not blind tokens' bare-inheritance detector", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-opus-5"}\n');
+  // codex:codex-rescue is curated in FOREIGN_AGENT_PINS as pinning sonnet - but
+  // that table is a hand-maintained guess `report` needs because it has no
+  // other way to know, not a measurement. If the guess ever goes stale
+  // (upstream drops the pin, or it was simply wrong), `tokens` is the one
+  // report that can still tell, because it reads what actually ran instead of
+  // trusting the table. This dispatch ran the SESSION'S OWN model bare -
+  // genuine inheritance - and must still be caught even though the agent type
+  // has a curated entry.
+  writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-opus-5", 5000) + "\n");
+  metaFor(dir, "a", "codex:codex-rescue");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /Inherited the session model bare: 5k \(100% of the volume seen here\) - codex:codex-rescue 5k\./);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("tokens flags a foreign agent running below ITS OWN measured model, using only the pin this plugin owns", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-opus-5"}\n');
+  // codex-rescue's curated pin (sonnet) is intentionally NOT consulted here -
+  // ownPinnedModel only knows this plugin's own AGENT_PINS, so a dispatch
+  // running below the curated guess is neither flagged as below-pin (this
+  // plugin does not own that policy) nor miscounted as bare inheritance
+  // (haiku is not the session's opus-5). It just contributes plain volume.
+  writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-haiku-4-5", 4000) + "\n");
+  metaFor(dir, "a", "codex:codex-rescue", "haiku");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.doesNotMatch(out, /Below the agent's own pin/);
+    assert.doesNotMatch(out, /Inherited the session model bare/);
+    assert.match(out, /codex:codex-rescue\s+1 agent on haiku-4-5/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
 test("the by-agent section still prints when every sidecar is missing", () => {
   const cfg = freshConfigDir();
   const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
