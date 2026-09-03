@@ -2,6 +2,10 @@
 
 ## [0.16.0](https://github.com/AqueGen/model-routing/compare/v0.15.0...v0.16.0) (2026-09-03)
 
+The release where the stats stopped counting and started weighing. A dispatch is one line in a log whether it processed four thousand tokens or four million, so the two warnings the dispatch report raised - volume below an agent's own pin, and bare dispatches inheriting a strong session model - ranked by how often something happened and never by what it cost. `tokens` now reads the sidecar Claude Code writes beside every subagent transcript and names the agent behind each slice of volume, with both verdicts re-derived from the model that actually ran. The first thing that section found was that the loudest warning of the week was mostly noise: 11 of 18 flagged "tier leaks" were an agent from another plugin whose own frontmatter pins sonnet, invisible to a hook that only sees requests. That agent and two others are now in a small hand-curated table so `report` stops crying wolf too - but the table is a guess, so `tokens` deliberately never consults it, and stays the side that measures.
+
+Four review rounds across Fable, Opus and Codex went into this, and the README says plainly which half of the answer each report owns: what ran and how much, only the transcripts know; what was asked for and what the session model was at that moment, only the log knows.
+
 
 ### Features
 
