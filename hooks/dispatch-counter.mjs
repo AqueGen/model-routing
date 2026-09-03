@@ -468,12 +468,16 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     bySession.set(key, s);
   }
   const sessionRows = [...bySession.entries()].sort((a, b) => b[1].n - a[1].n);
-  // Tier leaks: unpinned dispatches of a non-bundled agent (general-purpose,
-  // custom types) that ran bare on a strong session (> sonnet) and so
-  // silently inherited the expensive model. These are the accidental-
-  // inheritance cost the 0.5.4 rule targets - work that could have been
-  // cheaper. Bundled agents are frontmatter-pinned and never leak; Explore
-  // is inherently cheap. Threshold is the research rework line: when a
+  // Tier leaks: bare dispatches of an agent type carrying no pin THIS PLUGIN
+  // knows about (general-purpose, custom types), made from a strong session
+  // (> sonnet). Such a dispatch inherits the session model - unless the agent
+  // pins its own in frontmatter, which the dispatch log cannot see and which is
+  // common: an agent from another plugin can pin sonnet and still land here
+  // looking exactly like an inherited opus dispatch. So this section counts
+  // dispatches that COULD have inherited, and says so; the measured answer is
+  // in `tokens`, which reads the model each subagent actually ran on. Bundled
+  // agents are frontmatter-pinned and never leak; Explore is inherently cheap.
+  // Threshold is the research rework line: when a
   // routed-down tier would need rework >~20% of the time the price edge
   // is gone - here inverted, >20% of cheap-capable dispatches leaking UP
   // is the same signal that the tier assignment is not holding.
@@ -495,8 +499,8 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   const leakLines = [];
   if (capable.length) {
     const rate = leaks.length / capable.length;
-    leakLines.push("", `Tier leaks: ${leaks.length} of ${capable.length} unpinned dispatches inherited a strong session model bare (${Math.round(rate * 100)}%).`);
-    if (rate > LEAK_WARN) leakLines.push(`  ! above the 20% rework threshold - pass an explicit model= on general-purpose/custom dispatches (sonnet default).`);
+    leakLines.push("", `Tier leaks: ${leaks.length} of ${capable.length} dispatches on agent types with no pin this plugin knows (${Math.round(rate * 100)}%) went out bare on a strong session - each inherited that session model unless its own frontmatter pinned one.`);
+    if (rate > LEAK_WARN) leakLines.push(`  ! above the 20% rework threshold - pass an explicit model= on general-purpose/custom dispatches (sonnet default). Check "Inherited the session model bare" in \`tokens\` first: it reports the volume that actually ran, so a foreign agent pinning a model CHEAPER than the session drops out of it - one pinning the session's own model cannot, and is counted there too.`);
   }
   if (unrankable) {
     leakLines.push(
@@ -598,6 +602,9 @@ if (process.argv[2] === "tokens") {
   const sessionModelCache = new Map();
   const perModel = new Map(); // model -> {agents, in, out, cr, cw5, cw1h, down}
   const perSession = new Map(); // session model -> {agents, vol, downVol}
+  // agent type -> {agents, vol, models: Map(model -> vol), belowPinVol, bareVol}
+  const perAgent = new Map();
+  let metaless = 0; // agent transcripts whose sidecar named no type
   let unknownAgents = 0, unknownVol = 0; // models tierOf cannot rank
   // Cost accounting. The rate epoch is the END of the window, not "now", so a
   // historical window is priced at the rates that applied to it - one model on
@@ -660,6 +667,30 @@ if (process.argv[2] === "tokens") {
       } catch {}
     }
     return fileVols;
+  };
+  // Which AGENT ran a transcript. The usage lines name only the model, so
+  // grouping volume by model answers "sonnet processed 325M" and never "which
+  // role spent it" - and the two warnings in the dispatch report (volume below
+  // an agent's pin, volume that inherited the session model bare) stay counts
+  // with no magnitude beside them. Claude Code writes agent-<id>.meta.json
+  // beside every agent-<id>.jsonl carrying `agentType` and, when the dispatch
+  // passed one, `model`. That file is not a documented interface, so every
+  // field is optional here: a sidecar that is missing, unreadable, or names no
+  // type drops its transcript out of the per-agent section ONLY, and is
+  // counted on its own line. Every total elsewhere in this report is computed
+  // from the transcripts alone and is unaffected either way.
+  // A real sidecar is a few hundred bytes. The cap is not about legitimate
+  // growth, it is about not letting one corrupt or hostile file stall a report
+  // that would otherwise work: readFileSync on a multi-gigabyte file can exhaust
+  // memory BEFORE the catch below ever gets a chance to preserve anything.
+  const META_MAX = 64 * 1024;
+  const readMeta = (p) => {
+    const f = p.replace(/\.jsonl$/, ".meta.json");
+    try {
+      if (statSync(f).size > META_MAX) return null;
+      const m = JSON.parse(readFileSync(f, "utf-8"));
+      return m && typeof m.agentType === "string" && m.agentType ? m : null;
+    } catch { return null; }
   };
   const walk = (dir, depth) => {
     let entries;
@@ -741,6 +772,15 @@ if (process.argv[2] === "tokens") {
       const ss = perSession.get(sessKey) ?? { agents: 0, vol: 0, cmpVol: 0, downVol: 0 };
       ss.agents++;
       perSession.set(sessKey, ss);
+      const meta = readMeta(p);
+      if (!meta) metaless++;
+      // One transcript is one agent, counted here for the same reason ss.agents
+      // is counted outside the per-model loop: a mid-run fallback splits the
+      // volume across two models but is still a single dispatch.
+      const pa = meta
+        ? perAgent.get(meta.agentType) ?? { agents: 0, vol: 0, models: new Map(), belowPinVol: 0, bareVol: 0 }
+        : null;
+      if (pa) { pa.agents++; perAgent.set(meta.agentType, pa); }
       for (const [model, v] of fileVols) {
         const vol = volOf(v);
         // Cost as it ran, and what the same token counts would have cost had the
@@ -771,6 +811,35 @@ if (process.argv[2] === "tokens") {
         // headline; non-comparable volume is shown, never percented.
         if (tm != null && tsess != null) ss.cmpVol += vol;
         if (down) ss.downVol += vol;
+        if (!pa) continue;
+        pa.vol += vol;
+        pa.models.set(model, (pa.models.get(model) ?? 0) + vol);
+        // Both verdicts are re-derived here from the model the transcript
+        // actually ran on, not from the model the dispatch asked for. That is
+        // the one thing this side of the report has and the dispatch log does
+        // not: an override the harness declined and a fallback mid-run both
+        // land in the usage lines, while the dispatch log can only record the
+        // request. One thing it does NOT see is CLAUDE_CODE_SUBAGENT_MODEL: the
+        // env var reaches the usage lines indistinguishably from a pin, so a
+        // machine forcing every subagent to haiku puts a pinned agent's volume
+        // in belowPinVol here while the dispatch report deliberately excludes
+        // it (there the remedy is unsetting one variable, not fixing one
+        // dispatch). The volume figure is right either way; only the remedy
+        // named beside it belongs to the other report.
+        if (belowPin({ agent: meta.agentType, model, session: sessionModel })) pa.belowPinVol += vol;
+        // Bare inheritance: an agent with no pin this plugin knows about, no
+        // model= on the dispatch, that ran THE session's own model - the
+        // accidental-inheritance case the dispatch report counts, and the whole
+        // reason this section exists, so the test is deliberately the strict
+        // one. Same-tier is not enough: an agent from another plugin pinning
+        // opus-4-8 under an opus-5 session sits at the same tier and inherited
+        // nothing, which is the exact false positive that made the count-based
+        // warning overstate leaks. Identity misses one real case in exchange -
+        // a session that quota-fell to a sibling model after its transcript
+        // head was written, whose children then inherit a model the head does
+        // not name. That is an undercount in a case nothing here can resolve,
+        // and undercounting a warning beats accusing the wrong agent.
+        else if (!pinnedModel(meta.agentType) && meta.model == null && model === sessionModel && tsess > 2) pa.bareVol += vol;
       }
     }
   };
@@ -822,6 +891,41 @@ if (process.argv[2] === "tokens") {
   const comparableVol = Math.max(1, total - unknownVol);
   const bar = (v) => "#".repeat(Math.max(1, Math.round((v / total) * 24)));
   const sessionRows = [...perSession.entries()].sort((a, b) => b[1].vol - a[1].vol);
+  // Rows are capped so a machine with dozens of agent types prints a report and
+  // not a directory listing. What the cap leaves out is stated in words rather
+  // than dropped: a truncated list that looks complete is how a "By agent"
+  // section starts getting quoted as "nothing else spent anything".
+  const AGENT_ROWS = 8;
+  // Volume and its share as ONE padded field: padding the number alone leaves
+  // the column ragged as soon as a share crosses from one digit to two.
+  const volPct = (v) => `${fmtN(v)} (${Math.round((v / total) * 100)}%)`.padStart(13);
+  const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  const agentRows = [...perAgent.entries()].sort((a, b) => b[1].vol - a[1].vol);
+  const agentShown = agentRows.slice(0, AGENT_ROWS);
+  const agentRest = agentRows.slice(AGENT_ROWS);
+  const agentW = Math.max(0, ...agentShown.map(([a]) => a.length));
+  // Volume the per-agent section could actually see. The two shares below are
+  // taken against IT, not against the report total: a window where half the
+  // sidecars are missing would otherwise print a below-pin share diluted by
+  // volume that was never examined for a pin in the first place.
+  const agentVol = agentRows.reduce((a, [, s]) => a + s.vol, 0);
+  const belowPinVol = agentRows.reduce((a, [, s]) => a + s.belowPinVol, 0);
+  const bareVol = agentRows.reduce((a, [, s]) => a + s.bareVol, 0);
+  // CLAUDE_CODE_SUBAGENT_MODEL forces every subagent at once and reaches the
+  // usage lines indistinguishably from a pin, so neither callout can tell a
+  // forced dispatch from a chosen one - a machine forcing haiku files a pinned
+  // agent under "below the pin", one forcing the session's own model files an
+  // unpinned agent under "inherited it bare". The dispatch log DOES record the
+  // variable, so the caveat is printed only in a window that actually contains
+  // forced dispatches instead of hedging every report against a rare setting.
+  const envForced = (() => {
+    try { return readEntries(dataFile()).filter((e) => e.env && e.ts >= win.start && e.ts < win.end).length; } catch { return 0; }
+  })();
+  // Named worst-first, because the remedy differs per agent and an aggregate
+  // ("40.1M below pin") tells you the size of a problem without telling you
+  // whose it is.
+  const worst = (pick) => agentRows.filter(([, s]) => pick(s) > 0).sort((a, b) => pick(b[1]) - pick(a[1]))
+    .slice(0, 3).map(([a, s]) => `${a} ${fmtN(pick(s))}`).join(", ");
   const out = [
     `Subagent token volume - ${winLabel} (input + cache)${versionSuffix}:`,
     "",
@@ -834,6 +938,29 @@ if (process.argv[2] === "tokens") {
     "",
     "By session model:",
     ...sessionRows.map(([m, s]) => `  ${m}: ${fmtN(s.vol)} across ${s.agents} agents - ${s.cmpVol ? `${Math.round((s.downVol / s.cmpVol) * 100)}% below session tier` : "not tier-comparable"}${s.cmpVol && s.vol > s.cmpVol ? ` (${fmtN(s.vol - s.cmpVol)} not comparable)` : ""}`),
+    // `metaless` alone still opens the section. A window where EVERY sidecar is
+    // missing is the one this feature most needs to announce - it means the
+    // undocumented file moved or changed name - and gating the whole block on
+    // having rows made that case print nothing at all, indistinguishable from a
+    // build without the feature.
+    ...(agentRows.length || metaless ? [
+      "",
+      "By agent - which role processed the volume:",
+      ...agentShown.map(([a, s]) => {
+        const models = [...s.models.entries()].sort((x, y) => y[1] - x[1]).map(([m]) => shortModel(m)).join(", ");
+        return `  ${volPct(s.vol)}  ${a.padEnd(agentW)}  ${plural(s.agents, "agent")} on ${models}`;
+      }),
+      ...(agentRest.length ? [`  ${volPct(agentRest.reduce((a, [, s]) => a + s.vol, 0))}  ${plural(agentRest.length, "more agent type")}, not listed`] : []),
+      // Printed only when there IS volume to report: "0 below pin" reads as a
+      // score, and this section is not one.
+      ...(belowPinVol ? [`  Below the agent's own pin: ${fmtN(belowPinVol)} (${Math.round((belowPinVol / Math.max(1, agentVol)) * 100)}% of the volume seen here) - ${worst((s) => s.belowPinVol)}. Not a saving: the pin is the tier the role needs, so this is the same job done worse, and it counts as "routed down" in every other figure above.`] : []),
+      // Both callouts carry the same denominator label. Without it the share
+      // reads against the report total like the rows above it do, and the same
+      // volume appears twice under two different percentages.
+      ...(bareVol ? [`  Inherited the session model bare: ${fmtN(bareVol)} (${Math.round((bareVol / Math.max(1, agentVol)) * 100)}% of the volume seen here) - ${worst((s) => s.bareVol)}. Agent types with no pin, dispatched with no model=: pass one (sonnet default), give the type a pin, or - for a workflow-subagent row - set the model opt on the agent() call that spawned it.`] : []),
+      ...(envForced && (belowPinVol || bareVol) ? [`  Read both callouts with one caveat this window earns: ${plural(envForced, "dispatch")} in it ran under CLAUDE_CODE_SUBAGENT_MODEL, which forces every subagent at once and is indistinguishable from a pin in a usage line. Volume from those is classified by what ran, not by what chose it, and the remedy there is unsetting the variable rather than fixing a dispatch.`] : []),
+      ...(metaless ? [`  ${plural(metaless, "transcript")} had no readable agent-<id>.meta.json sidecar and are absent from this section only - every total elsewhere in this report still counts them.`] : []),
+    ] : []),
     ...(unknownAgents ? ["", `${unknownAgents} agents not tier-comparable (${fmtN(unknownVol)}), excluded from routed-down math - either the agent ran an unrecognized model family (extend TIER_PATTERNS in dispatch-counter.mjs) or no model could be read from the parent session transcript, which happens when the transcript is gone or names no model anywhere.`] : []),
     ...(unreadable ? ["", `${unreadable} transcript(s) could not be read (too large to load as one string, or unreadable) - the totals below understate by whatever they held.`] : []),
     ...(mainVolTotal ? [

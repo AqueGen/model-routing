@@ -24,3 +24,19 @@ volume stayed below the session model, how the per-session-model split
 compares (e.g. fable sessions routing down more than opus sessions), and
 anything that looks off (e.g. many subagents running AT the session tier).
 Do not re-run the commands, no extra tables, no dollar estimates.
+
+The two reports count different things, and each owns a different half of
+the answer. A dispatch row is one line in a log whether it cost four
+thousand tokens or four million, and only the token report knows which
+model actually ran and how much it processed. Only the dispatch report
+knows what was asked for and what the session model was at that moment -
+it stamps the session at dispatch time, while the token side reads it from
+the parent transcript's head.
+
+So when a dispatch-side warning names an agent - a tier leak, or a dispatch
+below its pin - carry its volume from the "By agent" block into the
+sentence. When that volume is not there, say the count overstated it and
+name why: most often an agent from another plugin pinning a model cheaper
+than the session, which the dispatch log cannot see. When the two disagree
+and the window contains a mid-session /model switch, say that instead - the
+token side attributes those subagents to the model the session started on.

@@ -522,8 +522,9 @@ invented dollar savings:
 ```text
 /model-routing:stats
 # in-chat report: per-agent dispatch breakdown + real token volume per model
-# also flags "tier leaks" - unpinned dispatches that inherited a strong
-# session model bare; warns past the 20% rework threshold. Counted only
+# also flags "tier leaks" - bare dispatches of an agent type carrying no
+# pin this plugin knows, which inherit a strong session model unless the
+# agent pins one itself; warns past the 20% rework threshold. Counted only
 # where the session model is recorded AND rankable - the rest is left out
 # and declared, because "did this inherit something strong" has no answer
 # for a session nothing can rank
@@ -583,6 +584,35 @@ If the cheap tier really was right for that work, the fix is to pick an agent wh
 Effort is reconstructed rather than observed, because transcripts do not record it. The sources are read in the order Claude Code applies them: `CLAUDE_CODE_EFFORT_LEVEL` first (the only place `max` is accepted), then `effortLevel` from the settings cascade (local, then project, then user - these accept `low`/`medium`/`high`/`xhigh` only), then the documented model default described in [the effort ladder](#model-tiers-and-effort-ladder). Levels that came from that last rung are counted separately in the report, so an inferred default never reads as a setting somebody chose, and a level the session model does not support is recorded as the one Claude Code falls back to instead. Two cases contribute nothing to the line rather than a guess: a session on a model the docs give no effort support, and a session whose model could not be read at all, since the same configured level means different things on different models.
 
 The line states its limits rather than hiding them, and there are more than the sources suggest. Four documented states override the reconstruction and none of them are visible to a hook: a `/effort` or `--effort` choice made inside a running session, ultracode (which sends `xhigh`), an organization effort cap, and the model-default hold that Fable 5, Opus 4.8 and Opus 4.7 apply on first run over a level you previously set. Only the pins of the bundled agents are known here too - an agent from another plugin may pin its own effort and will still be counted as inheriting. Read the figure as what the visible sources resolve to, not as a measurement.
+
+### The by-agent section
+
+`report` counts dispatches; `tokens` weighs them. A dispatch is one line in a log whether it processed four thousand tokens or four million, so a count-based warning ranks by how often something happened and never by how much it cost. `tokens` closes that gap by naming the agent behind each slice of volume:
+
+```text
+By agent - which role processed the volume:
+   304.0M (49%)  model-routing:implementer  24 agents on sonnet-5, opus-5
+    59.8M (10%)  model-routing:reviewer     28 agents on sonnet-5, fable-5, opus-5
+     15.3M (2%)  codex:codex-rescue         11 agents on sonnet-5
+  Below the agent's own pin: 49.6M (8% of the volume seen here) - model-routing:reviewer 40.1M, model-routing:scout 9.5M.
+  Inherited the session model bare: 1.8M (0%) - Explore 1.7M, claude 86k, general-purpose 73k.
+```
+
+The two callout lines are the same two problems the dispatch report flags, now with a size beside them. Both verdicts are re-derived from the model each transcript ACTUALLY ran on, which is the one thing this side of the report has and the dispatch log does not: an override the harness declined and a fallback mid-run both reach the usage lines, while the log can only ever record what was asked for.
+
+Neither report is the authority on everything, and it is worth knowing which half each one owns. **What model ran, and how much it processed** - only the transcripts know that; the log records a request. **What was asked for, and what the session model was at that moment** - only the log knows that; it stamps the session model when the dispatch happens, while this side reads it from the parent transcript's head and so misattributes every subagent spawned after a mid-session `/model` switch. So a below-pin verdict here is measured on the agent's side and inferred on the session's, and a window with a tier switch in it can flag a correctly-capped dispatch. Read a disagreement as each report describing the half it can see.
+
+Inheritance is tested by model identity, not by tier. An agent from another plugin can pin a SIBLING of your session model - opus-4.8 under an opus-5 session - and a tier comparison cannot tell that from inheritance, which is the same false positive one tier up. Identity gives one case back in exchange: a session that quota-fell to a sibling model after its transcript head was written has children inheriting a model the head does not name, and they are not flagged. That is an undercount in a case nothing here can resolve, and undercounting a warning beats accusing the wrong agent.
+
+What identity does not fix, and nothing on this side can, is a foreign agent whose frontmatter pins EXACTLY your session model. It ran opus on an opus session because it was told to, and that is byte-identical to having inherited it. Such an agent is counted here. The rule that survives is narrower than "foreign pins drop out": a foreign pin CHEAPER than the session drops out of this section, a foreign pin equal to it cannot.
+
+One limit belongs to this side rather than the other: `CLAUDE_CODE_SUBAGENT_MODEL` reaches the usage lines indistinguishably from a pin, so a machine forcing every subagent to haiku puts a pinned agent's volume under "below the pin" here, while the dispatch report excludes env-forced dispatches on purpose - there the remedy is unsetting one variable, not fixing one dispatch. The volume is right either way; only the remedy printed beside it belongs to the other report.
+
+That difference is not academic. In the window above, the dispatch report flagged 18 bare dispatches as tier leaks, 35% and past its warning threshold; 11 of them were `codex:codex-rescue`, an agent from another plugin whose own frontmatter pins sonnet. The dispatch log cannot see a foreign pin, so it has to allow that they inherited opus. The transcripts show they did not: an agent whose usage lines all name sonnet did not bill opus, whatever the log had to allow. Measured leaked volume was 1.8M of 621M - the count said "act on this", the volume said "there is nothing here".
+
+Two limits on that, because it is the argument this section rests on. The join is between two populations, not two event streams - the dispatch log carries no agent id, so "11 bare rows, 11 sonnet transcripts" is a match of sets and not of events. And what the transcripts refute is the SPEND, not the cause: a dispatch can be logically bare and still run something cheap because of a fallback or a machine-wide override. For the question anyone actually asks a cost report - was expensive money spent here - that is enough. For "why did it run what it ran", it is not.
+
+Attribution comes from `agent-<id>.meta.json`, the sidecar Claude Code writes beside every subagent transcript, which names the agent type the usage lines omit. It is not a documented interface, so every field is treated as optional: a sidecar that is missing, unreadable, or names no type drops its transcript out of this section only, and the count of those is printed - including when it is ALL of them, which is the case most worth announcing, since it means the file moved or changed name. Every other total in the report is computed from the transcripts alone and is unaffected. Per-subagent token accounting has been [requested and closed as not planned](https://github.com/anthropics/claude-code/issues/22625) upstream, and `/usage` attributes to subagents as a category share of your plan limits rather than per agent type, so the sidecar is currently the only route to this.
 
 ### The cost line
 
