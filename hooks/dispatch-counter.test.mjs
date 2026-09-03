@@ -115,7 +115,7 @@ test("a curated foreign agent pin classifies like a bundled one, not a leak", ()
     const out = run(["report"], cfg);
     assert.match(out, /1 of 2 dispatches \(50%\) ran on a cheaper model/);
     assert.match(out, /Ran cheaper[\s\S]*codex:codex-rescue \(pin=sonnet\)/);
-    assert.match(out, /Tier leaks: 1 of 1 dispatches on agent types with no pin this plugin knows \(100%\)/);
+    assert.match(out, /Tier leaks: 1 of 1 dispatches on agent types with no MODEL pin this plugin knows \(100%, Explore excepted as inherently cheap\)/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
@@ -396,7 +396,7 @@ test("tier-leak section: threshold boundary and bundled-only absence", () => {
   let cfg = mk(1, 4); // exactly 20%: strict > threshold means no warning line
   try {
     const out = run(["report"], cfg);
-    assert.match(out, /Tier leaks: 1 of 5 dispatches on agent types with no pin this plugin knows \(20%\)/);
+    assert.match(out, /Tier leaks: 1 of 5 dispatches on agent types with no MODEL pin this plugin knows \(20%, Explore excepted as inherently cheap\)/);
     assert.ok(!out.includes("rework threshold"));
   } finally { rmSync(cfg, { recursive: true, force: true }); }
   cfg = mk(2, 3); // 40%: above the threshold
@@ -590,7 +590,7 @@ test("CLAUDE_CODE_SUBAGENT_MODEL override is recorded and outranks the pin", () 
   const cfg3 = freshConfigDir();
   writeLog(cfg3, [{ ts: Date.now(), agent: "general-purpose", model: null, env: "sonnet", session: "claude-opus-4-8" }]);
   try {
-    assert.match(run(["report"], cfg3), /Tier leaks: 0 of 1 dispatches on agent types with no pin this plugin knows/);
+    assert.match(run(["report"], cfg3), /Tier leaks: 0 of 1 dispatches on agent types with no MODEL pin this plugin knows/);
   } finally { rmSync(cfg3, { recursive: true, force: true }); }
 });
 
@@ -942,7 +942,7 @@ test("report separates inherited effort from pinned, and flags inferred levels",
   ]);
   try {
     const out = run(["report"], cfg);
-    assert.match(out, /Effort: 2 of 4 dispatches ran on an agent type carrying no pin this plugin knows about/);
+    assert.match(out, /Effort: 2 of 4 dispatches ran on an agent type carrying no EFFORT pin this plugin knows about/);
     assert.match(out, /\(2 at high\)/);
     // An inferred default must never read as an observed setting, and the count
     // must be the inherited subset - 1 here, not the 3 in the whole population.
@@ -1200,7 +1200,7 @@ test("tier leaks leave out dispatches whose session cannot be ranked", () => {
   ]);
   try {
     const out = run(["report"], cfg);
-    assert.match(out, /Tier leaks: 1 of 1 dispatches on agent types with no pin this plugin knows \(100%\)/);
+    assert.match(out, /Tier leaks: 1 of 1 dispatches on agent types with no MODEL pin this plugin knows \(100%, Explore excepted as inherently cheap\)/);
     assert.match(out, /2 unpinned dispatch\(es\) left out/);
     // The warning is the point of the fraction: 1 of 3 reads as 33% and stays
     // quiet, 1 of 1 is 100% and trips the threshold.
@@ -1495,5 +1495,10 @@ test("the env-override caveat prints only in a window that contains one", () => 
     assert.match(run(["tokens"], cfg), /1 dispatch in it ran under CLAUDE_CODE_SUBAGENT_MODEL/);
     // Same log, a window that ends before it: no caveat.
     assert.doesNotMatch(run(["tokens", "--ago", "30"], cfg), /CLAUDE_CODE_SUBAGENT_MODEL/);
+    // --session scopes the caveat like everything else in the report: the
+    // env dispatch above happened on an opus session, so a fable-scoped run
+    // must not say "1 dispatch in it" about a population it is not describing.
+    assert.doesNotMatch(run(["tokens", "--session", "fable"], cfg), /CLAUDE_CODE_SUBAGENT_MODEL/);
+    assert.match(run(["tokens", "--session", "opus"], cfg), /1 dispatch in it ran under CLAUDE_CODE_SUBAGENT_MODEL/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });

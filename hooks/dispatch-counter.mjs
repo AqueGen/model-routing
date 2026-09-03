@@ -540,7 +540,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   const leakLines = [];
   if (capable.length) {
     const rate = leaks.length / capable.length;
-    leakLines.push("", `Tier leaks: ${leaks.length} of ${capable.length} dispatches on agent types with no pin this plugin knows (${Math.round(rate * 100)}%) went out bare on a strong session - each inherited that session model unless its own frontmatter pinned one.`);
+    leakLines.push("", `Tier leaks: ${leaks.length} of ${capable.length} dispatches on agent types with no MODEL pin this plugin knows (${Math.round(rate * 100)}%, Explore excepted as inherently cheap) went out bare on a strong session - each inherited that session model unless its own frontmatter pinned one.`);
     if (rate > LEAK_WARN) leakLines.push(`  ! above the 20% rework threshold - pass an explicit model= on general-purpose/custom dispatches (sonnet default). Check "Inherited the session model bare" in \`tokens\` first: it reports the volume that actually ran, so a foreign agent pinning a model CHEAPER than the session drops out of it - one pinning the session's own model cannot, and is counted there too.`);
   }
   if (unrankable) {
@@ -569,7 +569,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     const inferred = inherited.filter((e) => e.effortFrom === "default").length;
     effortLines.push(
       "",
-      `Effort: ${inherited.length} of ${withEffort.length} dispatches ran on an agent type carrying no pin this plugin knows about, and so inherited the session level${byLevel ? ` (${byLevel})` : ""}.`,
+      `Effort: ${inherited.length} of ${withEffort.length} dispatches ran on an agent type carrying no EFFORT pin this plugin knows about, and so inherited the session level${byLevel ? ` (${byLevel})` : ""}. Only the bundled agents pin effort here - a foreign agent with a known model pin still counts as inheriting effort.`,
       `  The bundled agents pin theirs in frontmatter, so routing a mechanical errand through a role agent buys a cheaper effort as well as a cheaper tier. An agent from anywhere else may pin its own effort, which is invisible here and counted as inherited.`,
       ...(inferred ? [`  ${inferred} of these levels are the documented model default rather than an observed setting.`] : []),
       `  Source order is CLAUDE_CODE_EFFORT_LEVEL, then settings effortLevel, then the model default. Four states can override that and none are visible here: a /effort or --effort choice inside a running session, ultracode, an organization effort cap, and the model-default hold Fable 5 / Opus 4.8 / Opus 4.7 apply on first run over a previously set level.`,
@@ -969,7 +969,12 @@ if (process.argv[2] === "tokens") {
   // variable, so the caveat is printed only in a window that actually contains
   // forced dispatches instead of hedging every report against a rare setting.
   const envForced = (() => {
-    try { return readEntries(dataFile()).filter((e) => e.env && e.ts >= win.start && e.ts < win.end).length; } catch { return 0; }
+    // Scoped by the same --session filter as everything else in this report,
+    // so "N dispatches in it" describes the population the header names.
+    try {
+      return readEntries(dataFile()).filter((e) => e.env && e.ts >= win.start && e.ts < win.end
+        && (!sf || (e.session && shortModel(e.session).toLowerCase().includes(sf)))).length;
+    } catch { return 0; }
   })();
   // Named worst-first, because the remedy differs per agent and an aggregate
   // ("40.1M below pin") tells you the size of a problem without telling you
@@ -1007,7 +1012,7 @@ if (process.argv[2] === "tokens") {
       // Both callouts carry the same denominator label. Without it the share
       // reads against the report total like the rows above it do, and the same
       // volume appears twice under two different percentages.
-      ...(bareVol ? [`  Inherited the session model bare: ${fmtN(bareVol)} (${Math.round((bareVol / Math.max(1, agentVol)) * 100)}% of the volume seen here) - ${worst((s) => s.bareVol)}. Agent types with no pin, dispatched with no model=: pass one (sonnet default), give the type a pin, or - for a workflow-subagent row - set the model opt on the agent() call that spawned it.`] : []),
+      ...(bareVol ? [`  Inherited the session model bare: ${fmtN(bareVol)} (${Math.round((bareVol / Math.max(1, agentVol)) * 100)}% of the volume seen here) - ${worst((s) => s.bareVol)}. Agent types with no pin, dispatched with no model=: pass one (sonnet default), give the type a pin, or - for a workflow-subagent row - set the model opt on the agent() call that spawned it. A workflow-subagent sidecar never records a model, so that row means "ran on the session model", which a model opt equal to the session model would also produce.`] : []),
       ...(envForced && (belowPinVol || bareVol) ? [`  Read both callouts with one caveat this window earns: ${plural(envForced, "dispatch")} in it ran under CLAUDE_CODE_SUBAGENT_MODEL, which forces every subagent at once and is indistinguishable from a pin in a usage line. Volume from those is classified by what ran, not by what chose it, and the remedy there is unsetting the variable rather than fixing a dispatch.`] : []),
       ...(metaless ? [`  ${plural(metaless, "transcript")} had no readable agent-<id>.meta.json sidecar and are absent from this section only - every total elsewhere in this report still counts them.`] : []),
     ] : []),
