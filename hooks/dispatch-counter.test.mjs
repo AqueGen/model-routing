@@ -14,10 +14,10 @@ const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "dispatch-counter.m
 
 function run(args, configDir, stdin, extraEnv, cwd) {
   return execFileSync(process.execPath, [SCRIPT, ...args].filter(Boolean), {
-    // CLAUDE_CODE_SUBAGENT_MODEL and CLAUDE_CODE_EFFORT_LEVEL are blanked by
-    // default so a developer's own overrides cannot leak into the hermetic
-    // tests; set either via extraEnv to test it.
-    env: { ...process.env, CLAUDE_CONFIG_DIR: configDir, CLAUDE_CODE_SUBAGENT_MODEL: "", CLAUDE_CODE_EFFORT_LEVEL: "", ...(extraEnv ?? {}) },
+    // CLAUDE_CODE_SUBAGENT_MODEL, CLAUDE_CODE_SUBAGENT_MODEL_FORCE and
+    // CLAUDE_CODE_EFFORT_LEVEL are blanked by default so a developer's own
+    // overrides cannot leak into the hermetic tests; set any via extraEnv.
+    env: { ...process.env, CLAUDE_CONFIG_DIR: configDir, CLAUDE_CODE_SUBAGENT_MODEL: "", CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "", CLAUDE_CODE_EFFORT_LEVEL: "", ...(extraEnv ?? {}) },
     // Default the working directory to the temp config dir, never the directory
     // the suite happens to run from: the hook reads <cwd>/.claude/settings*.json
     // for the session effort, so an ambient cwd would let a real settings file
@@ -205,16 +205,16 @@ test("a session below the pin still has a floor of its own", () => {
 test("an env override is never counted as undercutting the pin", () => {
   const cfg = freshConfigDir();
   writeLog(cfg, [
-    // CLAUDE_CODE_SUBAGENT_MODEL forces every subagent at once, so this is a
-    // machine-wide setting rather than a per-dispatch decision and the section's
-    // advice would not apply. Covered indirectly by the env-override test above,
-    // but a rule should carry its own case.
+    // CLAUDE_CODE_SUBAGENT_MODEL ranks BELOW the frontmatter pin since 2.1.251,
+    // so it cannot put a pinned agent under its pin at all: this reviewer ran
+    // opus. Covered indirectly by the env-override test above, but a rule
+    // should carry its own case.
     { ts: Date.now(), agent: "model-routing:reviewer", env: "haiku", session: "claude-opus-5" },
   ]);
   try {
     const out = run(["report"], cfg);
     assert.doesNotMatch(out, /BELOW/);
-    assert.match(out, /reviewer \(env=haiku\)/);
+    assert.match(out, /reviewer \(pin=opus\)/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
@@ -568,7 +568,7 @@ test("--ago windows see timestamped lines inside resumed transcripts", () => {
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
-test("CLAUDE_CODE_SUBAGENT_MODEL override is recorded and outranks the pin", () => {
+test("CLAUDE_CODE_SUBAGENT_MODEL override is recorded and is a default below the pin", () => {
   const cfg = freshConfigDir();
   const event = JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: "model-routing:reviewer" } });
   try {
@@ -576,14 +576,15 @@ test("CLAUDE_CODE_SUBAGENT_MODEL override is recorded and outranks the pin", () 
     const log = readFileSync(join(cfg, "model-routing", "dispatches.jsonl"), "utf-8").trim().split("\n").map((l) => JSON.parse(l));
     assert.equal(log[0].env, "sonnet");
   } finally { rmSync(cfg, { recursive: true, force: true }); }
-  // In the report the env override wins over the opus pin: from an opus
-  // session this reviewer dispatch actually ran sonnet = routed down.
+  // Since 2.1.251 the pin outranks the variable: from an opus session this
+  // reviewer dispatch ran opus, not the env sonnet - at tier, not routed down.
   const cfg2 = freshConfigDir();
   writeLog(cfg2, [{ ts: Date.now(), agent: "model-routing:reviewer", model: null, env: "sonnet", session: "claude-opus-4-8" }]);
   try {
     const out = run(["report"], cfg2);
-    assert.match(out, /1 of 1 dispatches \(100%\)/);
-    assert.match(out, /Ran cheaper[\s\S]*reviewer \(env=sonnet\)/);
+    assert.match(out, /0 of 1 dispatches \(0%\)/);
+    assert.match(out, /reviewer \(pin=opus\)/);
+    assert.ok(!out.includes("env=sonnet"));
   } finally { rmSync(cfg2, { recursive: true, force: true }); }
   // A bare general-purpose dispatch under an env override did NOT inherit
   // the session model - it must not count as a tier leak.
@@ -592,6 +593,54 @@ test("CLAUDE_CODE_SUBAGENT_MODEL override is recorded and outranks the pin", () 
   try {
     assert.match(run(["report"], cfg3), /Tier leaks: 0 of 1 dispatches on agent types with no MODEL pin this plugin knows/);
   } finally { rmSync(cfg3, { recursive: true, force: true }); }
+});
+
+test("CLAUDE_CODE_SUBAGENT_MODEL=inherit is the same as unset", () => {
+  const cfg = freshConfigDir();
+  try {
+    run([], cfg, JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: "model-routing:reviewer" } }), { CLAUDE_CODE_SUBAGENT_MODEL: "inherit" });
+    const log = readFileSync(join(cfg, "model-routing", "dispatches.jsonl"), "utf-8").trim().split("\n").map((l) => JSON.parse(l));
+    assert.equal(log[0].env, undefined);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("CLAUDE_CODE_SUBAGENT_MODEL_FORCE is recorded on its own and overrules the pin", () => {
+  const cfg = freshConfigDir();
+  try {
+    run([], cfg, JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: "model-routing:reviewer" } }), { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1" });
+    const log = readFileSync(join(cfg, "model-routing", "dispatches.jsonl"), "utf-8").trim().split("\n").map((l) => JSON.parse(l));
+    assert.equal(log[0].envForce, true);
+    assert.equal(log[0].env, undefined);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+  // Forced with no env model: the reviewer ran the SESSION model, opus. At
+  // tier, and not flagged below its opus pin - the remedy is one variable.
+  const cfg2 = freshConfigDir();
+  writeLog(cfg2, [{ ts: Date.now(), agent: "model-routing:reviewer", envForce: true, session: "claude-opus-4-8" }]);
+  try {
+    const out = run(["report"], cfg2);
+    assert.match(out, /0 of 1 dispatches \(0%\)/);
+    assert.match(out, /reviewer \(forced=session\)/);
+    assert.ok(!out.includes("below its pin"));
+  } finally { rmSync(cfg2, { recursive: true, force: true }); }
+  // "0" is off, not a truthy string.
+  const cfg3 = freshConfigDir();
+  try {
+    run([], cfg3, JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: "model-routing:reviewer" } }), { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "0" });
+    const log = readFileSync(join(cfg3, "model-routing", "dispatches.jsonl"), "utf-8").trim().split("\n").map((l) => JSON.parse(l));
+    assert.equal(log[0].envForce, undefined);
+    assert.equal(log[0].env, undefined);
+  } finally { rmSync(cfg3, { recursive: true, force: true }); }
+});
+
+test("hook records the Claude Code version from the transcript tail", () => {
+  const cfg = freshConfigDir();
+  const sess = join(cfg, "versioned-session.jsonl");
+  writeFileSync(sess, '{"model":"claude-opus-4-8","version":"2.1.249"}\n{"model":"claude-opus-4-8","version":"2.1.260"}\n');
+  try {
+    run([], cfg, JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: "x" }, transcript_path: sess }));
+    const log = readFileSync(join(cfg, "model-routing", "dispatches.jsonl"), "utf-8").trim().split("\n").map((l) => JSON.parse(l));
+    assert.equal(log[0].v, "2.1.260");
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
 test("--session scopes the report to matching session models", () => {

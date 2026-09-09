@@ -664,9 +664,7 @@ the `model-routing` skill. If you had pasted a routing snippet into your
 
 There is deliberately no config subsystem - four override paths cover it:
 
-- **Whole session**: the `CLAUDE_CODE_SUBAGENT_MODEL` env var outranks
-  everything below it - both an explicit `model` param and a frontmatter
-  pin - and the dispatch report marks those rows `agent (env=...)`.
+- **Whole session**: since Claude Code 2.1.251 the `CLAUDE_CODE_SUBAGENT_MODEL` env var is a DEFAULT below everything else - an explicit `model` param wins, then a frontmatter pin, then this var, then the session model (`inherit` is the same as leaving it unset) - and the dispatch report marks the rows it actually decided `agent (env=...)`. Since 2.1.257 `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` inverts that and makes the harness ignore every param and every pin: with both set, subagents run the env model, with only FORCE set they run the session model, and those rows read `agent (forced=...)`.
 - **Per dispatch**: the Agent tool's `model` param overrides any
   frontmatter pin (pins-are-ceilings works through exactly this);
   Workflow `agent()` takes `model` and `effort` opts per call. Plain

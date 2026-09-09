@@ -369,11 +369,28 @@ function lastModelIn(file, bytes) {
   return last;
 }
 
-// The model a dispatch actually ran on, in harness priority order: the
-// CLAUDE_CODE_SUBAGENT_MODEL env override (recorded by the hook as e.env),
-// else the explicit model param, else the agent's frontmatter pin, else
-// unknown (session-model inheritance).
-const effectiveModel = (e) => e.env ?? e.model ?? pinnedModel(e.agent) ?? null;
+function lastVersionIn(file, bytes) {
+  // Claude Code version in effect at dispatch time, read from the same tail
+  // slice as lastModelIn. The precedence order below changed in 2.1.251, so an
+  // entry that does not say which version wrote it cannot be re-judged later.
+  let last = null;
+  for (const m of readSlice(file, bytes, true).matchAll(/"version":"(\d+\.\d+\.\d+)"/g)) last = m[1];
+  return last;
+}
+
+// The model a dispatch actually ran on, in harness priority order (Claude Code
+// 2.1.251+): 1. the per-invocation model param, 2. the agent's frontmatter pin
+// (inherit = the session model), 3. CLAUDE_CODE_SUBAGENT_MODEL, 4. the session
+// model. CLAUDE_CODE_SUBAGENT_MODEL_FORCE (2.1.257+, recorded as e.envForce)
+// inverts that: it makes the harness ignore every param and every pin, so the
+// dispatch runs the env model, or the session model when no env model is set.
+// Residual: a FOREIGN agent whose frontmatter says `model: inherit` is
+// invisible to the pin tables here, so with env set it is credited to env while
+// the docs rank the pin first. Accepted - the tables cannot see foreign
+// frontmatter at all, and this is the rarer of the two ways to be wrong.
+const effectiveModel = (e) => e.envForce
+  ? (e.env ?? e.session ?? null)
+  : (e.model ?? pinnedModel(e.agent) ?? e.env ?? null);
 
 // A pinned agent has a FLOOR as well as a ceiling. The pin states how much
 // reasoning the role needs - reviewer on opus because a missed bug costs more
@@ -388,11 +405,13 @@ const effectiveModel = (e) => e.env ?? e.model ?? pinnedModel(e.agent) ?? null;
 // its one call site, so its verdicts stay measurement-only - see the comment
 // on `ownPinnedModel` above.
 function belowPin(e, pinLookup = pinnedModel) {
-  // CLAUDE_CODE_SUBAGENT_MODEL forces every subagent at once, so it is a
-  // deliberate machine-wide setting rather than a judgement made per dispatch.
-  // Flagging it would fill this section with rows whose only remedy is unsetting
-  // the variable, which the env= rows already say plainly.
-  if (e.env) return false;
+  // CLAUDE_CODE_SUBAGENT_MODEL_FORCE overrules every pin on the machine at
+  // once, so a dispatch under it is a deliberate machine-wide setting rather
+  // than a judgement made per dispatch. Flagging it would fill this section with
+  // rows whose only remedy is unsetting the variable, which the forced= rows
+  // already say plainly. A plain CLAUDE_CODE_SUBAGENT_MODEL is only a default
+  // BELOW the pin, so it can never put a pinned agent under its pin at all.
+  if (e.envForce) return false;
   const tp = tierOf(pinLookup(e.agent));
   const te = tierOf(effectiveModel(e));
   const ts = tierOf(e.session);
@@ -478,7 +497,12 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     // so one key can never mix below-pin dispatches with correct ones. Move this
     // into the row text instead and rows start mis-bucketing silently.
     const under = belowPin(e);
-    const key = e.env ? `${e.agent} (env=${e.env})`
+    const eff = effectiveModel(e);
+    // Under FORCE the row names what the harness forced: the env model when
+    // one is set, otherwise the session model, which is worth saying as
+    // "session" - the by-session rows already carry the id.
+    const key = e.envForce ? `${e.agent} (forced=${e.env ?? "session"})`
+      : eff && eff === e.env ? `${e.agent} (env=${e.env})`
       : e.model ? `${e.agent} (model=${e.model}${under ? `, pin=${pinnedModel(e.agent)}` : ""})`
       : pinnedModel(e.agent) ? `${e.agent} (pin=${pinnedModel(e.agent)})`
       : e.agent;
@@ -534,8 +558,12 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   const capable = unpinned.filter((e) => e.session && tierOf(e.session) != null);
   const unrankable = unpinned.length - capable.length;
   // An env override means the dispatch did NOT inherit the session model,
-  // no matter that the call itself was bare - not a leak.
-  const leaks = capable.filter((e) => !e.env && !e.model && tierOf(e.session) > 2);
+  // no matter that the call itself was bare - not a leak. Under
+  // CLAUDE_CODE_SUBAGENT_MODEL_FORCE with no env model the dispatch DOES run
+  // the session model, but that is the machine-wide setting doing exactly what
+  // it says, so it is excluded here too: the remedy is one variable, not one
+  // dispatch.
+  const leaks = capable.filter((e) => !e.env && !e.envForce && !e.model && tierOf(e.session) > 2);
   const LEAK_WARN = 0.20;
   const leakLines = [];
   if (capable.length) {
@@ -972,7 +1000,7 @@ if (process.argv[2] === "tokens") {
     // Scoped by the same --session filter as everything else in this report,
     // so "N dispatches in it" describes the population the header names.
     try {
-      return readEntries(dataFile()).filter((e) => e.env && e.ts >= win.start && e.ts < win.end
+      return readEntries(dataFile()).filter((e) => (e.env || e.envForce) && e.ts >= win.start && e.ts < win.end
         && (!sf || (e.session && shortModel(e.session).toLowerCase().includes(sf)))).length;
     } catch { return 0; }
   })();
@@ -1069,15 +1097,27 @@ try {
   // the entry because the effort default depends on it.
   const session = event.transcript_path ? lastModelIn(event.transcript_path, 262144) : null;
   const effort = sessionEffort(event.cwd ?? process.cwd(), session);
+  const version = event.transcript_path ? lastVersionIn(event.transcript_path, 262144) : null;
+  const envModel = (process.env.CLAUDE_CODE_SUBAGENT_MODEL ?? "").trim();
+  const envForce = !["", "0", "false"].includes((process.env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE ?? "").trim().toLowerCase());
   const entry = {
     ts: Date.now(),
     agent: input.subagent_type ?? "general-purpose",
     model: input.model ?? null,
-    // CLAUDE_CODE_SUBAGENT_MODEL outranks both the model param and the
-    // frontmatter pin - when set, it is the model every subagent actually
-    // ran on, so record it rather than guessing from pins.
-    ...(process.env.CLAUDE_CODE_SUBAGENT_MODEL ? { env: process.env.CLAUDE_CODE_SUBAGENT_MODEL } : {}),
+    // Since 2.1.251 CLAUDE_CODE_SUBAGENT_MODEL is a DEFAULT below the model
+    // param and the frontmatter pin, not an override of them (before that
+    // version it outranked both). "inherit" means the session model, i.e. the
+    // same as leaving it unset, so it is not worth recording. Since 2.1.257
+    // CLAUDE_CODE_SUBAGENT_MODEL_FORCE flips it back and further: every param
+    // and every pin is ignored. It is recorded on its own because it is
+    // meaningful with no env model set too - then subagents run the session
+    // model.
+    ...(envModel && envModel !== "inherit" ? { env: envModel } : {}),
+    ...(envForce ? { envForce: true } : {}),
     session,
+    // Which precedence order the harness applied - the entry cannot be
+    // re-judged later without it.
+    ...(version ? { v: version } : {}),
     // The session's effort level plus its source, so the report can separate an
     // observed setting from the documented default it fell back to. Omitted
     // entirely when neither could be established.

@@ -369,8 +369,10 @@ what changes cost there.
   opts inherits the session model at session effort, multiplied by the
   fan-out. Mechanical finder stages get an explicit cheap model and
   `effort: low`; a tier up only where the stage earns it. Precedence:
-  the `CLAUDE_CODE_SUBAGENT_MODEL` env var overrides both the script
-  opt and the session model.
+  the script opt wins, then a frontmatter pin, then the
+  `CLAUDE_CODE_SUBAGENT_MODEL` env var, then the session model - unless
+  `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set, which ignores the opt and
+  the pin and runs the env var (or the session model if it is unset).
 - **Granularity is saved progress.** On resume, completed agents return
   cached results - but replay follows start order: caching stops at the
   first agent that did not finish, and every agent that started after it
