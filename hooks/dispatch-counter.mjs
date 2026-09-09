@@ -343,9 +343,10 @@ function readSlice(file, bytes, fromEnd) {
 }
 
 function firstModelIn(file, bytes) {
-  // Session-START model: the head of the session jsonl. Used by the tokens
-  // report, which says so in its footer - a /model switch or fallback later
-  // in the session is attributed to the start model.
+  // Session-START model: the head of the session jsonl. The tokens report uses
+  // it only as a LAST resort, when neither the dispatching assistant message
+  // nor the timeline around the agent's first timestamp could name a model -
+  // a /model switch later in the session is invisible to it.
   const m = readSlice(file, bytes, false).match(/"model":"(?:[a-z0-9-]+\.)*(claude-[a-z0-9.-]+)"/);
   return m?.[1] ?? null;
 }
@@ -733,6 +734,75 @@ if (process.argv[2] === "tokens") {
       return m && typeof m.agentType === "string" && m.agentType ? m : null;
     } catch { return null; }
   };
+  // Which model DISPATCHED an agent. Every agent sidecar names the toolUseId of
+  // the Agent tool_use block that spawned it, and that block lives on an
+  // assistant line of the parent transcript whose message.model is the model the
+  // session was on at that moment. Reading it there is what makes this report
+  // agree with the dispatch log, which stamps the model at dispatch time: the
+  // session head answered a different question, and in a 7d sample it gave 135
+  // of 269 agents a model the session was no longer on when it dispatched them.
+  // One read per parent transcript, memoized by path - the walk reaches a
+  // subagents dir BEFORE the parent transcript beside it, and every agent in
+  // that dir shares the same parent, so the index has to be built lazily.
+  const dispatchCache = new Map(); // path -> { ids: Map(toolUseId -> model), timeline: [ts, model][] }
+  const dispatchIndexOf = (file) => {
+    const hit = dispatchCache.get(file);
+    if (hit) return hit;
+    const idx = { ids: new Map(), timeline: [] };
+    dispatchCache.set(file, idx);
+    let text;
+    try { text = readFileSync(file, "utf-8"); } catch { return idx; }
+    for (const line of text.split("\n")) {
+      if (!line.includes('"assistant"')) continue;
+      try {
+        const obj = JSON.parse(line);
+        if (obj.type !== "assistant") continue;
+        const model = obj.message?.model;
+        if (!model) continue;
+        const ts = obj.timestamp ? Date.parse(obj.timestamp) : NaN;
+        if (Number.isFinite(ts)) idx.timeline.push([ts, model]);
+        if (!Array.isArray(obj.message.content)) continue;
+        for (const b of obj.message.content) {
+          if (b?.type === "tool_use" && b.id) idx.ids.set(b.id, model);
+        }
+      } catch {}
+    }
+    return idx;
+  };
+  // The agent transcript's own first timestamp - when it was launched.
+  const launchedAt = (file) => {
+    const m = readSlice(file, 8192, false).split("\n", 1)[0].match(/"timestamp":"([^"]+)"/);
+    const ts = m ? Date.parse(m[1]) : NaN;
+    return Number.isFinite(ts) ? ts : null;
+  };
+  const dispatchModelOf = (p, meta, sessionJsonl) => {
+    if (!sessionJsonl) return null;
+    const idx = dispatchIndexOf(sessionJsonl);
+    if (meta?.toolUseId) {
+      const own = idx.ids.get(meta.toolUseId);
+      if (own) return own;
+      // A nested agent (spawnDepth 2) was dispatched by another AGENT, so its
+      // tool_use line sits in that agent's transcript, not the session's.
+      if (meta.parentAgentId) {
+        const up = dispatchIndexOf(join(dirname(p), `agent-${meta.parentAgentId}.jsonl`)).ids.get(meta.toolUseId);
+        if (up) return up;
+      }
+    }
+    // No sidecar, or a dispatch line this read could not see: the model in
+    // effect when the agent started. MAX timestamp <= launch, not the last
+    // assistant line in FILE order - a resumed session re-appends its history,
+    // so file order is not chronological.
+    const launch = launchedAt(p);
+    if (launch != null) {
+      let best = null, bestTs = -Infinity;
+      for (const [ts, model] of idx.timeline) {
+        if (ts <= launch && ts > bestTs) { bestTs = ts; best = model; }
+      }
+      if (best) return best;
+    }
+    if (!sessionModelCache.has(sessionJsonl)) sessionModelCache.set(sessionJsonl, sessionModelOf(sessionJsonl));
+    return sessionModelCache.get(sessionJsonl);
+  };
   const walk = (dir, depth) => {
     let entries;
     try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
@@ -770,16 +840,20 @@ if (process.argv[2] === "tokens") {
       if (!fileVols.size) continue;
       if (isMainSession) {
         // Scoped by the same --session filter as the agents, so the denominator
-        // always describes the same population as the headline above it.
-        if (!sessionModelCache.has(p)) sessionModelCache.set(p, sessionModelOf(p));
-        const sessionModel = sessionModelCache.get(p);
-        if (sf && !(sessionModel && shortModel(sessionModel).toLowerCase().includes(sf))) continue;
-        mainSessions++;
+        // always describes the same population as the headline above it. Per
+        // LINE model, not per file: agents are attributed at dispatch time now,
+        // so a session that switched mid-way contributes only the volume that
+        // actually ran on the filtered model, and counts as a session only if
+        // any of it did.
+        let matched = false;
         for (const [model, v] of fileVols) {
+          if (sf && !shortModel(model).toLowerCase().includes(sf)) continue;
+          matched = true;
           mainPerModel.set(model, (mainPerModel.get(model) ?? 0) + volOf(v));
           const c = costOf(model, v, priceAt);
           if (c == null) mainUnpricedVol += volOf(v); else mainCost += c;
         }
+        if (matched) mainSessions++;
         continue;
       }
       // The parent session transcript is <session-id>.jsonl, sibling of the
@@ -787,10 +861,8 @@ if (process.argv[2] === "tokens") {
       // dispatches, further up for Workflow agents nested in workflows/<wf>/.
       const anchored = p.match(/^(.*?)[\\/]subagents[\\/]/);
       const sessionJsonl = anchored ? anchored[1] + ".jsonl" : null;
-      if (sessionJsonl && !sessionModelCache.has(sessionJsonl)) {
-        sessionModelCache.set(sessionJsonl, sessionModelOf(sessionJsonl));
-      }
-      const sessionModel = sessionJsonl ? sessionModelCache.get(sessionJsonl) : null;
+      const meta = readMeta(p);
+      const sessionModel = dispatchModelOf(p, meta, sessionJsonl);
       const tsess = tierOf(sessionModel);
       // Accumulated BEFORE the filter returns: --session narrows to the sessions
       // where routing has the most room, so the scoped share is printed next to
@@ -813,7 +885,6 @@ if (process.argv[2] === "tokens") {
       const ss = perSession.get(sessKey) ?? { agents: 0, vol: 0, cmpVol: 0, downVol: 0 };
       ss.agents++;
       perSession.set(sessKey, ss);
-      const meta = readMeta(p);
       if (!meta) metaless++;
       // One transcript is one agent, counted here for the same reason ss.agents
       // is counted outside the per-model loop: a mid-run fallback splits the
@@ -1046,7 +1117,7 @@ if (process.argv[2] === "tokens") {
     ] : []),
     "",
     "Volume = tokens the subagent processed; cache reads are billed at the subagent's model rate, which is where routing saves.",
-    "Session model is read from the head of each session transcript - the model it started on - so a mid-session /model switch or fallback attributes later subagents to the start model (the dispatch report does not have this limit). In a session long enough that its head names no model at all, the tail is read instead and that session is attributed to its LAST model, which is the opposite bias for those sessions.",
+    "Session model is the model of the assistant message that DISPATCHED the agent, matched through the toolUseId in the agent's sidecar - the same instant the dispatch report stamps, so a mid-session /model switch moves both reports together. Without a usable sidecar the model in effect at the agent's first timestamp is used, and failing that the head of the session transcript (or its tail, when the head names no model at all).",
   ];
   process.stdout.write(out.join("\n"));
   process.exit(0);
