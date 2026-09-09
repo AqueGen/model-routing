@@ -178,8 +178,12 @@ function toList(value) {
   return Array.isArray(value) ? value : [value];
 }
 
+// A missing per-turn value (a dead turn's result object was absent) means the
+// total is unknown, not zero - so any null/undefined input makes the whole
+// sum null instead of silently treating the gap as free.
 function sum(values) {
-  return values.reduce((a, b) => a + (b ?? 0), 0);
+  if (values.some((v) => v == null)) return null;
+  return values.reduce((a, b) => a + b, 0);
 }
 
 function mergeModelUsage(all) {
