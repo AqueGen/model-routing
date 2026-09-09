@@ -1025,6 +1025,22 @@ test("cost prices every token type at its own documented rate", () => {
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
+test("fable-5.1 cache reads price at 0.025x, sonnet-5 stays at $2/$10", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), usageLine("claude-opus-5", 1) + "\n");
+  // Fable 5.1 cache read: 1M x 0.025 x $10/MTok = $0.25 (vs $1.00 at the 0.1x
+  // every other model gets). Sonnet 5: 1M base input x $2/MTok = $2.00, the
+  // permanent rate - the scheduled 2026-09-01 increase to $3/$15 was called off.
+  writeFileSync(join(dir, "agent-a.jsonl"), costLine("claude-fable-5-1", { cacheRead: 1e6 }) + "\n");
+  writeFileSync(join(dir, "agent-b.jsonl"), costLine("claude-sonnet-5", { input: 1e6 }) + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /as it ran\s+\$2\.25/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
 test("a cache-write bucket this code has never heard of is still charged", () => {
   const cfg = freshConfigDir();
   const dir = join(cfg, "projects", "proj", "sess-1", "subagents");

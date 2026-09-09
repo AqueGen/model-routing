@@ -282,25 +282,27 @@ const shortModel = (m) => m ? m.replace(/^claude-/, "").replace(/-\d{8}$/, "") :
 // (Opus 4.1 bills at three times Opus 4.5) and a loose pattern would quietly
 // misprice a retired model. A model absent from this table is reported as
 // unpriced volume, never as zero.
-const PRICES_ASOF = "2026-08-11";
-const SONNET5_STANDARD_FROM = Date.parse("2026-09-01T00:00:00Z");
+const PRICES_ASOF = "2026-09-09";
 const PRICES = [
   // Retired families first: a looser pattern below must not claim them.
   [/opus-4-1-|opus-4-20/, () => [15, 75]],
   // Pre-4.x ids put the generation first (claude-3-5-haiku-...), so both orders
   // are matched; the row above needs the same trick for claude-opus-4-20250514.
   [/3-5-haiku|haiku-3-5/, () => [0.8, 4]],
+  // 5.1 cache reads at 0.025x base input, ahead of the looser 5.x row below.
+  [/fable-5-1|mythos-5-1/, () => [10, 50, 0.025]],
   [/fable-5|mythos-5/, () => [10, 50]],
   [/opus-5|opus-4-8|opus-4-7|opus-4-6|opus-4-5/, () => [5, 25]],
-  // The one model on the page whose price changes on a date rather than with a
-  // new id: introductory $2/$10 through 2026-08-31, standard $3/$15 after.
-  [/sonnet-5/, (at) => (at < SONNET5_STANDARD_FROM ? [2, 10] : [3, 15])],
+  // Permanent $2/$10: the scheduled increase to $3/$15 on 2026-09-01 was
+  // called off.
+  [/sonnet-5/, () => [2, 10]],
   [/sonnet-4-6|sonnet-4-5|sonnet-4-20/, () => [3, 15]],
   [/haiku-4-5/, () => [1, 5]],
 ];
 // Prompt-caching multipliers, quoted from the same page: a 5-minute cache write
-// costs 1.25x base input, a 1-hour write 2x, and a cache read 0.1x. Transcripts
-// break cache writes down by TTL, so no averaging is needed.
+// costs 1.25x base input, a 1-hour write 2x. Cache reads are 0.1x base input
+// for every model except where the page states otherwise (Fable 5.1 and
+// Mythos 5.1 read at 0.025x - the row's third element overrides CACHE_READ).
 const CACHE_WRITE_5M = 1.25, CACHE_WRITE_1H = 2, CACHE_READ = 0.1;
 
 // Billable input volume: everything the model read, however it was cached.
@@ -314,12 +316,12 @@ const volOf = (v) => v.in + v.cr + v.cw5 + v.cw1h;
 function costOf(model, v, at) {
   const row = model ? PRICES.find(([re]) => re.test(model)) : null;
   if (!row) return null;
-  const [inRate, outRate] = row[1](at);
+  const [inRate, outRate, crMul = CACHE_READ] = row[1](at);
   const perTok = inRate / 1e6;
   return (v.in * perTok)
     + (v.cw5 * perTok * CACHE_WRITE_5M)
     + (v.cw1h * perTok * CACHE_WRITE_1H)
-    + (v.cr * perTok * CACHE_READ)
+    + (v.cr * perTok * crMul)
     + (v.out * outRate / 1e6);
 }
 
