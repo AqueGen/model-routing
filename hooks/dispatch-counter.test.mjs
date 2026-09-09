@@ -736,6 +736,52 @@ test("tokens reaches Workflow-spawned agents nested under subagents/workflows/",
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
+// One assistant API response is written as one JSONL line PER CONTENT BLOCK,
+// every line repeating the same usage with only output_tokens climbing to its
+// final value on the last line. Counting lines instead of responses is what
+// multiplied real volume 2-3x, so these two pin the dedup.
+const blockLine = (id, model, usage, ts) =>
+  JSON.stringify({ timestamp: new Date(ts).toISOString(), message: { id, model, usage } });
+
+test("one API response written as several content-block lines is counted once", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  const now = Date.now();
+  const u = (out) => ({ input_tokens: 10, output_tokens: out, cache_read_input_tokens: 39094, cache_creation_input_tokens: 0 });
+  // The output snapshots are far apart on purpose: the report rounds to 0.1M,
+  // so only a wide spread makes "final value, not the sum" visible in the row.
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-opus-4-8"}\n');
+  writeFileSync(join(dir, "agent-a.jsonl"), [999e3, 999e3, 1e6]
+    .map((out) => blockLine("msg_x", "claude-sonnet-5", u(out), now)).join("\n") + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    // 10 + 39094 counted once (39k), not three times (117k), and the output
+    // column shows the final snapshot (1.0M), not the sum of the three (3.0M).
+    assert.match(out, /sonnet-5[^\n]*\s39k \(100%\)\s+1 agents, out 1\.0M/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("lines of one message straddling the window boundary count once, in the window of the last line", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  const HOUR = 3600e3, DAY = 24 * HOUR;
+  const histEnd = Date.now() - 7 * DAY; // end of the --days 7 --ago 7 window
+  const u = { input_tokens: 5000, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-opus-4-8"}\n');
+  writeFileSync(join(dir, "agent-a.jsonl"),
+    blockLine("msg_y", "claude-sonnet-5", u, histEnd - HOUR) + "\n" +
+    blockLine("msg_y", "claude-sonnet-5", u, histEnd + HOUR) + "\n");
+  try {
+    // Dedup runs before the window filter, so the response belongs to the
+    // window holding its LAST line - counted there once, and nowhere else.
+    assert.match(run(["tokens", "--days", "7", "--ago", "7"], cfg), /No subagent transcripts found/);
+    assert.match(run(["tokens"], cfg), /sonnet-5[^\n]*\s5k \(100%\)\s+1 agents, out 10/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+
 // Effort has three sources with a precedence between them, so these tests pin
 // every rung: a temp CLAUDE_CONFIG_DIR for the user file, a temp cwd for the two
 // project files, and an explicit env var for the override. Nothing here may read

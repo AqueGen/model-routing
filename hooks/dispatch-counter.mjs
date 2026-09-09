@@ -675,37 +675,57 @@ if (process.argv[2] === "tokens") {
     // timestamp are windowed individually - a resumed transcript has a fresh
     // mtime but old lines; lines without one fall back to the file mtime, which
     // the caller has already checked.
+    //
+    // One line per CONTENT BLOCK, not per API response: Claude Code writes a
+    // separate JSONL line for each block of one assistant reply, and every one
+    // of them repeats the SAME message.usage - same input, same cache read,
+    // same cache write - while output_tokens is a streaming snapshot whose
+    // final value lands on the last line of the id. Summing lines therefore
+    // multiplies a single response's cost by its block count (measured over 7
+    // days on one machine: input 3.0x, cache reads 1.97x, cache writes 2.59x).
+    // So: dedup by message.id, keeping the LAST line of each id, and only then
+    // window and accumulate. A message.id never spans two files, so a per-file
+    // map is enough - and it also absorbs literally re-appended duplicate
+    // lines. Dedup happens BEFORE the window filter so a response whose lines
+    // straddle a boundary counts in exactly one window, the one holding its
+    // last line, rather than in both or neither.
     const fileVols = new Map(); // model -> { in, out, cr, cw5, cw1h }
     let text;
     try { text = readFileSync(p, "utf-8"); } catch { unreadable++; return fileVols; }
+    const lastById = new Map(); // message.id -> [line's obj, its message]
+    const rest = []; // lines carrying no id: nothing to dedup them by
     for (const line of text.split("\n")) {
       if (!line.includes('"usage"')) continue;
       try {
         const obj = JSON.parse(line);
         const m = obj.message ?? {};
-        const u = m.usage; if (!u) continue;
+        if (!m.usage) continue;
         if (!m.model || m.model.startsWith("<")) continue;
-        const lts = obj.timestamp ? Date.parse(obj.timestamp) : NaN;
-        if (Number.isFinite(lts)) {
-          if (lts < win.start || lts >= win.end) continue;
-        } else if (!mtimeInWindow) continue;
-        const v = fileVols.get(m.model) ?? { in: 0, out: 0, cr: 0, cw5: 0, cw1h: 0 };
-        v.in += u.input_tokens ?? 0; v.out += u.output_tokens ?? 0;
-        v.cr += u.cache_read_input_tokens ?? 0;
-        // Cache writes are split by TTL because they are priced differently
-        // (1.25x base input at 5 minutes, 2x at an hour). Whatever the breakdown
-        // does not account for - a line carrying only the flat total, or a TTL
-        // bucket added upstream that this code has never heard of - is charged
-        // at the cheaper 5-minute rate. Taking the remainder rather than
-        // choosing between the two shapes is what stops an unknown bucket from
-        // disappearing out of both the volume and the cost.
-        const cc = u.cache_creation;
-        const e5 = cc?.ephemeral_5m_input_tokens ?? 0;
-        const e1h = cc?.ephemeral_1h_input_tokens ?? 0;
-        v.cw1h += e1h;
-        v.cw5 += e5 + Math.max(0, (u.cache_creation_input_tokens ?? 0) - e5 - e1h);
-        fileVols.set(m.model, v);
+        if (m.id) lastById.set(m.id, [obj, m]); else rest.push([obj, m]);
       } catch {}
+    }
+    for (const [obj, m] of [...lastById.values(), ...rest]) {
+      const u = m.usage;
+      const lts = obj.timestamp ? Date.parse(obj.timestamp) : NaN;
+      if (Number.isFinite(lts)) {
+        if (lts < win.start || lts >= win.end) continue;
+      } else if (!mtimeInWindow) continue;
+      const v = fileVols.get(m.model) ?? { in: 0, out: 0, cr: 0, cw5: 0, cw1h: 0 };
+      v.in += u.input_tokens ?? 0; v.out += u.output_tokens ?? 0;
+      v.cr += u.cache_read_input_tokens ?? 0;
+      // Cache writes are split by TTL because they are priced differently
+      // (1.25x base input at 5 minutes, 2x at an hour). Whatever the breakdown
+      // does not account for - a line carrying only the flat total, or a TTL
+      // bucket added upstream that this code has never heard of - is charged
+      // at the cheaper 5-minute rate. Taking the remainder rather than
+      // choosing between the two shapes is what stops an unknown bucket from
+      // disappearing out of both the volume and the cost.
+      const cc = u.cache_creation;
+      const e5 = cc?.ephemeral_5m_input_tokens ?? 0;
+      const e1h = cc?.ephemeral_1h_input_tokens ?? 0;
+      v.cw1h += e1h;
+      v.cw5 += e5 + Math.max(0, (u.cache_creation_input_tokens ?? 0) - e5 - e1h);
+      fileVols.set(m.model, v);
     }
     return fileVols;
   };
