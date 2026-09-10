@@ -30,14 +30,19 @@ the answer. A dispatch row is one line in a log whether it cost four
 thousand tokens or four million, and only the token report knows which
 model actually ran and how much it processed. Only the dispatch report
 knows what was asked for and what the session model was at that moment -
-it stamps the session at dispatch time, while the token side reads it from
-the parent transcript's head.
+both sides stamp the session at dispatch time - the token side matches each
+agent back to the assistant message that dispatched it.
 
 So when a dispatch-side warning names an agent - a tier leak, or a dispatch
 below its pin - carry its volume from the "By agent" block into the
 sentence. When that volume is not there, say the count overstated it and
 name why: most often an agent from another plugin pinning a model cheaper
 than the session, which the dispatch log cannot see unless that agent is in
-FOREIGN_AGENT_PINS. When the two disagree
-and the window contains a mid-session /model switch, say that instead - the
-token side attributes those subagents to the model the session started on.
+FOREIGN_AGENT_PINS. When the two disagree, say that instead, and name the
+cause: the dispatch log stamps the model of the PREVIOUS assistant turn for
+the first dispatch right after a `/model` switch or a fallback, because
+PostToolUse fires before the dispatching line is flushed (background
+dispatches especially); nested agents are keyed to their dispatching agent
+on the token side and to the main session on the log side; or the token side
+could not read the parent transcript at all, which it says in its own
+footer.

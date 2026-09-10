@@ -1016,9 +1016,9 @@ test("tokens falls back to the transcript tail when the head names no model", ()
     const out = run(["tokens"], cfg);
     assert.match(out, /opus-5: 1k across 1 agents - 100% below session tier/);
     assert.doesNotMatch(out, /session unknown/);
-    // The footer must admit the tail case: for these sessions the attribution
-    // is the LAST model, the opposite bias from the start-model promise.
-    assert.match(out, /the tail is read instead and that session is attributed to its LAST model/);
+    // The footer must name the fallback ladder that got there: no sidecar, no
+    // usable timestamp, so the transcript head - and here its tail.
+    assert.match(out, /or its tail, when the head names no model at all/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
@@ -1562,5 +1562,107 @@ test("a plain env dispatch caveats the bare-inheritance callout, not the pin one
     const out = run(["tokens"], cfg);
     assert.match(out, /1 dispatch in it ran with CLAUDE_CODE_SUBAGENT_MODEL set/);
     assert.doesNotMatch(out, /CLAUDE_CODE_SUBAGENT_MODEL_FORCE/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+// --- Dispatch-time attribution (sidecar toolUseId -> assistant message) -----
+
+const assistantLine = (model, ts, content, input = 0) =>
+  JSON.stringify({
+    type: "assistant",
+    timestamp: ts,
+    message: { model, content, usage: { input_tokens: input, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } },
+  });
+const agentUsageLine = (model, ts, input) =>
+  JSON.stringify({ type: "assistant", timestamp: ts, message: { model, usage: { input_tokens: input, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } });
+const iso = (msAgo) => new Date(Date.now() - msAgo).toISOString();
+
+test("an agent is attributed to the model that dispatched it, not the session head", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  // The session STARTED on opus and switched to fable before dispatching, the
+  // exact shape that used to send half a real 7d sample to the wrong model.
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"),
+    assistantLine("claude-opus-5", iso(3600e3), [{ type: "text", text: "x" }], 5000) + "\n"
+    + assistantLine("claude-fable-5-1", iso(1800e3), [{ type: "tool_use", id: "toolu_1", name: "Agent", input: {} }], 100) + "\n");
+  writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-sonnet-5", 1000) + "\n");
+  writeFileSync(join(dir, "agent-a.meta.json"), JSON.stringify({ agentType: "model-routing:scout", toolUseId: "toolu_1", spawnDepth: 1 }));
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /fable-5-1: 1k across 1 agents/);
+    assert.doesNotMatch(out, /opus-5: \S+ across \d+ agents/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a nested agent is attributed through its parent agent's transcript", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"),
+    assistantLine("claude-fable-5-1", iso(3600e3), [{ type: "tool_use", id: "toolu_1", name: "Agent", input: {} }], 100) + "\n");
+  // The dispatching tool_use for a spawnDepth-2 agent lives in the DISPATCHING
+  // AGENT's transcript, so the session index alone can never resolve it.
+  writeFileSync(join(dir, "agent-a.jsonl"),
+    assistantLine("claude-sonnet-5", iso(1800e3), [{ type: "tool_use", id: "toolu_2", name: "Agent", input: {} }], 1000) + "\n");
+  writeFileSync(join(dir, "agent-a.meta.json"), JSON.stringify({ agentType: "model-routing:scout", toolUseId: "toolu_1", spawnDepth: 1 }));
+  writeFileSync(join(dir, "agent-b.jsonl"), usageLine("claude-haiku-4-5", 2000) + "\n");
+  writeFileSync(join(dir, "agent-b.meta.json"), JSON.stringify({ agentType: "model-routing:test-runner", toolUseId: "toolu_2", parentAgentId: "a", spawnDepth: 2 }));
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /sonnet-5: 2k across 1 agents/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("without a sidecar match, the model in effect at the agent's first timestamp wins", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  // opus first, fable later, and the agent starts between them: the switch
+  // happened AFTER this dispatch, so the tail model must not claim it.
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"),
+    assistantLine("claude-opus-5", iso(3600e3), [{ type: "text", text: "x" }], 100) + "\n"
+    + assistantLine("claude-fable-5-1", iso(600e3), [{ type: "text", text: "y" }], 100) + "\n");
+  writeFileSync(join(dir, "agent-a.jsonl"), agentUsageLine("claude-sonnet-5", iso(1800e3), 1000) + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /opus-5: 1k across 1 agents/);
+    assert.doesNotMatch(out, /fable-5-1: \S+ across \d+ agents/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a synthetic assistant line never becomes the session model", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  // "<synthetic>" is a harness placeholder, not a model the session ran on, and
+  // it is the LAST line before the launch - exactly where the timeline fallback
+  // would otherwise pick it up.
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"),
+    assistantLine("claude-opus-5", iso(3600e3), [{ type: "text", text: "x" }], 100) + "\n"
+    + assistantLine("<synthetic>", iso(1800e3), [{ type: "text", text: "y" }], 100) + "\n");
+  writeFileSync(join(dir, "agent-a.jsonl"), agentUsageLine("claude-sonnet-5", iso(900e3), 1000) + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /opus-5: 1k across 1 agents/);
+    assert.doesNotMatch(out, /<synthetic>/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("--session scopes the main-session denominator per line model", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  // One transcript, two models: attributing agents at dispatch time means the
+  // filter can no longer take or drop a whole switched session at once.
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"),
+    assistantLine("claude-fable-5-1", iso(3600e3), [{ type: "tool_use", id: "toolu_1", name: "Agent", input: {} }], 4000) + "\n"
+    + usageLine("claude-opus-5", 8000) + "\n");
+  writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-sonnet-5", 1000) + "\n");
+  writeFileSync(join(dir, "agent-a.meta.json"), JSON.stringify({ agentType: "model-routing:scout", toolUseId: "toolu_1", spawnDepth: 1 }));
+  try {
+    const out = run(["tokens", "--session", "fable"], cfg);
+    assert.match(out, /Main sessions \(not routable\): 4k across 1 sessions/);
+    assert.doesNotMatch(out, /opus-5\s+8k/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
