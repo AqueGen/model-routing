@@ -629,7 +629,7 @@ Attribution comes from `agent-<id>.meta.json`, the sidecar Claude Code writes be
 `tokens` also prices the volume it just counted, because tokens need translating and dollars do not. Sample output - the window rolls daily, so your figures will differ:
 
 ```text
-At API list prices (rates as of 2026-08-11), this is what the volume above would have cost on the Claude API:
+At API list prices (rates as of 2026-09-09), this is what the volume above would have cost on the Claude API:
   as it ran                                             $2,380
   had every subagent inherited its session model        $4,417
   difference                                            $2,037

@@ -310,9 +310,8 @@ const CACHE_WRITE_5M = 1.25, CACHE_WRITE_1H = 2, CACHE_READ = 0.1;
 const volOf = (v) => v.in + v.cr + v.cw5 + v.cw1h;
 
 // Dollars for one model's token counts, or null when the model is not on the
-// price table. `at` is the instant the rates are taken from - the price of a
-// window, not of today, since one model's rate changes on a date inside the
-// horizon these reports can cover.
+// price table. `at` is kept as the hook for a future dated rate; no row on
+// the table uses it today.
 function costOf(model, v, at) {
   const row = model ? PRICES.find(([re]) => re.test(model)) : null;
   if (!row) return null;
@@ -649,10 +648,8 @@ if (process.argv[2] === "tokens") {
   const perAgent = new Map();
   let metaless = 0; // agent transcripts whose sidecar named no type
   let unknownAgents = 0, unknownVol = 0; // models tierOf cannot rank
-  // Cost accounting. The rate epoch is the END of the window, not "now", so a
-  // historical window is priced at the rates that applied to it - one model on
-  // the price table changes rate on a date that falls inside the horizon these
-  // windows can reach.
+  // Cost accounting. priceAt is kept as the hook for a future dated rate; no
+  // row on the table uses it today.
   const priceAt = win.end;
   let costRan = 0, costInherited = 0, unpricedVol = 0, unpricedSessionVol = 0;
   let mainCost = 0, mainUnpricedVol = 0;
