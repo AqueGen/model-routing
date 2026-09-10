@@ -330,7 +330,7 @@ earns its cost (the knobs themselves:
 | Situation | Model | Effort | Why this model | Why this effort |
 | --------- | ----- | ------ | -------------- | --------------- |
 | Exploration (`scout`) | sonnet | low | Finding and tracing code is retrieval, not reasoning - a cheap tier reports as well as a costly one, and the file volume stays in the subagent regardless. | The work is mechanical lookup; extra thinking buys nothing. |
-| Ordinary implementation (`implementer`) | sonnet | medium | Sonnet is near-opus quality on single-file, clear-shape coding at a fraction of the price (intro pricing through 2026-08-31 makes it ~2.5x cheaper than opus) - for work whose approach the plan already decided, the margin never changes the outcome. | The plan already decided the approach; the agent executes real logic, not design. |
+| Ordinary implementation (`implementer`) | sonnet | medium | Sonnet is near-opus quality on single-file, clear-shape coding at a fraction of the price (permanently priced at $2/$10, ~2.5x cheaper than opus) - for work whose approach the plan already decided, the margin never changes the outcome. | The plan already decided the approach; the agent executes real logic, not design. |
 | Complex implementation (`implementer` `model=opus`) | opus | medium (pinned) | Multi-file or cross-layer changes, security/money/migrations/concurrency/public contracts, or a retry after a weak sonnet result - a wrong approach is expensive, and Opus 5 stepped the tier up at UNCHANGED price, so escalate when in doubt. (Ambiguous tasks are not an escalation case: implementer stops on ambiguity by contract - clarify first.) | The `model=opus` dispatch changes the model only - the Agent tool has no effort param, so the pinned medium stays; the escalation buys the tier, not extra thinking. |
 | Code review (`reviewer`) | opus | high | Review is an asymmetric bet - one pass guards against a bug that costs far more if it ships, so it is the one place to prefer the top tier by default. | High: subtle correctness bugs hide from shallow reading. Anthropic reports Opus 5 review holds at lower effort - medium is a future eval candidate; the pin stays high until measured. |
 | Tests / builds (`test-runner`) | haiku | low | Running a command and summarizing output is mechanical; the value is keeping raw logs out of the main context, not the model doing it. | Low: no reasoning, just report. |
@@ -387,7 +387,7 @@ exact numbers live on
 | ------ | ------------ | ------------------- |
 | fable | ~2x | Frontier reasoning. A main-session choice for all-hard-reasoning days (architecture, subtle debugging hunts) - never a routing target. |
 | opus | 1x | The escalation tier: code review, multi-file/cross-layer implementation, security/money/concurrency-sensitive changes. Opus 5 made this tier a step stronger at the same price. |
-| sonnet | ~0.6x (~0.4x intro through 2026-08-31) | The workhorse: ordinary implementation from an approved plan, exploration, E2E driving. Near-opus on clear-shape coding. |
+| sonnet | ~0.4x (permanent $2/$10) | The workhorse: ordinary implementation from an approved plan, exploration, E2E driving. Near-opus on clear-shape coding. |
 | haiku | ~0.2x | Mechanical grind: test/build runs, diff sanity checks, trivial sweeps. |
 
 Generation notes (as of the Opus 5 launch, July 2026 - these rot
@@ -629,7 +629,7 @@ Attribution comes from `agent-<id>.meta.json`, the sidecar Claude Code writes be
 `tokens` also prices the volume it just counted, because tokens need translating and dollars do not. Sample output - the window rolls daily, so your figures will differ:
 
 ```text
-At API list prices (rates as of 2026-08-11), this is what the volume above would have cost on the Claude API:
+At API list prices (rates as of 2026-09-09), this is what the volume above would have cost on the Claude API:
   as it ran                                             $2,380
   had every subagent inherited its session model        $4,417
   difference                                            $2,037
@@ -638,7 +638,7 @@ At API list prices (rates as of 2026-08-11), this is what the volume above would
 
 Read it as a counterfactual, which is exactly what it is: on a subscription you pay none of this, and the difference carries the same assumption as the volume figures above - that every subagent would otherwise have inherited the session model, which agents pinned by other plugins would not.
 
-The arithmetic is per token type rather than per token, because they are priced an order of magnitude apart: base input at the model rate, cache reads at 0.1x, five-minute cache writes at 1.25x, one-hour writes at 2x, and output at its own rate. Cache reads dominate real transcripts, so a flat volume multiply would overstate the bill several times over. Transcripts break cache writes down by TTL; a line carrying only a total is charged at the cheaper five-minute rate.
+The arithmetic is per token type rather than per token, because they are priced an order of magnitude apart: base input at the model rate, cache reads at 0.1x (0.025x on Fable 5.1 and Mythos 5.1), five-minute cache writes at 1.25x, one-hour writes at 2x, and output at its own rate. Cache reads dominate real transcripts, so a flat volume multiply would overstate the bill several times over. Transcripts break cache writes down by TTL; a line carrying only a total is charged at the cheaper five-minute rate.
 
 Several documented modifiers push these figures DOWNWARD, so treat them as conservative rather than optimistic. Models from Opus 4.7, Sonnet 5 and Fable 5 onward use a tokenizer producing roughly 30% more tokens for the same text than Sonnet 4.6 and earlier, so re-pricing a cheap model's token count at an expensive model's rate understates what that work would really have cost there. Nothing in a usage line reveals whether fast mode (double rates on Opus 5 and Opus 4.8) or US-only inference (1.1x from 4.6 onward) applied, so neither is added. And a model absent from the price table is excluded from every figure and declared on its own line, never counted as free - a window where nothing can be priced prints that declaration instead of figures, because silence would read as "this cost nothing".
 

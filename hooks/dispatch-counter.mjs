@@ -282,25 +282,27 @@ const shortModel = (m) => m ? m.replace(/^claude-/, "").replace(/-\d{8}$/, "") :
 // (Opus 4.1 bills at three times Opus 4.5) and a loose pattern would quietly
 // misprice a retired model. A model absent from this table is reported as
 // unpriced volume, never as zero.
-const PRICES_ASOF = "2026-08-11";
-const SONNET5_STANDARD_FROM = Date.parse("2026-09-01T00:00:00Z");
+const PRICES_ASOF = "2026-09-09";
 const PRICES = [
   // Retired families first: a looser pattern below must not claim them.
   [/opus-4-1-|opus-4-20/, () => [15, 75]],
   // Pre-4.x ids put the generation first (claude-3-5-haiku-...), so both orders
   // are matched; the row above needs the same trick for claude-opus-4-20250514.
   [/3-5-haiku|haiku-3-5/, () => [0.8, 4]],
+  // 5.1 cache reads at 0.025x base input, ahead of the looser 5.x row below.
+  [/fable-5-1|mythos-5-1/, () => [10, 50, 0.025]],
   [/fable-5|mythos-5/, () => [10, 50]],
   [/opus-5|opus-4-8|opus-4-7|opus-4-6|opus-4-5/, () => [5, 25]],
-  // The one model on the page whose price changes on a date rather than with a
-  // new id: introductory $2/$10 through 2026-08-31, standard $3/$15 after.
-  [/sonnet-5/, (at) => (at < SONNET5_STANDARD_FROM ? [2, 10] : [3, 15])],
+  // Permanent $2/$10: the scheduled increase to $3/$15 on 2026-09-01 was
+  // called off.
+  [/sonnet-5/, () => [2, 10]],
   [/sonnet-4-6|sonnet-4-5|sonnet-4-20/, () => [3, 15]],
   [/haiku-4-5/, () => [1, 5]],
 ];
 // Prompt-caching multipliers, quoted from the same page: a 5-minute cache write
-// costs 1.25x base input, a 1-hour write 2x, and a cache read 0.1x. Transcripts
-// break cache writes down by TTL, so no averaging is needed.
+// costs 1.25x base input, a 1-hour write 2x. Cache reads are 0.1x base input
+// for every model except where the page states otherwise (Fable 5.1 and
+// Mythos 5.1 read at 0.025x - the row's third element overrides CACHE_READ).
 const CACHE_WRITE_5M = 1.25, CACHE_WRITE_1H = 2, CACHE_READ = 0.1;
 
 // Billable input volume: everything the model read, however it was cached.
@@ -308,18 +310,17 @@ const CACHE_WRITE_5M = 1.25, CACHE_WRITE_1H = 2, CACHE_READ = 0.1;
 const volOf = (v) => v.in + v.cr + v.cw5 + v.cw1h;
 
 // Dollars for one model's token counts, or null when the model is not on the
-// price table. `at` is the instant the rates are taken from - the price of a
-// window, not of today, since one model's rate changes on a date inside the
-// horizon these reports can cover.
+// price table. `at` is kept as the hook for a future dated rate; no row on
+// the table uses it today.
 function costOf(model, v, at) {
   const row = model ? PRICES.find(([re]) => re.test(model)) : null;
   if (!row) return null;
-  const [inRate, outRate] = row[1](at);
+  const [inRate, outRate, crMul = CACHE_READ] = row[1](at);
   const perTok = inRate / 1e6;
   return (v.in * perTok)
     + (v.cw5 * perTok * CACHE_WRITE_5M)
     + (v.cw1h * perTok * CACHE_WRITE_1H)
-    + (v.cr * perTok * CACHE_READ)
+    + (v.cr * perTok * crMul)
     + (v.out * outRate / 1e6);
 }
 
@@ -671,10 +672,8 @@ if (process.argv[2] === "tokens") {
   let metaless = 0; // agent transcripts whose sidecar named no type
   let parentUnreadable = 0; // parent transcripts that could not be read at all
   let unknownAgents = 0, unknownVol = 0; // models tierOf cannot rank
-  // Cost accounting. The rate epoch is the END of the window, not "now", so a
-  // historical window is priced at the rates that applied to it - one model on
-  // the price table changes rate on a date that falls inside the horizon these
-  // windows can reach.
+  // Cost accounting. priceAt is kept as the hook for a future dated rate; no
+  // row on the table uses it today.
   const priceAt = win.end;
   let costRan = 0, costInherited = 0, unpricedVol = 0, unpricedSessionVol = 0;
   let mainCost = 0, mainUnpricedVol = 0;

@@ -135,9 +135,9 @@ actually earns its cost:
   which stays in the subagent regardless of tier.
 - **Ordinary implementation -> sonnet/medium.** Sonnet is near-opus
   quality on single-file, clear-shape coding at a fraction of the price
-  (as of the Opus 5 launch, July 2026: sonnet runs at intro pricing
-  through 2026-08-31, ~2.5x cheaper than opus). For work whose approach
-  the plan already decided, that margin does not change the outcome, so
+  (sonnet is permanently priced at $2/$10, ~2.5x cheaper than opus). For
+  work whose approach the plan already decided, that margin does not
+  change the outcome, so
   sonnet stays the value default. Medium effort because the agent
   executes, it does not design.
 - **Complex implementation -> opus, still at the agent's pinned medium**
