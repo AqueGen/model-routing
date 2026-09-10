@@ -538,10 +538,6 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   // that COULD have inherited and says so; the measured answer is in `tokens`,
   // which reads the model each subagent actually ran on. Bundled agents are
   // frontmatter-pinned and never leak; Explore is inherently cheap.
-  // Threshold is the research rework line: when a
-  // routed-down tier would need rework >~20% of the time the price edge
-  // is gone - here inverted, >20% of cheap-capable dispatches leaking UP
-  // is the same signal that the tier assignment is not holding.
   const BUNDLED = new Set([...Object.keys(AGENT_PINS), ...Object.keys(FOREIGN_AGENT_PINS), ...CHEAP_AGENTS]);
   const unpinned = entries.filter((e) => !BUNDLED.has(e.agent));
   // The question "did this inherit a STRONG session model" is only answerable
@@ -560,12 +556,10 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   // it says, so it is excluded here too: the remedy is one variable, not one
   // dispatch.
   const leaks = capable.filter((e) => !e.env && !e.envForce && !e.model && tierOf(e.session) > 2);
-  const LEAK_WARN = 0.20;
   const leakLines = [];
   if (capable.length) {
     const rate = leaks.length / capable.length;
     leakLines.push("", `Tier leaks: ${leaks.length} of ${capable.length} dispatches on agent types with no MODEL pin this plugin knows (${Math.round(rate * 100)}%, Explore excepted as inherently cheap) went out bare on a strong session - each inherited that session model unless its own frontmatter pinned one.`);
-    if (rate > LEAK_WARN) leakLines.push(`  ! above the 20% rework threshold - pass an explicit model= on general-purpose/custom dispatches (sonnet default). Check "Inherited the session model bare" in \`tokens\` first: it reports the volume that actually ran, so a foreign agent pinning a model CHEAPER than the session drops out of it - one pinning the session's own model cannot, and is counted there too.`);
   }
   if (unrankable) {
     leakLines.push(

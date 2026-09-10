@@ -181,7 +181,7 @@ pie showData title Subagent volume by model (7d, fable-default sessions, million
 
 The opus slice is not a leak - on a Fable session even opus is a cheaper tier, and review plus multi-file implementation are dispatched there deliberately, because a missed bug costs more than the review.
 
-The fable slice is worth reading against the previous snapshot (2026-07-20, v0.8.1), where it was 21.4M of 166.8M - mostly Workflow `agent()` calls dispatched with no explicit `model` opt. 0.7.2 added the Workflow routing rule in response to that exact measurement, and the accidental part of this slice is now a rounding error. Most of what remains is the opposite of a leak: a `model=fable` reviewer dispatched ON PURPOSE at the top tier, above the session, to review this release. The counter reports it as above-tier work rather than hiding it, which is the behaviour 0.8.0 added. Tier leaks sit at 1 of 11 unpinned dispatches (9%), under the 20% rework threshold the report warns at. The plugin's job is making every slice a decision instead of an accident, and a visible, attributable top-tier slice is what a decision looks like.
+The fable slice is worth reading against the previous snapshot (2026-07-20, v0.8.1), where it was 21.4M of 166.8M - mostly Workflow `agent()` calls dispatched with no explicit `model` opt. 0.7.2 added the Workflow routing rule in response to that exact measurement, and the accidental part of this slice is now a rounding error. Most of what remains is the opposite of a leak: a `model=fable` reviewer dispatched ON PURPOSE at the top tier, above the session, to review this release. The counter reports it as above-tier work rather than hiding it, which is the behaviour 0.8.0 added. Tier leaks sit at 1 of 11 unpinned dispatches (9%) - the report states that count, not a verdict on it. The plugin's job is making every slice a decision instead of an accident, and a visible, attributable top-tier slice is what a decision looks like.
 
 Which task lands on which tier:
 
@@ -353,11 +353,9 @@ Research backing: task-type routing beats complexity-score routing
 sonnet-vs-opus tier gap on benchmarks such as
 [SWE-bench Verified](https://www.swebench.com) is what makes sonnet
 the implementation default with opus reserved for the margin cases; the
-20% rework threshold the dispatch report warns on comes from coding-agent
-routing practice
-([Augment](https://www.augmentcode.com/guides/ai-model-routing-guide)) -
-if a routed-down tier needs rework more than ~1 time in 5, the price edge
-is gone and that task type should route up. Benchmark numbers are a
+dispatch report's tier-leak count is descriptive, not a verdict - it says
+how many bare dispatches could have inherited a strong session model, and
+leaves the judgment call to the reader. Benchmark numbers are a
 snapshot (last reviewed July 2026, at the
 [Opus 5 launch](https://www.anthropic.com/news/claude-opus-5)) and shift
 with every release; the principle - a small tier gap on ordinary work, a
@@ -524,7 +522,7 @@ invented dollar savings:
 # in-chat report: per-agent dispatch breakdown + real token volume per model
 # also flags "tier leaks" - bare dispatches of an agent type carrying no
 # pin this plugin knows, which inherit a strong session model unless the
-# agent pins one itself; warns past the 20% rework threshold. Counted only
+# agent pins one itself; the count is descriptive, not a verdict. Counted only
 # where the session model is recorded AND rankable - the rest is left out
 # and declared, because "did this inherit something strong" has no answer
 # for a session nothing can rank
@@ -608,7 +606,7 @@ What identity does not fix, and nothing on this side can, is a foreign agent who
 
 One limit belongs to this side rather than the other: `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` reaches the usage lines indistinguishably from a pin, so a machine forcing every subagent to haiku puts a pinned agent's volume under "below the pin" here, while the dispatch report excludes forced dispatches on purpose - there the remedy is unsetting one variable, not fixing one dispatch. The volume is right either way; only the remedy printed beside it belongs to the other report.
 
-That difference is how this got noticed. In one window, the dispatch report flagged 18 bare dispatches as tier leaks, 35% and past its warning threshold; 11 of them were `codex:codex-rescue`, an agent from another plugin whose own frontmatter pins sonnet. The dispatch log could not see that pin, so it had to allow that they inherited opus. The transcripts showed they did not: an agent whose usage lines all name sonnet did not bill opus, whatever the log had to allow. Measured leaked volume was 1.8M of 621M - the count said "act on this", the volume said "there is nothing here".
+That difference is how this got noticed. In one window, the dispatch report flagged 18 bare dispatches as tier leaks, 35%; 11 of them were `codex:codex-rescue`, an agent from another plugin whose own frontmatter pins sonnet. The dispatch log could not see that pin, so it had to allow that they inherited opus. The transcripts showed they did not: an agent whose usage lines all name sonnet did not bill opus, whatever the log had to allow. Measured leaked volume was 1.8M of 621M - the count said "act on this", the volume said "there is nothing here".
 
 Two limits on that, because it is the argument this section rests on. The join is between two populations, not two event streams - the dispatch log carries no agent id, so "11 bare rows, 11 sonnet transcripts" is a match of sets and not of events. And what the transcripts refute is the SPEND, not the cause: a dispatch can be logically bare and still run something cheap because of a fallback or a machine-wide override. For the question anyone actually asks a cost report - was expensive money spent here - that is enough. For "why did it run what it ran", it is not.
 

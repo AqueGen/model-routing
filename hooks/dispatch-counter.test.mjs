@@ -383,7 +383,7 @@ test("stats one-liner: today count, and --ago suppressing 'today'", () => {
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
-test("tier-leak section: threshold boundary and bundled-only absence", () => {
+test("tier-leak section: rate line and bundled-only absence", () => {
   const now = Date.now();
   const mk = (bare, explicit) => {
     const cfg = freshConfigDir();
@@ -393,15 +393,10 @@ test("tier-leak section: threshold boundary and bundled-only absence", () => {
     ]);
     return cfg;
   };
-  let cfg = mk(1, 4); // exactly 20%: strict > threshold means no warning line
+  let cfg = mk(1, 4); // 20%
   try {
     const out = run(["report"], cfg);
     assert.match(out, /Tier leaks: 1 of 5 dispatches on agent types with no MODEL pin this plugin knows \(20%, Explore excepted as inherently cheap\)/);
-    assert.ok(!out.includes("rework threshold"));
-  } finally { rmSync(cfg, { recursive: true, force: true }); }
-  cfg = mk(2, 3); // 40%: above the threshold
-  try {
-    assert.match(run(["report"], cfg), /above the 20% rework threshold/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
   cfg = freshConfigDir(); // bundled-only log: no unpinned dispatches, no section
   writeLog(cfg, [{ ts: now, agent: "model-routing:scout", session: "claude-opus-4-8" }]);
@@ -1305,9 +1300,6 @@ test("tier leaks leave out dispatches whose session cannot be ranked", () => {
     const out = run(["report"], cfg);
     assert.match(out, /Tier leaks: 1 of 1 dispatches on agent types with no MODEL pin this plugin knows \(100%, Explore excepted as inherently cheap\)/);
     assert.match(out, /2 unpinned dispatch\(es\) left out/);
-    // The warning is the point of the fraction: 1 of 3 reads as 33% and stays
-    // quiet, 1 of 1 is 100% and trips the threshold.
-    assert.match(out, /above the 20% rework threshold/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 

@@ -178,8 +178,12 @@ function toList(value) {
   return Array.isArray(value) ? value : [value];
 }
 
+// A missing per-turn value (a dead turn's result object was absent) means the
+// total is unknown, not zero - so any null/undefined input makes the whole
+// sum null instead of silently treating the gap as free.
 function sum(values) {
-  return values.reduce((a, b) => a + (b ?? 0), 0);
+  if (values.some((v) => v == null)) return null;
+  return values.reduce((a, b) => a + b, 0);
 }
 
 function mergeModelUsage(all) {
@@ -316,6 +320,9 @@ function printCase(kase, armResults) {
   // print the price next to the score rather than letting the score stand alone.
   const price = Object.entries(armResults).map(([arm, runs]) => {
     const priced = runs.filter((r) => typeof r.costUsd === "number");
+    if (priced.length === 0) {
+      return `${arm}: no priced runs (0/${runs.length}) - every run of this arm ended without a result`;
+    }
     const cost = mean(runs.map((r) => r.costUsd));
     const seconds = mean(runs.map((r) => r.durationMs)) / 1000;
     // Say how many runs are behind the mean. A run that died has no cost to
