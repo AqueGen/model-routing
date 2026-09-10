@@ -175,7 +175,10 @@ actually earns its cost:
   which is the generation whose tokenizer Fable 5 uses - it is not a gap
   between Fable and opus, and the model table lists the same token
   density for both. So budget the fable-to-opus gap as the sticker 2x
-  rather than something wider.
+  rather than something wider - on base input and output. Cache reads
+  run the other way on Fable 5.1 (0.025x, $0.25/MTok, against opus at
+  0.1x, $0.50/MTok): cache-heavy opus work dispatched from a Fable 5.1
+  session pays MORE per cached token than the session would have.
   Where the inflation does bite is any comparison against a Sonnet
   4.6-era baseline: re-pricing today's token counts at yesterday's rates
   understates the difference.

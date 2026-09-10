@@ -561,7 +561,7 @@ volume against the parent session like any other subagent.
 
 An agent pin is a ceiling AND a floor. The ceiling is documented above: when the pin sits over your session model, cap the dispatch at the session model. The floor is the other half - the pin states how much reasoning the ROLE needs, so `reviewer` dispatched with `model=haiku` is not a cheaper review, it is a weaker one, and a missed bug costs more than the review did.
 
-The report calls these out because every other figure counts them as wins: they genuinely ran on a cheaper model than the session, so they pad the routed-down percentage while breaking the thing they were routed for.
+The report calls these out because every other figure counts them as wins: they genuinely ran on a lower tier than the session, so they pad the routed-down percentage while breaking the thing they were routed for.
 
 ```text
 4 of the cheaper ones went BELOW their agent's own pin, which is not a saving - the pin is the tier the role needs, and nothing about the session required going under it.

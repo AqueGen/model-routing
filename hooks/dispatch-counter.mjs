@@ -626,7 +626,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   const lines = [
     `Model routing report - ${winLabel}${versionSuffix}`,
     "",
-    `${down.length} of ${comparable}${unknownCount ? " comparable" : ""} dispatches (${pct}%) ran on a cheaper model than the session${unknownCount ? ` - ${unknownCount} not tier-comparable excluded` : ""}${todayPart ? ` (${todayPart.replace(" · ", "")})` : ""}.`,
+    `${down.length} of ${comparable}${unknownCount ? " comparable" : ""} dispatches (${pct}%) ran on a lower tier than the session${unknownCount ? ` - ${unknownCount} not tier-comparable excluded` : ""}${todayPart ? ` (${todayPart.replace(" · ", "")})` : ""}.`,
     ...(upCount ? [`${upCount} ran ABOVE the session tier - a pin above the session model, uncapped; pins are ceilings only when the dispatch passes model=<session>.`] : []),
     ...(underPinCount ? [`${underPinCount} of the cheaper ones went BELOW their agent's own pin, which is not a saving - the pin is the tier the role needs, and nothing about the session required going under it.`] : []),
     ...section("Ran cheaper (routed down):", groups.down),
@@ -1051,7 +1051,12 @@ if (process.argv[2] === "tokens") {
     const mainNote = mainVolTotal
       ? `\n\nMain sessions in this window: ${fmtN(mainVolTotal)} across ${mainSessions} sessions, with no subagent volume counted against them.`
       : "";
-    process.stdout.write(`No subagent transcripts found under ${projRoot} (${winLabel})${versionSuffix}.\nToken stats read Claude Code agent-*.jsonl transcript files; they appear after subagent dispatches. If your config lives elsewhere, set CLAUDE_CONFIG_DIR.${mainNote}`);
+    // Read failures are the one cause of an empty report that is not "nothing
+    // was delegated", so they are declared here too, not only in the full one.
+    const readNote = unreadablePaths.size
+      ? `\n\n${unreadablePaths.size} transcript(s) could not be read (too large to load as one string, or unreadable) - the window may hold subagent volume this report cannot count.`
+      : "";
+    process.stdout.write(`No subagent transcripts found under ${projRoot} (${winLabel})${versionSuffix}.\nToken stats read Claude Code agent-*.jsonl transcript files; they appear after subagent dispatches. If your config lives elsewhere, set CLAUDE_CONFIG_DIR.${mainNote}${readNote}`);
     process.exit(0);
   }
   const rows = [...perModel.entries()].map(([m, s]) => ({ m, vol: volOf(s), ...s }))
@@ -1110,7 +1115,7 @@ if (process.argv[2] === "tokens") {
   const out = [
     `Subagent token volume - ${winLabel} (input + cache)${versionSuffix}:`,
     "",
-    `${fmtN(downTotal)} of ${fmtN(total - unknownVol)} ${unknownVol ? "comparable " : ""}tokens (${Math.round((downTotal / comparableVol) * 100)}%) processed on a cheaper model than their session - judged per session (fable/opus days both count fairly).`,
+    `${fmtN(downTotal)} of ${fmtN(total - unknownVol)} ${unknownVol ? "comparable " : ""}tokens (${Math.round((downTotal / comparableVol) * 100)}%) processed on a lower tier than their session - judged per session (fable/opus days both count fairly). Lower tier is not always cheaper: the dollar rows below are the priced answer.`,
     // A --session filter selects the sessions with the most room to route down,
     // so the scoped figure is never the only one on screen.
     ...(sf && allCmpVol ? [`Across ALL sessions, unfiltered: ${Math.round((allDownVol / allCmpVol) * 100)}% of ${fmtN(allCmpVol)} comparable tokens - the filter above scopes to sessions where routing has the most room.`] : []),
@@ -1173,7 +1178,7 @@ if (process.argv[2] === "tokens") {
       "Rates are first-party Claude API list prices - Bedrock and Google Cloud bill separately and are not modelled. They are transcribed from the Anthropic pricing page on the date above and will drift; a window straddling a price change is priced wholly at the rates in effect at its end. Re-check PRICES in dispatch-counter.mjs before quoting a figure.",
     ] : []),
     "",
-    "Volume = tokens the subagent processed; cache reads are billed at the subagent's model rate, which is where routing saves.",
+    "Volume = tokens the subagent processed; cache reads are billed at the subagent's model rate, which is where routing usually saves - not always: a Fable 5.1 session reads its cache at 0.025x of its base rate while an opus subagent reads its own at 0.1x of a base half as high - twice the rate per cached token - so cache-heavy opus work dispatched from Fable 5.1 costs MORE per cached token than staying put. The tier share above does not know that; the dollar rows do.",
     "Session model is the model of the assistant message that DISPATCHED the agent, matched through the toolUseId in the agent's sidecar - the same instant the dispatch report stamps, so a mid-session /model switch moves both reports together. Without a usable sidecar the model in effect at the agent's first timestamp is used, and failing that the head of the session transcript (or its tail, when the head names no model at all). A nested agent (spawned by another agent) is keyed to the model of that agent, which is the model it would inherit; the dispatch log keys it to the main session, so the two can differ for nested agents.",
   ];
   process.stdout.write(out.join("\n"));
