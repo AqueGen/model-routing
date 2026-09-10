@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.16.1](https://github.com/AqueGen/model-routing/compare/v0.16.0...v0.16.1) (2026-09-10)
+
+
+### Bug Fixes
+
+* attribute subagent volume to the model that dispatched it ([#42](https://github.com/AqueGen/model-routing/issues/42)) ([7d01541](https://github.com/AqueGen/model-routing/commit/7d015410ca7a76c576d2b0720c21df236a80dd1e))
+* count each API response once when a transcript writes it as several lines ([#39](https://github.com/AqueGen/model-routing/issues/39)) ([13240d2](https://github.com/AqueGen/model-routing/commit/13240d25bdf2426af64d1260900fd976835f5156))
+* cover the FORCE exemption, read launch timestamps past 8 KB, count an unreadable parent once ([#44](https://github.com/AqueGen/model-routing/issues/44)) ([f4ca263](https://github.com/AqueGen/model-routing/commit/f4ca2631a306e2a3a2f20daac61313d7c3a597d7))
+* price Fable 5.1 cache reads at 0.025x and keep Sonnet 5 at $2/$10 ([#38](https://github.com/AqueGen/model-routing/issues/38)) ([66fafa0](https://github.com/AqueGen/model-routing/commit/66fafa071525bd3ba4527f34dd05868c60f0e19c))
+* resolve subagent model in the order Claude Code 2.1.251+ uses ([#41](https://github.com/AqueGen/model-routing/issues/41)) ([529e281](https://github.com/AqueGen/model-routing/commit/529e28129de852ae988b9749046e964c3e69d153))
+
 ## [0.16.0](https://github.com/AqueGen/model-routing/compare/v0.15.0...v0.16.0) (2026-09-03)
 
 The release where the stats stopped counting and started weighing. A dispatch is one line in a log whether it processed four thousand tokens or four million, so the two warnings the dispatch report raised - volume below an agent's own pin, and bare dispatches inheriting a strong session model - ranked by how often something happened and never by what it cost. `tokens` now reads the sidecar Claude Code writes beside every subagent transcript and names the agent behind each slice of volume, with both verdicts re-derived from the model that actually ran. The first thing that section found was that the loudest warning of the week was mostly noise: 11 of 18 flagged "tier leaks" were an agent from another plugin whose own frontmatter pins sonnet, invisible to a hook that only sees requests. That agent and two others are now in a small hand-curated table so `report` stops crying wolf too - but the table is a guess, so `tokens` deliberately never consults it, and stays the side that measures.
