@@ -238,6 +238,7 @@ async function runTurn(prompt, arm, workspace, timeoutMs, isFollowup, appendSyst
   // set for their own work must not reach the experiment.
   const env = { ...process.env };
   delete env.CLAUDE_CODE_SUBAGENT_MODEL;
+  delete env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE;
 
   // No `shell: true` - it concatenates argv, which mangles the prompt.
   const child = spawn(process.platform === "win32" ? "claude.exe" : "claude", argv, { cwd: workspace, env });

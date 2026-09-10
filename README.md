@@ -573,7 +573,7 @@ Ran BELOW the agent's pin (counted cheaper above, but the role was undercut - dr
    1  model-routing:implementer (model=haiku, pin=sonnet)
 ```
 
-The floor is `min(pin, session model)`, not the pin, so capping at a cheaper session is never flagged - `reviewer` running sonnet on a sonnet session is the rule being followed, not broken. A dispatch whose session model cannot be read is not flagged either: without it the cap is unknowable, and the same dispatch might have been correct. Unpinned agent types have no floor. `CLAUDE_CODE_SUBAGENT_MODEL` is excluded too: it forces every subagent at once, which is a deliberate machine-wide setting rather than a per-dispatch decision, and the `env=` rows already say so.
+The floor is `min(pin, session model)`, not the pin, so capping at a cheaper session is never flagged - `reviewer` running sonnet on a sonnet session is the rule being followed, not broken. A dispatch whose session model cannot be read is not flagged either: without it the cap is unknowable, and the same dispatch might have been correct. Unpinned agent types have no floor. `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is excluded too: it overrides every pin at once, which is a deliberate machine-wide setting rather than a per-dispatch decision, and the `forced=` rows already say so. A plain `CLAUDE_CODE_SUBAGENT_MODEL` is only a default below the pin, so it can never put a pinned agent under its pin at all.
 
 If the cheap tier really was right for that work, the fix is to pick an agent whose pin matches it - `test-runner` and `verifier` pin haiku for exactly that reason - rather than to override a role agent downward.
 
@@ -606,7 +606,7 @@ Inheritance is tested by model identity, not by tier. An agent from another plug
 
 What identity does not fix, and nothing on this side can, is a foreign agent whose frontmatter pins EXACTLY your session model. It ran opus on an opus session because it was told to, and that is byte-identical to having inherited it. Such an agent is counted here. The rule that survives is narrower than "foreign pins drop out": a foreign pin CHEAPER than the session drops out of this section, a foreign pin equal to it cannot.
 
-One limit belongs to this side rather than the other: `CLAUDE_CODE_SUBAGENT_MODEL` reaches the usage lines indistinguishably from a pin, so a machine forcing every subagent to haiku puts a pinned agent's volume under "below the pin" here, while the dispatch report excludes env-forced dispatches on purpose - there the remedy is unsetting one variable, not fixing one dispatch. The volume is right either way; only the remedy printed beside it belongs to the other report.
+One limit belongs to this side rather than the other: `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` reaches the usage lines indistinguishably from a pin, so a machine forcing every subagent to haiku puts a pinned agent's volume under "below the pin" here, while the dispatch report excludes forced dispatches on purpose - there the remedy is unsetting one variable, not fixing one dispatch. The volume is right either way; only the remedy printed beside it belongs to the other report.
 
 That difference is how this got noticed. In one window, the dispatch report flagged 18 bare dispatches as tier leaks, 35% and past its warning threshold; 11 of them were `codex:codex-rescue`, an agent from another plugin whose own frontmatter pins sonnet. The dispatch log could not see that pin, so it had to allow that they inherited opus. The transcripts showed they did not: an agent whose usage lines all name sonnet did not bill opus, whatever the log had to allow. Measured leaked volume was 1.8M of 621M - the count said "act on this", the volume said "there is nothing here".
 
@@ -664,9 +664,7 @@ the `model-routing` skill. If you had pasted a routing snippet into your
 
 There is deliberately no config subsystem - four override paths cover it:
 
-- **Whole session**: the `CLAUDE_CODE_SUBAGENT_MODEL` env var outranks
-  everything below it - both an explicit `model` param and a frontmatter
-  pin - and the dispatch report marks those rows `agent (env=...)`.
+- **Whole session**: since Claude Code 2.1.251 the `CLAUDE_CODE_SUBAGENT_MODEL` env var is a DEFAULT below everything else - an explicit `model` param wins, then a frontmatter pin, then this var, then the session model (`inherit` is the same as leaving it unset) - and the dispatch report marks the rows it actually decided `agent (env=...)`. Since 2.1.257 `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` inverts that and makes the harness ignore every param and every pin: with both set, subagents run the env model, with only FORCE set they run the session model, and those rows read `agent (forced=...)`.
 - **Per dispatch**: the Agent tool's `model` param overrides any
   frontmatter pin (pins-are-ceilings works through exactly this);
   Workflow `agent()` takes `model` and `effort` opts per call. Plain
