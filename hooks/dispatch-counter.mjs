@@ -369,15 +369,6 @@ function lastModelIn(file, bytes) {
   return last;
 }
 
-function lastVersionIn(file, bytes) {
-  // Claude Code version in effect at dispatch time, read from the same tail
-  // slice as lastModelIn. The precedence order below changed in 2.1.251, so an
-  // entry that does not say which version wrote it cannot be re-judged later.
-  let last = null;
-  for (const m of readSlice(file, bytes, true).matchAll(/"version":"(\d+\.\d+\.\d+)"/g)) last = m[1];
-  return last;
-}
-
 // The model a dispatch actually ran on, in harness priority order (Claude Code
 // 2.1.251+): 1. the per-invocation model param, 2. the agent's frontmatter pin
 // (inherit = the session model), 3. CLAUDE_CODE_SUBAGENT_MODEL, 4. the session
@@ -497,14 +488,17 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     // so one key can never mix below-pin dispatches with correct ones. Move this
     // into the row text instead and rows start mis-bucketing silently.
     const under = belowPin(e);
-    const eff = effectiveModel(e);
+    // The label names the RUNG that decided this dispatch, in the harness's own
+    // order, never a value comparison: an env model that merely happens to
+    // equal the param or the pin did not decide anything, and labelling it
+    // `env=` blamed the variable for a dispatch that chose its own model.
     // Under FORCE the row names what the harness forced: the env model when
     // one is set, otherwise the session model, which is worth saying as
     // "session" - the by-session rows already carry the id.
     const key = e.envForce ? `${e.agent} (forced=${e.env ?? "session"})`
-      : eff && eff === e.env ? `${e.agent} (env=${e.env})`
       : e.model ? `${e.agent} (model=${e.model}${under ? `, pin=${pinnedModel(e.agent)}` : ""})`
       : pinnedModel(e.agent) ? `${e.agent} (pin=${pinnedModel(e.agent)})`
+      : e.env ? `${e.agent} (env=${e.env})`
       : e.agent;
     const s = byAgent.get(key) ?? { n: 0, down: 0, up: 0, unknown: 0, underPin: 0 };
     s.n++;
@@ -888,13 +882,13 @@ if (process.argv[2] === "tokens") {
         // the one thing this side of the report has and the dispatch log does
         // not: an override the harness declined and a fallback mid-run both
         // land in the usage lines, while the dispatch log can only record the
-        // request. One thing it does NOT see is CLAUDE_CODE_SUBAGENT_MODEL: the
-        // env var reaches the usage lines indistinguishably from a pin, so a
-        // machine forcing every subagent to haiku puts a pinned agent's volume
-        // in belowPinVol here while the dispatch report deliberately excludes
-        // it (there the remedy is unsetting one variable, not fixing one
-        // dispatch). The volume figure is right either way; only the remedy
-        // named beside it belongs to the other report.
+        // request. One thing it does NOT see is
+        // CLAUDE_CODE_SUBAGENT_MODEL_FORCE: the env var reaches the usage lines
+        // indistinguishably from a pin, so a machine forcing every subagent to
+        // haiku puts a pinned agent's volume in belowPinVol here (there the
+        // remedy is unsetting one variable, not fixing one dispatch). The
+        // volume figure is right either way; only the remedy named beside it
+        // belongs to the other report.
         // Pass ownPinnedModel explicitly: this section measures the model that
         // actually ran, so its verdict about the agent's OWN pin must rest on
         // a pin this plugin can vouch for, never on the FOREIGN_AGENT_PINS
@@ -989,20 +983,23 @@ if (process.argv[2] === "tokens") {
   const agentVol = agentRows.reduce((a, [, s]) => a + s.vol, 0);
   const belowPinVol = agentRows.reduce((a, [, s]) => a + s.belowPinVol, 0);
   const bareVol = agentRows.reduce((a, [, s]) => a + s.bareVol, 0);
-  // CLAUDE_CODE_SUBAGENT_MODEL forces every subagent at once and reaches the
-  // usage lines indistinguishably from a pin, so neither callout can tell a
-  // forced dispatch from a chosen one - a machine forcing haiku files a pinned
-  // agent under "below the pin", one forcing the session's own model files an
-  // unpinned agent under "inherited it bare". The dispatch log DOES record the
-  // variable, so the caveat is printed only in a window that actually contains
-  // forced dispatches instead of hedging every report against a rare setting.
-  const envForced = (() => {
+  // Both variables reach the usage lines indistinguishably from a pin, but they
+  // spoil DIFFERENT callouts, so they are counted apart. FORCE overrides every
+  // pin and every param at once, which is what can file a pinned agent under
+  // "below the pin". A plain CLAUDE_CODE_SUBAGENT_MODEL only decides agents
+  // with no pin and no model=, i.e. exactly the population of the bare-
+  // inheritance callout, where it means the dispatch ran the ENV model rather
+  // than inheriting the session's. The dispatch log DOES record both, so each
+  // caveat prints only in a window that actually contains its own case instead
+  // of hedging every report against a rare setting.
+  const [forcedN, envN] = (() => {
     // Scoped by the same --session filter as everything else in this report,
     // so "N dispatches in it" describes the population the header names.
     try {
-      return readEntries(dataFile()).filter((e) => (e.env || e.envForce) && e.ts >= win.start && e.ts < win.end
-        && (!sf || (e.session && shortModel(e.session).toLowerCase().includes(sf)))).length;
-    } catch { return 0; }
+      const inWin = readEntries(dataFile()).filter((e) => (e.env || e.envForce) && e.ts >= win.start && e.ts < win.end
+        && (!sf || (e.session && shortModel(e.session).toLowerCase().includes(sf))));
+      return [inWin.filter((e) => e.envForce).length, inWin.filter((e) => e.env && !e.envForce).length];
+    } catch { return [0, 0]; }
   })();
   // Named worst-first, because the remedy differs per agent and an aggregate
   // ("40.1M below pin") tells you the size of a problem without telling you
@@ -1037,11 +1034,12 @@ if (process.argv[2] === "tokens") {
       // Printed only when there IS volume to report: "0 below pin" reads as a
       // score, and this section is not one.
       ...(belowPinVol ? [`  Below the agent's own pin: ${fmtN(belowPinVol)} (${Math.round((belowPinVol / Math.max(1, agentVol)) * 100)}% of the volume seen here) - ${worst((s) => s.belowPinVol)}. Not a saving: the pin is the tier the role needs, so this is the same job done worse, and it counts as "routed down" in every other figure above.`] : []),
+      ...(belowPinVol && forcedN ? [`  Read that with one caveat this window earns: ${plural(forcedN, "dispatch")} in it ran under CLAUDE_CODE_SUBAGENT_MODEL_FORCE, which overrides every pin and every model= at once and is indistinguishable from a pin in a usage line; volume from those is classified by what ran, and the remedy is unsetting the variable rather than fixing a dispatch.`] : []),
       // Both callouts carry the same denominator label. Without it the share
       // reads against the report total like the rows above it do, and the same
       // volume appears twice under two different percentages.
       ...(bareVol ? [`  Inherited the session model bare: ${fmtN(bareVol)} (${Math.round((bareVol / Math.max(1, agentVol)) * 100)}% of the volume seen here) - ${worst((s) => s.bareVol)}. Agent types with no pin, dispatched with no model=: pass one (sonnet default), give the type a pin, or - for a workflow-subagent row - set the model opt on the agent() call that spawned it. A workflow-subagent sidecar never records a model, so that row means "ran on the session model", which a model opt equal to the session model would also produce.`] : []),
-      ...(envForced && (belowPinVol || bareVol) ? [`  Read both callouts with one caveat this window earns: ${plural(envForced, "dispatch")} in it ran under CLAUDE_CODE_SUBAGENT_MODEL, which forces every subagent at once and is indistinguishable from a pin in a usage line. Volume from those is classified by what ran, not by what chose it, and the remedy there is unsetting the variable rather than fixing a dispatch.`] : []),
+      ...(bareVol && envN ? [`  Read that with one caveat this window earns: ${plural(envN, "dispatch")} in it ran with CLAUDE_CODE_SUBAGENT_MODEL set, which decides the model only for agents with no pin and no model=; a bare unpinned dispatch under it ran the env model, not the session model, so it is not inheritance.`] : []),
       ...(metaless ? [`  ${plural(metaless, "transcript")} had no readable agent-<id>.meta.json sidecar and are absent from this section only - every total elsewhere in this report still counts them.`] : []),
     ] : []),
     ...(unknownAgents ? ["", `${unknownAgents} agents not tier-comparable (${fmtN(unknownVol)}), excluded from routed-down math - either the agent ran an unrecognized model family (extend TIER_PATTERNS in dispatch-counter.mjs) or no model could be read from the parent session transcript, which happens when the transcript is gone or names no model anywhere.`] : []),
@@ -1097,9 +1095,14 @@ try {
   // the entry because the effort default depends on it.
   const session = event.transcript_path ? lastModelIn(event.transcript_path, 262144) : null;
   const effort = sessionEffort(event.cwd ?? process.cwd(), session);
-  const version = event.transcript_path ? lastVersionIn(event.transcript_path, 262144) : null;
+  // Entries logged before Claude Code 2.1.251 are judged under the current
+  // order; the log records no harness version, and no entry on record carries
+  // an env model, so nothing is misjudged today.
   const envModel = (process.env.CLAUDE_CODE_SUBAGENT_MODEL ?? "").trim();
-  const envForce = !["", "0", "false"].includes((process.env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE ?? "").trim().toLowerCase());
+  // Allow-list, the same one the harness parses the variable with: anything
+  // that is not one of these four words is off, so a "no" or a typo reads as
+  // off here exactly as it does in Claude Code.
+  const envForce = ["1", "true", "yes", "on"].includes((process.env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE ?? "").trim().toLowerCase());
   const entry = {
     ts: Date.now(),
     agent: input.subagent_type ?? "general-purpose",
@@ -1115,9 +1118,6 @@ try {
     ...(envModel && envModel !== "inherit" ? { env: envModel } : {}),
     ...(envForce ? { envForce: true } : {}),
     session,
-    // Which precedence order the harness applied - the entry cannot be
-    // re-judged later without it.
-    ...(version ? { v: version } : {}),
     // The session's effort level plus its source, so the report can separate an
     // observed setting from the documented default it fell back to. Omitted
     // entirely when neither could be established.

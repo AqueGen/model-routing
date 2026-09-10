@@ -622,25 +622,17 @@ test("CLAUDE_CODE_SUBAGENT_MODEL_FORCE is recorded on its own and overrules the 
     assert.match(out, /reviewer \(forced=session\)/);
     assert.ok(!out.includes("below its pin"));
   } finally { rmSync(cfg2, { recursive: true, force: true }); }
-  // "0" is off, not a truthy string.
-  const cfg3 = freshConfigDir();
-  try {
-    run([], cfg3, JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: "model-routing:reviewer" } }), { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "0" });
-    const log = readFileSync(join(cfg3, "model-routing", "dispatches.jsonl"), "utf-8").trim().split("\n").map((l) => JSON.parse(l));
-    assert.equal(log[0].envForce, undefined);
-    assert.equal(log[0].env, undefined);
-  } finally { rmSync(cfg3, { recursive: true, force: true }); }
-});
-
-test("hook records the Claude Code version from the transcript tail", () => {
-  const cfg = freshConfigDir();
-  const sess = join(cfg, "versioned-session.jsonl");
-  writeFileSync(sess, '{"model":"claude-opus-4-8","version":"2.1.249"}\n{"model":"claude-opus-4-8","version":"2.1.260"}\n');
-  try {
-    run([], cfg, JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: "x" }, transcript_path: sess }));
-    const log = readFileSync(join(cfg, "model-routing", "dispatches.jsonl"), "utf-8").trim().split("\n").map((l) => JSON.parse(l));
-    assert.equal(log[0].v, "2.1.260");
-  } finally { rmSync(cfg, { recursive: true, force: true }); }
+  // Parsed with the harness's allow-list: only 1/true/yes/on turn it on, so
+  // "0" is off and so is any other word.
+  for (const off of ["0", "no"]) {
+    const cfg3 = freshConfigDir();
+    try {
+      run([], cfg3, JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: "model-routing:reviewer" } }), { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: off });
+      const log = readFileSync(join(cfg3, "model-routing", "dispatches.jsonl"), "utf-8").trim().split("\n").map((l) => JSON.parse(l));
+      assert.equal(log[0].envForce, undefined);
+      assert.equal(log[0].env, undefined);
+    } finally { rmSync(cfg3, { recursive: true, force: true }); }
+  }
 });
 
 test("--session scopes the report to matching session models", () => {
@@ -1538,16 +1530,37 @@ test("the env-override caveat prints only in a window that contains one", () => 
   try {
     // No dispatch log at all: the callout stands without the caveat.
     assert.doesNotMatch(run(["tokens"], cfg), /CLAUDE_CODE_SUBAGENT_MODEL/);
-    // One env-forced dispatch inside the window: the caveat appears, because
-    // neither callout can tell a forced model from a chosen one.
+    // A plain env dispatch is NOT the caveat for this callout: since 2.1.251
+    // the variable ranks below the pin, so it cannot put a pinned agent under
+    // one, and only the bare-inheritance callout it can spoil says so.
     writeLog(cfg, [{ ts: Date.now(), agent: "general-purpose", model: null, env: "haiku", session: "claude-opus-5" }]);
-    assert.match(run(["tokens"], cfg), /1 dispatch in it ran under CLAUDE_CODE_SUBAGENT_MODEL/);
+    assert.doesNotMatch(run(["tokens"], cfg), /CLAUDE_CODE_SUBAGENT_MODEL/);
+    // One FORCE dispatch inside the window: the below-pin caveat appears,
+    // because FORCE does overrule a pin and reads as one in a usage line.
+    writeLog(cfg, [{ ts: Date.now(), agent: "general-purpose", envForce: true, session: "claude-opus-5" }]);
+    assert.match(run(["tokens"], cfg), /1 dispatch in it ran under CLAUDE_CODE_SUBAGENT_MODEL_FORCE/);
     // Same log, a window that ends before it: no caveat.
     assert.doesNotMatch(run(["tokens", "--ago", "30"], cfg), /CLAUDE_CODE_SUBAGENT_MODEL/);
     // --session scopes the caveat like everything else in the report: the
-    // env dispatch above happened on an opus session, so a fable-scoped run
+    // forced dispatch above happened on an opus session, so a fable-scoped run
     // must not say "1 dispatch in it" about a population it is not describing.
     assert.doesNotMatch(run(["tokens", "--session", "fable"], cfg), /CLAUDE_CODE_SUBAGENT_MODEL/);
-    assert.match(run(["tokens", "--session", "opus"], cfg), /1 dispatch in it ran under CLAUDE_CODE_SUBAGENT_MODEL/);
+    assert.match(run(["tokens", "--session", "opus"], cfg), /1 dispatch in it ran under CLAUDE_CODE_SUBAGENT_MODEL_FORCE/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a plain env dispatch caveats the bare-inheritance callout, not the pin one", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-opus-5"}\n');
+  // An unpinned type that ran the session model - the bare-inheritance callout.
+  writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-opus-5", 4000) + "\n");
+  metaFor(dir, "a", "general-purpose");
+  try {
+    writeLog(cfg, [{ ts: Date.now(), agent: "general-purpose", model: null, env: "opus", session: "claude-opus-5" }]);
+    const out = run(["tokens"], cfg);
+    assert.match(out, /1 dispatch in it ran with CLAUDE_CODE_SUBAGENT_MODEL set/);
+    assert.doesNotMatch(out, /CLAUDE_CODE_SUBAGENT_MODEL_FORCE/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
