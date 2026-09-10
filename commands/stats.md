@@ -29,16 +29,18 @@ The two reports count different things, and each owns a different half of
 the answer. A dispatch row is one line in a log whether it cost four
 thousand tokens or four million, and only the token report knows which
 model actually ran and how much it processed. Only the dispatch report
-knows what was asked for and what the session model was at that moment -
-both sides stamp the session at dispatch time - the token side matches each
-agent back to the assistant message that dispatched it.
+knows what was asked for. Both sides stamp the session at dispatch time:
+the token side matches each agent back to the assistant message that
+dispatched it.
 
 So when a dispatch-side warning names an agent - a tier leak, or a dispatch
 below its pin - carry its volume from the "By agent" block into the
-sentence. When that volume is not there, say the count overstated it and
-name why: most often an agent from another plugin pinning a model cheaper
-than the session, which the dispatch log cannot see unless that agent is in
-FOREIGN_AGENT_PINS. When the two disagree, say that instead, and name the
+sentence. When that volume is not there, say the count could not be
+reconciled with measured volume and name the likely reason: most often an
+agent from another plugin pinning a model cheaper than the session, which
+the dispatch log cannot see unless that agent is in FOREIGN_AGENT_PINS; or
+the role fell outside the eight types the block prints, or had no readable
+sidecar. Absent volume is not proof the count was wrong. When the two disagree, say that instead, and name the
 cause: the dispatch log stamps the model of the PREVIOUS assistant turn for
 the first dispatch right after a `/model` switch or a fallback, because
 PostToolUse fires before the dispatching line is flushed (background

@@ -70,7 +70,7 @@ test("report groups by tier and never ranks unknown models", () => {
     const out = run(["report"], cfg);
     // Unknown-tier entries are excluded from the denominator - one exotic
     // model must not drag the routed-down share down.
-    assert.match(out, /1 of 2 comparable dispatches \(50%\) ran on a cheaper model/);
+    assert.match(out, /1 of 2 comparable dispatches \(50%\) ran on a lower tier/);
     assert.match(out, /1 not tier-comparable excluded/);
     // Unknown-model rows land in their own section - honest unknown,
     // not silently counted as routed down or at-tier.
@@ -91,7 +91,7 @@ test("bare pinned agents classify by their frontmatter pin", () => {
   ]);
   try {
     const out = run(["report"], cfg);
-    assert.match(out, /1 of 2 dispatches \(50%\) ran on a cheaper model/);
+    assert.match(out, /1 of 2 dispatches \(50%\) ran on a lower tier/);
     assert.match(out, /Ran cheaper[\s\S]*implementer \(pin=sonnet\)/);
     assert.match(out, /Ran at the session tier[\s\S]*reviewer \(pin=opus\)/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
@@ -113,7 +113,7 @@ test("a curated foreign agent pin classifies like a bundled one, not a leak", ()
   ]);
   try {
     const out = run(["report"], cfg);
-    assert.match(out, /1 of 2 dispatches \(50%\) ran on a cheaper model/);
+    assert.match(out, /1 of 2 dispatches \(50%\) ran on a lower tier/);
     assert.match(out, /Ran cheaper[\s\S]*codex:codex-rescue \(pin=sonnet\)/);
     assert.match(out, /Tier leaks: 1 of 1 dispatches on agent types with no MODEL pin this plugin knows \(100%, Explore excepted as inherently cheap\)/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
@@ -164,7 +164,7 @@ test("a dispatch below its agent's pin is called out, not counted as a win", () 
     assert.doesNotMatch(cheaper, /reviewer|implementer/);
     // All three are still cheaper than the session, so the headline does not move
     // - the annotation qualifies it instead of redefining it.
-    assert.match(out, /3 of 3 dispatches \(100%\) ran on a cheaper model/);
+    assert.match(out, /3 of 3 dispatches \(100%\) ran on a lower tier/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
@@ -538,7 +538,7 @@ test("tokens excludes volume whose session tier is unknown", () => {
   try {
     const out = run(["tokens"], cfg);
     assert.match(out, /1 agents not tier-comparable/);
-    assert.match(out, /\(0%\) processed on a cheaper model/);
+    assert.match(out, /\(0%\) processed on a lower tier/);
     // Session row: no fake "0% below session tier" over incomparable volume.
     assert.match(out, /zephyr-9: [\s\S]* - not tier-comparable/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
@@ -615,8 +615,18 @@ test("CLAUDE_CODE_SUBAGENT_MODEL_FORCE is recorded on its own and overrules the 
     const out = run(["report"], cfg2);
     assert.match(out, /0 of 1 dispatches \(0%\)/);
     assert.match(out, /reviewer \(forced=session\)/);
-    assert.ok(!out.includes("below its pin"));
+    assert.doesNotMatch(out, /BELOW their agent's own pin|Ran BELOW the agent's pin/);
   } finally { rmSync(cfg2, { recursive: true, force: true }); }
+  // Forced to haiku under an opus pin: the one case the exemption exists for.
+  // Without `if (e.envForce) return false` this row lands in the below-pin
+  // section; with it, the remedy is the variable and the row says so.
+  const cfg3 = freshConfigDir();
+  writeLog(cfg3, [{ ts: Date.now(), agent: "model-routing:reviewer", env: "haiku", envForce: true, session: "claude-opus-4-8" }]);
+  try {
+    const out = run(["report"], cfg3);
+    assert.match(out, /Ran cheaper[\s\S]*reviewer \(forced=haiku\)/);
+    assert.doesNotMatch(out, /BELOW their agent's own pin|Ran BELOW the agent's pin/);
+  } finally { rmSync(cfg3, { recursive: true, force: true }); }
   // Parsed with the harness's allow-list: only 1/true/yes/on turn it on, so
   // "0" is off and so is any other word.
   for (const off of ["0", "no"]) {
@@ -662,7 +672,7 @@ test("tokens happy path: volume rows, session breakdown, unknown-model note", ()
   try {
     const out = run(["tokens"], cfg);
     assert.match(out, /haiku-4-5/);
-    assert.match(out, /processed on a cheaper model than their session/);
+    assert.match(out, /processed on a lower tier than their session/);
     assert.match(out, /By session model:[\s\S]*opus-4-8: [\s\S]*below session tier/);
     assert.match(out, /1 agents not tier-comparable/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
@@ -696,7 +706,7 @@ test("--session prints the unfiltered share next to the scoped one", () => {
   writeFileSync(join(opusDir, "agent-b.jsonl"), usageLine("claude-opus-4-8", 3000) + "\n");  // at tier
   try {
     const out = run(["tokens", "--session", "fable"], cfg);
-    assert.match(out, /100%\) processed on a cheaper model/);
+    assert.match(out, /100%\) processed on a lower tier/);
     // The flattering slice never appears alone: 1000 of 4000 unfiltered.
     assert.match(out, /Across ALL sessions, unfiltered: 25% of 4k comparable tokens/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
@@ -1678,6 +1688,25 @@ test("without a sidecar match, the model in effect at the agent's first timestam
     assistantLine("claude-opus-5", iso(3600e3), [{ type: "text", text: "x" }], 100) + "\n"
     + assistantLine("claude-fable-5-1", iso(600e3), [{ type: "text", text: "y" }], 100) + "\n");
   writeFileSync(join(dir, "agent-a.jsonl"), agentUsageLine("claude-sonnet-5", iso(1800e3), 1000) + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /opus-5: 1k across 1 agents/);
+    assert.doesNotMatch(out, /fable-5-1: \S+ across \d+ agents/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a first line longer than 8 KB still yields the launch timestamp", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  // Head says fable, the timeline at launch says opus: a launch timestamp lost
+  // in a long first line would fall through to the head and name fable.
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"),
+    assistantLine("claude-fable-5-1", iso(3600e3), [{ type: "text", text: "x" }], 100) + "\n"
+    + assistantLine("claude-opus-5", iso(2400e3), [{ type: "text", text: "y" }], 100) + "\n");
+  // A 20 KB prompt BEFORE the timestamp, the shape a real first line has.
+  const first = JSON.stringify({ type: "user", message: { role: "user", content: "p".repeat(20000) }, timestamp: iso(1800e3) });
+  writeFileSync(join(dir, "agent-a.jsonl"), first + "\n" + agentUsageLine("claude-sonnet-5", iso(1790e3), 1000) + "\n");
   try {
     const out = run(["tokens"], cfg);
     assert.match(out, /opus-5: 1k across 1 agents/);

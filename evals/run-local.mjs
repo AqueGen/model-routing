@@ -337,13 +337,17 @@ function printCase(kase, armResults) {
   // expensive tier only shows in the per-model split: a total that went up while
   // the top-tier line held flat is the plugin working, not the plugin costing.
   for (const [arm, runs] of Object.entries(armResults)) {
+    // Same population as the cost line above: a run with no total cost may
+    // still carry partial per-model usage, and dividing that by every run
+    // prints a per-model mean the total does not agree with.
+    const priced = runs.filter((r) => typeof r.costUsd === "number");
     const perModel = new Map();
-    for (const run of runs) {
+    for (const run of priced) {
       for (const [model, usage] of Object.entries(run.modelUsage ?? {})) {
         const acc = perModel.get(model) ?? { cost: 0, read: 0, n: 0 };
         acc.cost += usage.costUSD ?? 0;
         acc.read += (usage.cacheReadInputTokens ?? 0) + (usage.inputTokens ?? 0);
-        acc.n = runs.length;
+        acc.n = priced.length;
         perModel.set(model, acc);
       }
     }
