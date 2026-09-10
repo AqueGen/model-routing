@@ -684,7 +684,9 @@ if (process.argv[2] === "tokens") {
   // throws past V8's ~512MB limit. Dropping one silently would understate the
   // denominator, which biases the routed-down share UPWARD - the exact direction
   // of error this release exists to remove.
-  let unreadable = 0;
+  // Paths, not a count: a parent transcript is read twice (volume, then the
+  // dispatch index), and one file that fails both reads is one file.
+  const unreadablePaths = new Set();
   const readFileVols = (p, mtimeInWindow) => {
     // Per-line attribution: usage accumulates onto the model named on that line,
     // so a mid-run fallback splits the transcript across both models instead of
@@ -708,7 +710,7 @@ if (process.argv[2] === "tokens") {
     // last line, rather than in both or neither.
     const fileVols = new Map(); // model -> { in, out, cr, cw5, cw1h }
     let text;
-    try { text = readFileSync(p, "utf-8"); } catch { unreadable++; return fileVols; }
+    try { text = readFileSync(p, "utf-8"); } catch { unreadablePaths.add(p); return fileVols; }
     const lastById = new Map(); // message.id -> [line's obj, its message]
     const rest = []; // lines carrying no id: nothing to dedup them by
     for (const line of text.split("\n")) {
@@ -791,7 +793,7 @@ if (process.argv[2] === "tokens") {
     dispatchCache.set(file, idx);
     let text;
     // Memoized above, so this counts once per path however many agents share it.
-    try { text = readFileSync(file, "utf-8"); } catch { parentUnreadable++; return idx; }
+    try { text = readFileSync(file, "utf-8"); } catch { unreadablePaths.add(file); parentUnreadable++; return idx; }
     for (const line of text.split("\n")) {
       if (!line.includes('"assistant"')) continue;
       try {
@@ -814,7 +816,10 @@ if (process.argv[2] === "tokens") {
   };
   // The agent transcript's own first timestamp - when it was launched.
   const launchedAt = (file) => {
-    const m = readSlice(file, 8192, false).split("\n", 1)[0].match(/"timestamp":"([^"]+)"/);
+    // 64 KB, not one line: the timestamp sits at the END of the first line,
+    // after the prompt, and a first line of 20 KB is on record here. The
+    // first timestamp in the slice is the first line's.
+    const m = readSlice(file, 65536, false).match(/"timestamp":"([^"]+)"/);
     const ts = m ? Date.parse(m[1]) : NaN;
     return Number.isFinite(ts) ? ts : null;
   };
@@ -1139,8 +1144,8 @@ if (process.argv[2] === "tokens") {
       ...(metaless ? [`  ${plural(metaless, "transcript")} had no readable agent-<id>.meta.json sidecar and are absent from this section only - every total elsewhere in this report still counts them.`] : []),
     ] : []),
     ...(unknownAgents ? ["", `${unknownAgents} agents not tier-comparable (${fmtN(unknownVol)}), excluded from routed-down math - either the agent ran an unrecognized model family (extend TIER_PATTERNS in dispatch-counter.mjs) or no model could be read from the parent session transcript, which happens when the transcript is gone or names no model anywhere.`] : []),
-    ...(unreadable ? ["", `${unreadable} transcript(s) could not be read (too large to load as one string, or unreadable) - the totals below understate by whatever they held.`] : []),
-    ...(parentUnreadable ? ["", `${plural(parentUnreadable, "parent transcript")} could not be read, so their agents fell back to the model in effect at launch or the transcript head.`] : []),
+    ...(unreadablePaths.size ? ["", `${plural(unreadablePaths.size, "transcript")} could not be read (too large to load as one string, or unreadable) - the totals below understate by whatever they held.`
+      + (parentUnreadable ? ` ${parentUnreadable} of them ${parentUnreadable === 1 ? "is a parent" : "are parents"} of agents in this window, whose agents fell back to the model in effect at launch or the transcript head.` : "")] : []),
     ...(mainVolTotal ? [
       "",
       `Main sessions (not routable): ${fmtN(mainVolTotal)} across ${mainSessions} sessions.`,

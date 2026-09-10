@@ -29,9 +29,9 @@ The two reports count different things, and each owns a different half of
 the answer. A dispatch row is one line in a log whether it cost four
 thousand tokens or four million, and only the token report knows which
 model actually ran and how much it processed. Only the dispatch report
-knows what was asked for and what the session model was at that moment -
-both sides stamp the session at dispatch time - the token side matches each
-agent back to the assistant message that dispatched it.
+knows what was asked for. Both sides stamp the session at dispatch time:
+the token side matches each agent back to the assistant message that
+dispatched it.
 
 So when a dispatch-side warning names an agent - a tier leak, or a dispatch
 below its pin - carry its volume from the "By agent" block into the

@@ -12,8 +12,8 @@ plugin).
 
 **Routing makes a dispatch cheaper; it does not make dispatching cheap.**
 A subagent starts empty, so everything it reads is a cache write, while
-the main session pays cache read - 12.5x less - for context it already
-holds. That penalty is paid whether or not the tier is routed down, so the
+the main session pays cache read - 12.5x less, 50x on Fable 5.1 and
+Mythos 5.1 - for context it already holds. That penalty is paid whether or not the tier is routed down, so the
 rules below only pay off on work that was going to be delegated anyway.
 On one wide-reading session, three runs: doing it inline cost $1.36 and
 delegating with the tier routed down $1.68, both measured; delegating at

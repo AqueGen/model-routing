@@ -30,7 +30,7 @@ Read this before installing, because the honest answer has two halves and
 
 **A subagent is not free.** It starts with an empty context, so everything it
 reads is a cache *write*, while your main session pays cache *read* - 12.5x
-cheaper - for what it already has. Delegation converts cheap re-reads into
+cheaper, 50x on Fable 5.1 and Mythos 5.1 - for what it already has. Delegation converts cheap re-reads into
 expensive first-reads, and that bill lands whether or not this plugin is
 installed.
 
@@ -165,7 +165,7 @@ The honest reading: the automatic half is fully attributable, the behavioural ha
 
 For the behavioural half there is now a control group, just a much smaller one: [`evals/`](evals/README.md) runs the same question with and without the plugin loaded. The behavioural claim holds - on a codebase question the plugin arm delegated to `scout` in 3 of 3 runs and the plugin-free arm in 0 of 3, grepping inline despite having `Explore` available.
 
-The money is a more interesting answer than "it saves". On a wide-reading question across a four-turn session, the expensive tier drops either way - opus spend down 14%, its input volume down about 25% - but the shipped configuration ends up **23% more expensive in total than not having the plugin at all**, because a fresh subagent pays cache *write* for everything it reads while a main session pays cache *read*, 12.5x cheaper, for what it already has. So what this plugin reliably buys is room in the expensive model's context, not a smaller bill; where the bill also falls is a narrower claim, and it depends on the tier.
+The money is a more interesting answer than "it saves". On a wide-reading question across a four-turn session, the expensive tier drops either way - opus spend down 14%, its input volume down about 25% - but the shipped configuration ends up **23% more expensive in total than not having the plugin at all**, because a fresh subagent pays cache *write* for everything it reads while a main session pays cache *read*, 12.5x cheaper (50x on Fable 5.1 and Mythos 5.1), for what it already has. So what this plugin reliably buys is room in the expensive model's context, not a smaller bill; where the bill also falls is a narrower claim, and it depends on the tier.
 
 Running that same question with `scout` pinned to haiku lands about a tenth *below* the no-plugin baseline - which looked like the fix until the tier was asked something subtler. On a question whose code contains a confident-looking wrong answer, haiku took the bait once in three runs and sonnet in none. Three runs cannot pin a failure rate, and the pin did not stay on sonnet because of the rate: it stayed because the failure is asymmetric, since a wrong answer sends the main session back to read the files itself and costs more than the cheaper tier saves. What the two results together support is a split rather than a pin change - breadth to `surveyor` (haiku), judgement to `scout` (sonnet). [`evals/README.md`](evals/README.md) carries the numbers, the arithmetic, and the three isolation attempts that produced numbers worth throwing away.
 

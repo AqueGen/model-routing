@@ -113,7 +113,7 @@ its third turn.
 **The subagent's tier has to be cheap enough.** This is the one that decided the
 result, and it is arithmetic rather than judgement. A fresh subagent pays cache
 *write* for everything it reads; a main session pays cache *read* for what it
-already has, and read is 12.5x cheaper than write at the same tier. Delegation
+already has, and read is 12.5x cheaper than write at the same tier (50x on Fable 5.1 and Mythos 5.1). Delegation
 converts cheap re-reads into expensive first-reads, so only a large tier discount
 pays for the conversion.
 

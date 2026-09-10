@@ -615,8 +615,18 @@ test("CLAUDE_CODE_SUBAGENT_MODEL_FORCE is recorded on its own and overrules the 
     const out = run(["report"], cfg2);
     assert.match(out, /0 of 1 dispatches \(0%\)/);
     assert.match(out, /reviewer \(forced=session\)/);
-    assert.ok(!out.includes("below its pin"));
+    assert.doesNotMatch(out, /BELOW their agent's own pin|Ran BELOW the agent's pin/);
   } finally { rmSync(cfg2, { recursive: true, force: true }); }
+  // Forced to haiku under an opus pin: the one case the exemption exists for.
+  // Without `if (e.envForce) return false` this row lands in the below-pin
+  // section; with it, the remedy is the variable and the row says so.
+  const cfg3 = freshConfigDir();
+  writeLog(cfg3, [{ ts: Date.now(), agent: "model-routing:reviewer", env: "haiku", envForce: true, session: "claude-opus-4-8" }]);
+  try {
+    const out = run(["report"], cfg3);
+    assert.match(out, /Ran cheaper[\s\S]*reviewer \(forced=haiku\)/);
+    assert.doesNotMatch(out, /BELOW their agent's own pin|Ran BELOW the agent's pin/);
+  } finally { rmSync(cfg3, { recursive: true, force: true }); }
   // Parsed with the harness's allow-list: only 1/true/yes/on turn it on, so
   // "0" is off and so is any other word.
   for (const off of ["0", "no"]) {
@@ -1678,6 +1688,25 @@ test("without a sidecar match, the model in effect at the agent's first timestam
     assistantLine("claude-opus-5", iso(3600e3), [{ type: "text", text: "x" }], 100) + "\n"
     + assistantLine("claude-fable-5-1", iso(600e3), [{ type: "text", text: "y" }], 100) + "\n");
   writeFileSync(join(dir, "agent-a.jsonl"), agentUsageLine("claude-sonnet-5", iso(1800e3), 1000) + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /opus-5: 1k across 1 agents/);
+    assert.doesNotMatch(out, /fable-5-1: \S+ across \d+ agents/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a first line longer than 8 KB still yields the launch timestamp", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  // Head says fable, the timeline at launch says opus: a launch timestamp lost
+  // in a long first line would fall through to the head and name fable.
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"),
+    assistantLine("claude-fable-5-1", iso(3600e3), [{ type: "text", text: "x" }], 100) + "\n"
+    + assistantLine("claude-opus-5", iso(2400e3), [{ type: "text", text: "y" }], 100) + "\n");
+  // A 20 KB prompt BEFORE the timestamp, the shape a real first line has.
+  const first = JSON.stringify({ type: "user", message: { role: "user", content: "p".repeat(20000) }, timestamp: iso(1800e3) });
+  writeFileSync(join(dir, "agent-a.jsonl"), first + "\n" + agentUsageLine("claude-sonnet-5", iso(1790e3), 1000) + "\n");
   try {
     const out = run(["tokens"], cfg);
     assert.match(out, /opus-5: 1k across 1 agents/);
