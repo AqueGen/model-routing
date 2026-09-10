@@ -320,6 +320,9 @@ function printCase(kase, armResults) {
   // print the price next to the score rather than letting the score stand alone.
   const price = Object.entries(armResults).map(([arm, runs]) => {
     const priced = runs.filter((r) => typeof r.costUsd === "number");
+    if (priced.length === 0) {
+      return `${arm}: no priced runs (0/${runs.length}) - every run of this arm ended without a result`;
+    }
     const cost = mean(runs.map((r) => r.costUsd));
     const seconds = mean(runs.map((r) => r.durationMs)) / 1000;
     // Say how many runs are behind the mean. A run that died has no cost to
