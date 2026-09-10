@@ -38,6 +38,11 @@ below its pin - carry its volume from the "By agent" block into the
 sentence. When that volume is not there, say the count overstated it and
 name why: most often an agent from another plugin pinning a model cheaper
 than the session, which the dispatch log cannot see unless that agent is in
-FOREIGN_AGENT_PINS. When the two disagree,
-say that instead - the token side had no sidecar for those agents, or could
-not read the parent transcript.
+FOREIGN_AGENT_PINS. When the two disagree, say that instead, and name the
+cause: the dispatch log stamps the model of the PREVIOUS assistant turn for
+the first dispatch right after a `/model` switch or a fallback, because
+PostToolUse fires before the dispatching line is flushed (background
+dispatches especially); nested agents are keyed to their dispatching agent
+on the token side and to the main session on the log side; or the token side
+could not read the parent transcript at all, which it says in its own
+footer.

@@ -1569,6 +1569,24 @@ test("without a sidecar match, the model in effect at the agent's first timestam
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
+test("a synthetic assistant line never becomes the session model", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  // "<synthetic>" is a harness placeholder, not a model the session ran on, and
+  // it is the LAST line before the launch - exactly where the timeline fallback
+  // would otherwise pick it up.
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"),
+    assistantLine("claude-opus-5", iso(3600e3), [{ type: "text", text: "x" }], 100) + "\n"
+    + assistantLine("<synthetic>", iso(1800e3), [{ type: "text", text: "y" }], 100) + "\n");
+  writeFileSync(join(dir, "agent-a.jsonl"), agentUsageLine("claude-sonnet-5", iso(900e3), 1000) + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /opus-5: 1k across 1 agents/);
+    assert.doesNotMatch(out, /<synthetic>/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
 test("--session scopes the main-session denominator per line model", () => {
   const cfg = freshConfigDir();
   const dir = join(cfg, "projects", "proj", "sess-1", "subagents");

@@ -647,6 +647,7 @@ if (process.argv[2] === "tokens") {
   // agent type -> {agents, vol, models: Map(model -> vol), belowPinVol, bareVol}
   const perAgent = new Map();
   let metaless = 0; // agent transcripts whose sidecar named no type
+  let parentUnreadable = 0; // parent transcripts that could not be read at all
   let unknownAgents = 0, unknownVol = 0; // models tierOf cannot rank
   // Cost accounting. The rate epoch is the END of the window, not "now", so a
   // historical window is priced at the rates that applied to it - one model on
@@ -731,7 +732,10 @@ if (process.argv[2] === "tokens") {
     try {
       if (statSync(f).size > META_MAX) return null;
       const m = JSON.parse(readFileSync(f, "utf-8"));
-      return m && typeof m.agentType === "string" && m.agentType ? m : null;
+      // Any plain object is worth keeping: `agentType` only gates the per-agent
+      // section, while `toolUseId` / `parentAgentId` drive attribution and are
+      // useful from a sidecar that names no type.
+      return m && typeof m === "object" && !Array.isArray(m) ? m : null;
     } catch { return null; }
   };
   // Which model DISPATCHED an agent. Every agent sidecar names the toolUseId of
@@ -751,14 +755,18 @@ if (process.argv[2] === "tokens") {
     const idx = { ids: new Map(), timeline: [] };
     dispatchCache.set(file, idx);
     let text;
-    try { text = readFileSync(file, "utf-8"); } catch { return idx; }
+    // Memoized above, so this counts once per path however many agents share it.
+    try { text = readFileSync(file, "utf-8"); } catch { parentUnreadable++; return idx; }
     for (const line of text.split("\n")) {
       if (!line.includes('"assistant"')) continue;
       try {
         const obj = JSON.parse(line);
         if (obj.type !== "assistant") continue;
         const model = obj.message?.model;
-        if (!model) continue;
+        // Same guard readFileVols uses: "<synthetic>" and its kin are harness
+        // placeholders, never a model a session was on, and letting one into the
+        // timeline would let the fallback name it as the dispatching model.
+        if (!model || model.startsWith("<")) continue;
         const ts = obj.timestamp ? Date.parse(obj.timestamp) : NaN;
         if (Number.isFinite(ts)) idx.timeline.push([ts, model]);
         if (!Array.isArray(obj.message.content)) continue;
@@ -885,14 +893,18 @@ if (process.argv[2] === "tokens") {
       const ss = perSession.get(sessKey) ?? { agents: 0, vol: 0, cmpVol: 0, downVol: 0 };
       ss.agents++;
       perSession.set(sessKey, ss);
-      if (!meta) metaless++;
+      // The per-agent section is keyed by agentType, so a sidecar that names no
+      // type is worth exactly as much to it as no sidecar at all - even though
+      // dispatchModelOf above may well have used its toolUseId.
+      const typed = meta && typeof meta.agentType === "string" && meta.agentType ? meta : null;
+      if (!typed) metaless++;
       // One transcript is one agent, counted here for the same reason ss.agents
       // is counted outside the per-model loop: a mid-run fallback splits the
       // volume across two models but is still a single dispatch.
-      const pa = meta
-        ? perAgent.get(meta.agentType) ?? { agents: 0, vol: 0, models: new Map(), belowPinVol: 0, bareVol: 0 }
+      const pa = typed
+        ? perAgent.get(typed.agentType) ?? { agents: 0, vol: 0, models: new Map(), belowPinVol: 0, bareVol: 0 }
         : null;
-      if (pa) { pa.agents++; perAgent.set(meta.agentType, pa); }
+      if (pa) { pa.agents++; perAgent.set(typed.agentType, pa); }
       for (const [model, v] of fileVols) {
         const vol = volOf(v);
         // Cost as it ran, and what the same token counts would have cost had the
@@ -942,7 +954,7 @@ if (process.argv[2] === "tokens") {
         // actually ran, so its verdict about the agent's OWN pin must rest on
         // a pin this plugin can vouch for, never on the FOREIGN_AGENT_PINS
         // guess `report` uses (see the comment on ownPinnedModel above).
-        if (belowPin({ agent: meta.agentType, model, session: sessionModel }, ownPinnedModel)) pa.belowPinVol += vol;
+        if (belowPin({ agent: typed.agentType, model, session: sessionModel }, ownPinnedModel)) pa.belowPinVol += vol;
         // Bare inheritance: an agent with no pin this plugin knows about, no
         // model= on the dispatch, that ran THE session's own model - the
         // accidental-inheritance case the dispatch report counts, and the whole
@@ -950,17 +962,17 @@ if (process.argv[2] === "tokens") {
         // one. Same-tier is not enough: an agent from another plugin pinning
         // opus-4-8 under an opus-5 session sits at the same tier and inherited
         // nothing, which is the exact false positive that made the count-based
-        // warning overstate leaks. Identity misses one real case in exchange -
-        // a session that quota-fell to a sibling model after its transcript
-        // head was written, whose children then inherit a model the head does
-        // not name. That is an undercount in a case nothing here can resolve,
-        // and undercounting a warning beats accusing the wrong agent.
+        // warning overstate leaks. The session model compared against is the
+        // one the dispatching assistant line names, so a mid-session switch or
+        // a quota fallback moves this test with it; the only agents left
+        // unresolved are those whose parent line could not be found at all,
+        // which fall back to launch time and then to the transcript head.
         // Same reasoning as the belowPin call above: a FOREIGN_AGENT_PINS entry
         // must never suppress this check. If the entry is stale or simply
         // wrong, this is the only thing left that would still catch the agent
         // genuinely inheriting the session model - ownPinnedModel keeps that
         // possible no matter what the curated table claims.
-        else if (!ownPinnedModel(meta.agentType) && meta.model == null && model === sessionModel && tsess > 2) pa.bareVol += vol;
+        else if (!ownPinnedModel(typed.agentType) && typed.model == null && model === sessionModel && tsess > 2) pa.bareVol += vol;
       }
     }
   };
@@ -1089,6 +1101,7 @@ if (process.argv[2] === "tokens") {
     ] : []),
     ...(unknownAgents ? ["", `${unknownAgents} agents not tier-comparable (${fmtN(unknownVol)}), excluded from routed-down math - either the agent ran an unrecognized model family (extend TIER_PATTERNS in dispatch-counter.mjs) or no model could be read from the parent session transcript, which happens when the transcript is gone or names no model anywhere.`] : []),
     ...(unreadable ? ["", `${unreadable} transcript(s) could not be read (too large to load as one string, or unreadable) - the totals below understate by whatever they held.`] : []),
+    ...(parentUnreadable ? ["", `${plural(parentUnreadable, "parent transcript")} could not be read, so their agents fell back to the model in effect at launch or the transcript head.`] : []),
     ...(mainVolTotal ? [
       "",
       `Main sessions (not routable): ${fmtN(mainVolTotal)} across ${mainSessions} sessions.`,
@@ -1117,7 +1130,7 @@ if (process.argv[2] === "tokens") {
     ] : []),
     "",
     "Volume = tokens the subagent processed; cache reads are billed at the subagent's model rate, which is where routing saves.",
-    "Session model is the model of the assistant message that DISPATCHED the agent, matched through the toolUseId in the agent's sidecar - the same instant the dispatch report stamps, so a mid-session /model switch moves both reports together. Without a usable sidecar the model in effect at the agent's first timestamp is used, and failing that the head of the session transcript (or its tail, when the head names no model at all).",
+    "Session model is the model of the assistant message that DISPATCHED the agent, matched through the toolUseId in the agent's sidecar - the same instant the dispatch report stamps, so a mid-session /model switch moves both reports together. Without a usable sidecar the model in effect at the agent's first timestamp is used, and failing that the head of the session transcript (or its tail, when the head names no model at all). A nested agent (spawned by another agent) is keyed to the model of that agent, which is the model it would inherit; the dispatch log keys it to the main session, so the two can differ for nested agents.",
   ];
   process.stdout.write(out.join("\n"));
   process.exit(0);
