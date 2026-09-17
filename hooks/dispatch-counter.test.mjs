@@ -115,7 +115,7 @@ test("a curated foreign agent pin classifies like a bundled one, not a leak", ()
     const out = run(["report"], cfg);
     assert.match(out, /1 of 2 dispatches \(50%\) ran on a lower tier/);
     assert.match(out, /Ran cheaper[\s\S]*codex:codex-rescue \(pin=sonnet\)/);
-    assert.match(out, /Tier leaks: 1 of 1 dispatches on agent types with no MODEL pin this plugin knows \(100%, Explore excepted as inherently cheap\)/);
+    assert.match(out, /Tier leaks: 1 of 1 dispatches on agent types with no MODEL pin this plugin knows \(100%\)/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
@@ -232,6 +232,26 @@ test("capping a pin at a cheaper session model is not below-pin", () => {
     const out = run(["report"], cfg);
     assert.doesNotMatch(out, /BELOW their agent's own pin/);
     assert.doesNotMatch(out, /Ran BELOW the agent's pin/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a bare Explore inherits the session model capped at opus and counts as a leak", () => {
+  const cfg = freshConfigDir();
+  const now = Date.now();
+  writeLog(cfg, [
+    // Capped at opus under a Fable session: cheaper than the session, still inherited.
+    { ts: now, agent: "Explore", model: null, session: "claude-fable-5-1" },
+    // Uncapped under opus: runs the session model.
+    { ts: now, agent: "Explore", model: null, session: "claude-opus-5" },
+    // A plain env default does not move Explore, so this one inherited too.
+    { ts: now, agent: "Explore", model: null, env: "haiku", session: "claude-opus-5" },
+    // Passing a model is what makes it cheap.
+    { ts: now, agent: "Explore", model: "haiku", session: "claude-opus-5" },
+  ]);
+  try {
+    const out = run(["report"], cfg);
+    assert.match(out, /2 of 4 dispatches \(50%\) ran on a lower tier/);
+    assert.match(out, /Tier leaks: 3 of 4 dispatches on agent types with no MODEL pin this plugin knows \(75%\)/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
@@ -396,7 +416,7 @@ test("tier-leak section: rate line and bundled-only absence", () => {
   let cfg = mk(1, 4); // 20%
   try {
     const out = run(["report"], cfg);
-    assert.match(out, /Tier leaks: 1 of 5 dispatches on agent types with no MODEL pin this plugin knows \(20%, Explore excepted as inherently cheap\)/);
+    assert.match(out, /Tier leaks: 1 of 5 dispatches on agent types with no MODEL pin this plugin knows \(20%\)/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
   cfg = freshConfigDir(); // bundled-only log: no unpinned dispatches, no section
   writeLog(cfg, [{ ts: now, agent: "model-routing:scout", session: "claude-opus-4-8" }]);
@@ -1322,7 +1342,7 @@ test("tier leaks leave out dispatches whose session cannot be ranked", () => {
   ]);
   try {
     const out = run(["report"], cfg);
-    assert.match(out, /Tier leaks: 1 of 1 dispatches on agent types with no MODEL pin this plugin knows \(100%, Explore excepted as inherently cheap\)/);
+    assert.match(out, /Tier leaks: 1 of 1 dispatches on agent types with no MODEL pin this plugin knows \(100%\)/);
     assert.match(out, /2 unpinned dispatch\(es\) left out/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });

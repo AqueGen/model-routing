@@ -111,7 +111,7 @@ carries no effort param:
 | Codebase exploration ("where is X", "how does Y work") | subagent | `scout` (sonnet) | low |
 | Breadth sweeps: enumerate, list, trace a chain end to end | subagent | `surveyor` (haiku) | low |
 | Implementing an approved plan/spec (ordinary: single-file, clear shape) | subagent | `implementer` (sonnet) | medium |
-| Complex implementation: multi-file refactor, subtle concurrency/security | subagent | `implementer` with `model=opus` | medium (pinned) |
+| Complex implementation: multi-file refactor, subtle concurrency/security | subagent | `implementer` with `model=opus` (main session on a Fable 5.1 or Mythos 5.1 session) | medium (pinned) |
 | Trivial mechanical tasks: renames, boilerplate, mirrored constants | subagent | sonnet | low |
 | Small interactive edits, quick fixes | main session | strongest | low |
 | Code review of implemented work | subagent | `reviewer` (opus) | high |
@@ -153,7 +153,9 @@ actually earns its cost:
   Opus 5 was a step-change over Opus 4.8 at UNCHANGED
   price ($5/$25), so the opus tier now buys strictly more per dollar than
   when this table was tuned - when in doubt between sonnet and opus for
-  implementation, take opus.
+  implementation, take opus. The exception is a Fable 5.1 or Mythos 5.1
+  session, where the opus step costs more than the session itself - see
+  the cache-read bullet below.
 - **Review -> opus/high.** Review is one cheap pass guarding against
   expensive misses - an asymmetric bet where the strongest reasoning at
   high effort is worth it, because a bug that ships costs far more than
@@ -179,6 +181,13 @@ actually earns its cost:
   run the other way on Fable 5.1 (0.025x, $0.25/MTok, against opus at
   0.1x, $0.50/MTok): cache-heavy opus work dispatched from a Fable 5.1
   session pays MORE per cached token than the session would have.
+  Implementation is that kind of work, so on a Fable 5.1 or Mythos 5.1
+  session the step above sonnet is the main session, not `model=opus`.
+  Measured on the author's own dispatches over the 7 days to 2026-09-17:
+  opus implementers from Fable 5.1 sessions priced at $275.55 against
+  $221.52 for the same tokens on the session model, before the cache
+  writes a fresh subagent adds on top. Fable 5 reads cache at the
+  ordinary 0.1x, so there opus stays the cheaper step.
   Where the inflation does bite is any comparison against a Sonnet
   4.6-era baseline: re-pricing today's token counts at yesterday's rates
   understates the difference.
@@ -229,7 +238,9 @@ actually ran with `/model-routing:stats`.
 - Three exploration routes, told apart by what has to come back rather
   than by how the question is phrased. Unverified candidates to look at
   next ("which files mention X"): the harness's built-in Explore agent,
-  cheaper than both bundled ones. A complete list or an ordering, verified
+  dispatched with `model=haiku` - since Claude Code 2.1.198 a bare Explore
+  inherits the session model, capped at opus on the Claude API, and no
+  longer runs haiku on its own. A complete list or an ordering, verified
   by following the code ("every stage in order", "everything that imports
   X"): `surveyor`. A judgement about behaviour ("how does Y work", "does
   this retry"): `scout`. "Which files import X" and "which files mention
@@ -303,7 +314,8 @@ actually ran with `/model-routing:stats`.
   same level that just failed.
 - The escalation ladder generalizes: any failed or visibly weak subagent
   RESULT (wrong answer, broken diff, report that dodges the question)
-  retries exactly one step up - next tier via the Agent `model` param, or
+  retries exactly one step up - next tier via the Agent `model` param
+  (above sonnet on a Fable 5.1 or Mythos 5.1 session, the main session), or
   the same tier at higher effort when the miss looks like shallow thinking
   rather than missing capability. One step, not a leap to the top: most
   failures clear one tier up, and jumping straight to the strongest model
