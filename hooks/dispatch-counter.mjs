@@ -1127,11 +1127,11 @@ if (process.argv[2] === "tokens") {
   // whose it is.
   const worst = (pick) => agentRows.filter(([, s]) => pick(s) > 0).sort((a, b) => pick(b[1]) - pick(a[1]))
     .slice(0, 3).map(([a, s]) => `${a} ${fmtN(pick(s))}`).join(", ");
-  // Compared in whole cents, the precision the amounts print at: a sub-cent
-  // difference would name an agent next to "$0.00 vs $0.00".
-  const cents = (n) => Math.round(n * 100);
+  // Compared as printed, not in raw dollars: fmtUsd drops to whole dollars at
+  // $1,000, so a finer test would name an agent next to "$0.00 vs $0.00" or
+  // "$1,000 vs $1,000".
   const costlier = agentRows.flatMap(([a, s]) => [...s.downCost.values()].map((c) => ({ agent: a, ...c })))
-    .filter((c) => cents(c.ran) > cents(c.inherited))
+    .filter((c) => c.ran > c.inherited && fmtUsd(c.ran) !== fmtUsd(c.inherited))
     .sort((x, y) => (y.ran - y.inherited) - (x.ran - x.inherited));
   // Cache-read rate per MTok from PRICES itself, so the explanation names the
   // rates that produced the amounts beside it and moves with the table.

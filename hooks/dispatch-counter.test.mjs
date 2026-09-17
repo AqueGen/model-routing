@@ -1536,6 +1536,22 @@ test("a difference below one cent, or against an unpriced session, names no agen
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
+test("amounts that print identically above $1,000 name no agent", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-fable-5-1"}\n');
+  // opus-5: 66.653333M x $5 + 1334.266667M x $0.50 = $1,000.40
+  // fable-5.1: 66.653333M x $10 + 1334.266667M x $0.25 = $1,000.10 - both print as $1,000.
+  writeFileSync(join(dir, "agent-a.jsonl"), costLine("claude-opus-5", { input: 66653333, cacheRead: 1334266667 }) + "\n");
+  metaFor(dir, "a", "model-routing:implementer", "opus");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /as it ran\s+\$1,000\n\s+had every subagent inherited its session model\s+\$1,000\n/);
+    assert.doesNotMatch(out, /Routed down but priced higher/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
 test("above-tier work costing more than the session model is not called out", () => {
   const cfg = freshConfigDir();
   const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
