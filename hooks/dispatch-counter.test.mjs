@@ -1552,6 +1552,26 @@ test("a routed-down agent priced above its session model is named with both amou
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
+test("a tier set by nothing the report can see gets no model= advice", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-fable-5-1"}\n');
+  // Another plugin's agent on its own opus pin: no model=, no pin this plugin knows.
+  writeFileSync(join(dir, "agent-a.jsonl"), costLine("claude-opus-5", { cacheRead: 10e6 }) + "\n");
+  metaFor(dir, "a", "other:heavy-agent");
+  // model=sonnet asked, opus ran (a fallback): the model= did not set the tier.
+  writeFileSync(join(dir, "agent-b.jsonl"), costLine("claude-opus-5", { cacheRead: 10e6 }) + "\n");
+  metaFor(dir, "b", "general-purpose", "sonnet");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /other:heavy-agent on opus-5 from fable-5-1 \$5\.00 vs \$2\.50/);
+    assert.match(out, /general-purpose on opus-5 from fable-5-1 \$5\.00 vs \$2\.50/);
+    assert.match(out, / (other:heavy-agent, general-purpose|general-purpose, other:heavy-agent): no model= or pin this report can see set the tier that ran/);
+    assert.doesNotMatch(out, /model=<session model> would have|evidence for revisiting that pin/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
 test("a pin at the tier that ran is named as evidence, and bare volume stays with the bare line", () => {
   const cfg = freshConfigDir();
   const dir = join(cfg, "projects", "proj", "sess-1", "subagents");

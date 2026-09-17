@@ -1020,8 +1020,13 @@ if (process.argv[2] === "tokens") {
         // Bare volume stays out: it was never a routing choice, and the bare line
         // already prescribes a cheaper model= for it.
         if (down && !bare && ran != null && inherited != null) {
-          const key = `${model}\n${sessionModel}`;
-          const c = pa.downCost.get(key) ?? { model, session: sessionModel, ran: 0, inherited: 0 };
+          // What set the tier that ran decides the advice, so it is part of the
+          // key: this agent's own pin, a model= that ran as asked, or neither -
+          // a pin from another plugin, an env override, or a fallback.
+          const setBy = tierOf(ownPinnedModel(typed.agentType)) === tm ? "pin"
+            : typed.model != null && tierOf(typed.model) === tm ? "model" : "unseen";
+          const key = `${model}\n${sessionModel}\n${setBy}`;
+          const c = pa.downCost.get(key) ?? { model, session: sessionModel, setBy, ran: 0, inherited: 0 };
           c.ran += ran; c.inherited += inherited;
           pa.downCost.set(key, c);
         }
@@ -1191,15 +1196,17 @@ if (process.argv[2] === "tokens") {
       // qualifies. The amounts compare a subagent with the same subagent on the
       // session model, so that is the option named - but only for a model= the
       // dispatch chose. Where the agent's own pin sits at the tier that ran, the
-      // pin is a rule, and going lower is the below-pin case above.
+      // pin is a rule, and going lower is the below-pin case above. Where this
+      // report cannot see what set the tier, it names none.
       ...(costlier.length ? (() => {
-        const pinnedAtRun = (c) => ownPinnedModel(c.agent) != null && tierOf(ownPinnedModel(c.agent)) === tierOf(c.model);
         const names = (list) => [...new Set(list.map((c) => c.agent))].join(", ");
-        const chosen = costlier.filter((c) => !pinnedAtRun(c));
-        const pinned = costlier.filter(pinnedAtRun);
+        const chosen = costlier.filter((c) => c.setBy === "model");
+        const pinned = costlier.filter((c) => c.setBy === "pin");
+        const unseen = costlier.filter((c) => c.setBy === "unseen");
         return [`  Routed down but priced higher than the same tokens on the session model: ${costlier.slice(0, 3).map((c) => `${c.agent} on ${shortModel(c.model)} from ${shortModel(c.session)} ${fmtUsd(c.ran)} vs ${fmtUsd(c.inherited)} (cache reads ${cacheReadRate(c.model)} vs ${cacheReadRate(c.session)} per MTok)`).join(", ")}${costlier.length > 3 ? `, and ${costlier.length - 3} more` : ""}. A lower tier is not always a lower rate, and cache reads are usually most of the volume.`
           + (chosen.length ? ` ${names(chosen)}: the model= on these dispatches cost more than model=<session model> would have; a cheaper tier is also open, down to the agent's own pin if it has one.` : "")
-          + (pinned.length ? ` ${names(pinned)}: the agent's own pin is the tier that ran, so this is evidence for revisiting that pin, not a reason to dispatch below it.` : "")];
+          + (pinned.length ? ` ${names(pinned)}: the agent's own pin is the tier that ran, so this is evidence for revisiting that pin, not a reason to dispatch below it.` : "")
+          + (unseen.length ? ` ${names(unseen)}: no model= or pin this report can see set the tier that ran (a pin from another plugin, an env override, or a fallback), so check that before changing a dispatch.` : "")];
       })() : []),
       ...(metaless ? [`  ${plural(metaless, "transcript")} had no readable agent-<id>.meta.json sidecar and are absent from this section only - every total elsewhere in this report still counts them.`] : []),
     ] : []),
