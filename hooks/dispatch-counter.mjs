@@ -128,11 +128,16 @@ const ownPinnedModel = (agent) => AGENT_PINS[agent]?.model ?? null;
 const pinnedEffort = (agent) => AGENT_PINS[agent]?.effort ?? null;
 // Built-in Explore has inherited the session model since Claude Code 2.1.198,
 // capped at opus on the Claude API; before that it always ran haiku, which is
-// why it used to be exempted here as inherently cheap. A plain
-// CLAUDE_CODE_SUBAGENT_MODEL does not move it, per the subagent docs. On other
-// providers the cap does not apply, so a Fable session's Explore there runs
-// Fable and this reads it one tier low.
+// why it used to be exempted here as inherently cheap. The cap survives FORCE
+// with no env model. On other providers the cap does not apply, so a Fable
+// session's Explore there runs Fable and this reads it one tier low - the log
+// records no provider to tell them apart.
 const exploreModel = (session) => session && (tierOf(session) ?? 0) > tierOf("opus") ? "opus" : session ?? null;
+// Built-in Explore and Plan carry a model in their own definitions, so a plain
+// CLAUDE_CODE_SUBAGENT_MODEL does not move either, per the subagent docs.
+const BUILTIN_AGENTS = new Set(["Explore", "Plan"]);
+const builtinModel = (e) => e.agent === "Explore" ? exploreModel(e.session) : e.session ?? null;
+const envDecides = (e) => Boolean(e.env) && !BUILTIN_AGENTS.has(e.agent);
 
 function configDir() {
   return process.env.CLAUDE_CONFIG_DIR?.trim()
@@ -387,8 +392,8 @@ function lastModelIn(file, bytes) {
 // the docs rank the pin first. Accepted - the tables cannot see foreign
 // frontmatter at all, and this is the rarer of the two ways to be wrong.
 const effectiveModel = (e) => e.envForce
-  ? (e.env ?? e.session ?? null)
-  : (e.model ?? pinnedModel(e.agent) ?? (e.agent === "Explore" ? exploreModel(e.session) : e.env) ?? null);
+  ? (e.env ?? (e.agent === "Explore" ? exploreModel(e.session) : e.session) ?? null)
+  : (e.model ?? pinnedModel(e.agent) ?? (BUILTIN_AGENTS.has(e.agent) ? builtinModel(e) : e.env) ?? null);
 
 // A pinned agent has a FLOOR as well as a ceiling. The pin states how much
 // reasoning the role needs - reviewer on opus because a missed bug costs more
@@ -505,7 +510,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     const key = e.envForce ? `${e.agent} (forced=${e.env ?? "session"})`
       : e.model ? `${e.agent} (model=${e.model}${under ? `, pin=${pinnedModel(e.agent)}` : ""})`
       : pinnedModel(e.agent) ? `${e.agent} (pin=${pinnedModel(e.agent)})`
-      : e.env ? `${e.agent} (env=${e.env})`
+      : envDecides(e) ? `${e.agent} (env=${e.env})`
       : e.agent;
     const s = byAgent.get(key) ?? { n: 0, down: 0, up: 0, unknown: 0, underPin: 0 };
     s.n++;
@@ -559,9 +564,9 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   // CLAUDE_CODE_SUBAGENT_MODEL_FORCE with no env model the dispatch DOES run
   // the session model, but that is the machine-wide setting doing exactly what
   // it says, so it is excluded here too: the remedy is one variable, not one
-  // dispatch. Explore is the exception to the plain env var: it does not move
-  // Explore, so a bare Explore under it still inherited.
-  const leaks = capable.filter((e) => (!e.env || e.agent === "Explore") && !e.envForce && !e.model && tierOf(e.session) > 2);
+  // dispatch. The plain env var does not move the built-in agents, so a bare
+  // Explore or Plan under it still inherited.
+  const leaks = capable.filter((e) => !envDecides(e) && !e.envForce && !e.model && tierOf(e.session) > 2);
   const leakLines = [];
   if (capable.length) {
     const rate = leaks.length / capable.length;
@@ -1033,7 +1038,10 @@ if (process.argv[2] === "tokens") {
         // wrong, this is the only thing left that would still catch the agent
         // genuinely inheriting the session model - ownPinnedModel keeps that
         // possible no matter what the curated table claims.
-        else if (!ownPinnedModel(typed.agentType) && typed.model == null && model === sessionModel && tsess > 2) pa.bareVol += vol;
+        // A bare Explore under a session above opus ran opus by the cap, which
+        // is still inheritance rather than a routing choice.
+        else if (!ownPinnedModel(typed.agentType) && typed.model == null && tsess > 2
+          && (model === sessionModel || (typed.agentType === "Explore" && tierOf(model) === tierOf(exploreModel(sessionModel))))) pa.bareVol += vol;
       }
     }
   };

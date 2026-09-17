@@ -252,6 +252,25 @@ test("a bare Explore inherits the session model capped at opus and counts as a l
     const out = run(["report"], cfg);
     assert.match(out, /2 of 4 dispatches \(50%\) ran on a lower tier/);
     assert.match(out, /Tier leaks: 3 of 4 dispatches on agent types with no MODEL pin this plugin knows \(75%\)/);
+    // The env var decided nothing, so the row must not name it.
+    assert.doesNotMatch(out, /Explore \(env=/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a plain env default does not move Plan, and FORCE alone keeps Explore's cap", () => {
+  const cfg = freshConfigDir();
+  const now = Date.now();
+  writeLog(cfg, [
+    // Plan inherits uncapped: at the session tier and a leak, whatever env says.
+    { ts: now, agent: "Plan", model: null, env: "haiku", session: "claude-opus-5" },
+    // FORCE with no env model: the session model, but Explore keeps its opus cap.
+    { ts: now, agent: "Explore", model: null, envForce: true, session: "claude-fable-5-1" },
+  ]);
+  try {
+    const out = run(["report"], cfg);
+    assert.match(out, /1 of 2 dispatches \(50%\) ran on a lower tier/);
+    assert.match(out, /Ran cheaper[\s\S]*Explore \(forced=session\)[\s\S]*Ran at the session tier[\s\S]*\n\s+1\s+Plan\n/);
+    assert.match(out, /Tier leaks: 1 of 2 dispatches/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
@@ -1494,6 +1513,22 @@ test("below-pin volume is judged on the model the transcript actually ran", () =
     const out = run(["tokens"], cfg);
     assert.match(out, /Below the agent's own pin: 4k \(100% of the volume seen here\) - model-routing:reviewer 4k/);
     assert.doesNotMatch(out, /Inherited the session model bare/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a bare Explore capped at opus under Fable is bare inheritance, not a routing choice", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-fable-5-1"}\n');
+  writeFileSync(join(dir, "agent-a.jsonl"), usageLine("claude-opus-5", 4000) + "\n");
+  metaFor(dir, "a", "Explore");
+  // The same run under an explicit model= is a choice and stays out of the callout.
+  writeFileSync(join(dir, "agent-b.jsonl"), usageLine("claude-opus-5", 2000) + "\n");
+  metaFor(dir, "b", "general-purpose", "opus");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /Inherited the session model bare: 4k \(67% of the volume seen here\) - Explore 4k\./);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 

@@ -111,7 +111,7 @@ carries no effort param:
 | Codebase exploration ("where is X", "how does Y work") | subagent | `scout` (sonnet) | low |
 | Breadth sweeps: enumerate, list, trace a chain end to end | subagent | `surveyor` (haiku) | low |
 | Implementing an approved plan/spec (ordinary: single-file, clear shape) | subagent | `implementer` (sonnet) | medium |
-| Complex implementation: multi-file refactor, subtle concurrency/security | subagent | `implementer` with `model=opus` (main session on a Fable 5.1 or Mythos 5.1 session) | medium (pinned) |
+| Complex implementation: multi-file refactor, subtle concurrency/security | subagent | `implementer` with `model=opus` (`model=<session model>` on a Fable 5.1 or Mythos 5.1 session) | medium (pinned) |
 | Trivial mechanical tasks: renames, boilerplate, mirrored constants | subagent | sonnet | low |
 | Small interactive edits, quick fixes | main session | strongest | low |
 | Code review of implemented work | subagent | `reviewer` (opus) | high |
@@ -154,8 +154,8 @@ actually earns its cost:
   price ($5/$25), so the opus tier now buys strictly more per dollar than
   when this table was tuned - when in doubt between sonnet and opus for
   implementation, take opus. The exception is a Fable 5.1 or Mythos 5.1
-  session, where the opus step costs more than the session itself - see
-  the cache-read bullet below.
+  session, where the opus step measured more expensive than the session
+  model for implementer work - see the cache-read bullet below.
 - **Review -> opus/high.** Review is one cheap pass guarding against
   expensive misses - an asymmetric bet where the strongest reasoning at
   high effort is worth it, because a bug that ships costs far more than
@@ -181,13 +181,20 @@ actually earns its cost:
   run the other way on Fable 5.1 (0.025x, $0.25/MTok, against opus at
   0.1x, $0.50/MTok): cache-heavy opus work dispatched from a Fable 5.1
   session pays MORE per cached token than the session would have.
-  Implementation is that kind of work, so on a Fable 5.1 or Mythos 5.1
-  session the step above sonnet is the main session, not `model=opus`.
-  Measured on the author's own dispatches over the 7 days to 2026-09-17:
-  opus implementers from Fable 5.1 sessions priced at $275.55 against
-  $221.52 for the same tokens on the session model, before the cache
-  writes a fresh subagent adds on top. Fable 5 reads cache at the
-  ordinary 0.1x, so there opus stays the cheaper step.
+  Opus still halves base input and output, so which side wins depends on
+  the token mix. For implementer work it came out against opus on the
+  author's own dispatches over the 7 days to 2026-09-17: opus implementers
+  from Fable 5.1 sessions priced at $275.55, against $221.52 for the same
+  tokens - cache writes and output included - at Fable 5.1 rates. That is
+  one person's week and one agent type, and what it compares is an opus
+  subagent with a session-model subagent, not with doing the work inline.
+  So on a Fable 5.1 or Mythos 5.1 session the implementer's step above
+  sonnet is `model=<session model>` (the pin ceiling allows it), not
+  `model=opus`. `reviewer` keeps its opus pin: the same week did not flag
+  it, and `/model-routing:stats` names any agent and model pair that ran
+  below the session tier yet priced above it, which is the evidence to
+  revisit either rule on. Fable 5 reads cache at the ordinary 0.1x, so
+  there opus stays the cheaper step.
   Where the inflation does bite is any comparison against a Sonnet
   4.6-era baseline: re-pricing today's token counts at yesterday's rates
   understates the difference.
@@ -314,8 +321,7 @@ actually ran with `/model-routing:stats`.
   same level that just failed.
 - The escalation ladder generalizes: any failed or visibly weak subagent
   RESULT (wrong answer, broken diff, report that dodges the question)
-  retries exactly one step up - next tier via the Agent `model` param
-  (above sonnet on a Fable 5.1 or Mythos 5.1 session, the main session), or
+  retries exactly one step up - next tier via the Agent `model` param, or
   the same tier at higher effort when the miss looks like shallow thinking
   rather than missing capability. One step, not a leap to the top: most
   failures clear one tier up, and jumping straight to the strongest model

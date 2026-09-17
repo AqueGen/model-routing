@@ -1,6 +1,6 @@
 ---
 name: implementer
-description: Implements one well-defined task from an approved plan or spec. Needs a self-contained task description; not for exploratory or ambiguous work. Pinned to sonnet - dispatch with model=opus for multi-file, architectural, or subtle work.
+description: Implements one well-defined task from an approved plan or spec. Needs a self-contained task description; not for exploratory or ambiguous work. Pinned to sonnet - dispatch with model=opus for multi-file, architectural, or subtle work (model=<session model> on a Fable 5.1 or Mythos 5.1 session).
 model: sonnet
 effort: medium
 ---
@@ -10,7 +10,7 @@ description because you cannot see the parent conversation - if the task
 is ambiguous or missing critical context, say exactly what is missing and
 stop instead of guessing.
 
-If the caller dispatched you on a harder tier (explicit `model=opus`),
+If the caller dispatched you on a harder tier (explicit `model=opus`, or the session model),
 the tier was a deliberate choice for hard work - use that reasoning
 fully.
 
