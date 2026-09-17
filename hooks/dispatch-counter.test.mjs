@@ -1490,8 +1490,49 @@ test("a routed-down agent priced above its session model is named with both amou
   metaFor(dir, "b", "model-routing:test-runner");
   try {
     const out = run(["tokens"], cfg);
-    assert.match(out, /Routed down but priced higher than staying on the session model: model-routing:implementer \$5\.00 vs \$2\.50\./);
-    assert.doesNotMatch(out, /test-runner \$/);
+    assert.match(out, /Routed down but priced higher than staying on the session model: model-routing:implementer on opus-5 from fable-5-1 \$5\.00 vs \$2\.50 \(cache reads \$0\.50 vs \$0\.25 per MTok\)\./);
+    assert.doesNotMatch(out, /test-runner on/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a cheap pair of the same agent type does not cancel out a costlier pair", () => {
+  const cfg = freshConfigDir();
+  const proj = join(cfg, "projects", "proj");
+  const dir1 = join(proj, "sess-1", "subagents");
+  const dir2 = join(proj, "sess-2", "subagents");
+  mkdirSync(dir1, { recursive: true });
+  mkdirSync(dir2, { recursive: true });
+  writeFileSync(join(proj, "sess-1.jsonl"), '{"model":"claude-fable-5-1"}\n');
+  writeFileSync(join(proj, "sess-2.jsonl"), '{"model":"claude-opus-5"}\n');
+  // +$2.50 on opus-5 under fable-5.1; -$60.00 on sonnet-5 ($40) under opus-5 ($100).
+  writeFileSync(join(dir1, "agent-a.jsonl"), costLine("claude-opus-5", { cacheRead: 10e6 }) + "\n");
+  metaFor(dir1, "a", "model-routing:implementer", "opus");
+  writeFileSync(join(dir2, "agent-b.jsonl"), costLine("claude-sonnet-5", { input: 20e6 }) + "\n");
+  metaFor(dir2, "b", "model-routing:implementer", "sonnet");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /model-routing:implementer on opus-5 from fable-5-1 \$5\.00 vs \$2\.50/);
+    assert.doesNotMatch(out, /on sonnet-5 from opus-5/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a difference below one cent, or against an unpriced session, names no agent", () => {
+  const cfg = freshConfigDir();
+  const proj = join(cfg, "projects", "proj");
+  const dir1 = join(proj, "sess-1", "subagents");
+  const dir2 = join(proj, "sess-2", "subagents");
+  mkdirSync(dir1, { recursive: true });
+  mkdirSync(dir2, { recursive: true });
+  writeFileSync(join(proj, "sess-1.jsonl"), '{"model":"claude-fable-5-1"}\n');
+  // Ranks as the top tier, absent from PRICES: the inherited side cannot be priced.
+  writeFileSync(join(proj, "sess-2.jsonl"), '{"model":"claude-fable-9"}\n');
+  // 1000 cache reads: $0.0005 against $0.00025, both print as $0.00.
+  writeFileSync(join(dir1, "agent-a.jsonl"), costLine("claude-opus-5", { cacheRead: 1000 }) + "\n");
+  metaFor(dir1, "a", "model-routing:reviewer");
+  writeFileSync(join(dir2, "agent-b.jsonl"), costLine("claude-opus-5", { cacheRead: 10e6 }) + "\n");
+  metaFor(dir2, "b", "model-routing:implementer", "opus");
+  try {
+    assert.doesNotMatch(run(["tokens"], cfg), /Routed down but priced higher/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 

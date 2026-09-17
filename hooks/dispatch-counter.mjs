@@ -945,7 +945,7 @@ if (process.argv[2] === "tokens") {
       // is counted outside the per-model loop: a mid-run fallback splits the
       // volume across two models but is still a single dispatch.
       const pa = typed
-        ? perAgent.get(typed.agentType) ?? { agents: 0, vol: 0, models: new Map(), belowPinVol: 0, bareVol: 0, downRan: 0, downInherited: 0 }
+        ? perAgent.get(typed.agentType) ?? { agents: 0, vol: 0, models: new Map(), belowPinVol: 0, bareVol: 0, downCost: new Map() }
         : null;
       if (pa) { pa.agents++; perAgent.set(typed.agentType, pa); }
       for (const [model, v] of fileVols) {
@@ -981,8 +981,16 @@ if (process.argv[2] === "tokens") {
         if (!pa) continue;
         // Priced only where the agent ran below the session tier: above-tier work
         // costing more is the documented intent, while a routed-down agent costing
-        // more is the case the tier share reports as a win.
-        if (down && ran != null && inherited != null) { pa.downRan += ran; pa.downInherited += inherited; }
+        // more is the case the tier share reports as a win. Keyed by the model
+        // pair, not the agent type alone: whether a lower tier bills higher is a
+        // property of the pair, and one type's cheap sonnet runs under an opus
+        // session would otherwise cancel out its expensive opus runs under Fable.
+        if (down && ran != null && inherited != null) {
+          const key = `${model}\n${sessionModel}`;
+          const c = pa.downCost.get(key) ?? { model, session: sessionModel, ran: 0, inherited: 0 };
+          c.ran += ran; c.inherited += inherited;
+          pa.downCost.set(key, c);
+        }
         pa.vol += vol;
         pa.models.set(model, (pa.models.get(model) ?? 0) + vol);
         // Both verdicts are re-derived here from the model the transcript
@@ -1119,8 +1127,15 @@ if (process.argv[2] === "tokens") {
   // whose it is.
   const worst = (pick) => agentRows.filter(([, s]) => pick(s) > 0).sort((a, b) => pick(b[1]) - pick(a[1]))
     .slice(0, 3).map(([a, s]) => `${a} ${fmtN(pick(s))}`).join(", ");
-  const costlier = agentRows.filter(([, s]) => s.downRan > s.downInherited)
-    .sort((a, b) => (b[1].downRan - b[1].downInherited) - (a[1].downRan - a[1].downInherited));
+  // Compared in whole cents, the precision the amounts print at: a sub-cent
+  // difference would name an agent next to "$0.00 vs $0.00".
+  const cents = (n) => Math.round(n * 100);
+  const costlier = agentRows.flatMap(([a, s]) => [...s.downCost.values()].map((c) => ({ agent: a, ...c })))
+    .filter((c) => cents(c.ran) > cents(c.inherited))
+    .sort((x, y) => (y.ran - y.inherited) - (x.ran - x.inherited));
+  // Cache-read rate per MTok from PRICES itself, so the explanation names the
+  // rates that produced the amounts beside it and moves with the table.
+  const cacheReadRate = (m) => fmtUsd(costOf(m, { in: 0, out: 0, cr: 1e6, cw5: 0, cw1h: 0 }, priceAt));
   const out = [
     `Subagent token volume - ${winLabel} (input + cache)${versionSuffix}:`,
     "",
@@ -1154,8 +1169,11 @@ if (process.argv[2] === "tokens") {
       // reads against the report total like the rows above it do, and the same
       // volume appears twice under two different percentages.
       ...(bareVol ? [`  Inherited the session model bare: ${fmtN(bareVol)} (${Math.round((bareVol / Math.max(1, agentVol)) * 100)}% of the volume seen here) - ${worst((s) => s.bareVol)}. Agent types with no pin, dispatched with no model=: pass one (sonnet default), give the type a pin, or - for a workflow-subagent row - set the model opt on the agent() call that spawned it. A workflow-subagent sidecar never records a model, so that row means "ran on the session model", which a model opt equal to the session model would also produce.`] : []),
-      ...(costlier.length ? [`  Routed down but priced higher than staying on the session model: ${costlier.slice(0, 3).map(([a, s]) => `${a} ${fmtUsd(s.downRan)} vs ${fmtUsd(s.downInherited)}`).join(", ")}. A lower tier is not a lower rate per cached token: a Fable 5.1 session reads its cache at 0.025x of its base rate, an opus subagent at 0.1x of a base half as high, so cache-heavy opus work dispatched from Fable 5.1 costs twice as much per cached token. Check whether these dispatches needed a tier above sonnet.`] : []),
       ...(bareVol && envN ? [`  Read that with one caveat this window earns: ${plural(envN, "dispatch")} in it ran with CLAUDE_CODE_SUBAGENT_MODEL set, which decides the model only for agents with no pin and no model=; a bare unpinned dispatch under it ran the env model, not the session model, so it is not inheritance.`] : []),
+      // After the env caveat, never between it and the bare-inheritance line it
+      // qualifies. The advice stays pin-neutral: for a role pinned at the tier
+      // that ran, going lower is the below-pin case above, not a saving.
+      ...(costlier.length ? [`  Routed down but priced higher than staying on the session model: ${costlier.slice(0, 3).map((c) => `${c.agent} on ${shortModel(c.model)} from ${shortModel(c.session)} ${fmtUsd(c.ran)} vs ${fmtUsd(c.inherited)} (cache reads ${cacheReadRate(c.model)} vs ${cacheReadRate(c.session)} per MTok)`).join(", ")}${costlier.length > 3 ? `, and ${costlier.length - 3} more` : ""}. A lower tier is not always a lower rate, and cache reads are usually most of the volume. For a role pinned to that tier, the cheaper option is keeping the work in the session; otherwise check whether a lower tier holds.`] : []),
       ...(metaless ? [`  ${plural(metaless, "transcript")} had no readable agent-<id>.meta.json sidecar and are absent from this section only - every total elsewhere in this report still counts them.`] : []),
     ] : []),
     ...(unknownAgents ? ["", `${unknownAgents} agents not tier-comparable (${fmtN(unknownVol)}), excluded from routed-down math - either the agent ran an unrecognized model family (extend TIER_PATTERNS in dispatch-counter.mjs) or no model could be read from the parent session transcript, which happens when the transcript is gone or names no model anywhere.`] : []),
@@ -1188,7 +1206,7 @@ if (process.argv[2] === "tokens") {
       "Rates are first-party Claude API list prices - Bedrock and Google Cloud bill separately and are not modelled. They are transcribed from the Anthropic pricing page on the date above and will drift; a window straddling a price change is priced wholly at the rates in effect at its end. Re-check PRICES in dispatch-counter.mjs before quoting a figure.",
     ] : []),
     "",
-    "Volume = tokens the subagent processed; cache reads are billed at the subagent's model rate, which is where routing usually saves. The tier share above does not know when it does not; the dollar rows do.",
+    "Volume = tokens the subagent processed; cache reads are billed at the subagent's model rate, which is where routing usually saves. The tier share above does not know when it does not; the dollar rows do, and the By agent section names the model pairs where it did not.",
     "Session model is the model of the assistant message that DISPATCHED the agent, matched through the toolUseId in the agent's sidecar - the same instant the dispatch report stamps, so a mid-session /model switch moves both reports together. Without a usable sidecar the model in effect at the agent's first timestamp is used, and failing that the head of the session transcript (or its tail, when the head names no model at all). A nested agent (spawned by another agent) is keyed to the model of that agent, which is the model it would inherit; the dispatch log keys it to the main session, so the two can differ for nested agents.",
   ];
   process.stdout.write(out.join("\n"));
