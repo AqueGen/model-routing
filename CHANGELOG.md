@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.2](https://github.com/AqueGen/model-routing/compare/v0.16.1...v0.16.2) (2026-09-17)
+
+
+### Bug Fixes
+
+* name routed-down agents priced above the session model, collapse the effort section when nothing inherited ([#45](https://github.com/AqueGen/model-routing/issues/45)) ([ad94dba](https://github.com/AqueGen/model-routing/commit/ad94dba69818c0757c6cd4de952c5c3b2cea73a8))
+* stop treating a bare Explore as cheap and escalate a Fable 5.1 implementer to the session model ([#47](https://github.com/AqueGen/model-routing/issues/47)) ([14b38b9](https://github.com/AqueGen/model-routing/commit/14b38b92ffa16e1c5810e5aa12ea329c602464ed))
+
 ## [0.16.1](https://github.com/AqueGen/model-routing/compare/v0.16.0...v0.16.1) (2026-09-10)
 
 
