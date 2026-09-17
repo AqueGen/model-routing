@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.3](https://github.com/AqueGen/model-routing/compare/v0.16.2...v0.16.3) (2026-09-17)
+
+
+### Bug Fixes
+
+* make the priced-higher advice match what set the tier, and keep bare volume out of it ([#48](https://github.com/AqueGen/model-routing/issues/48)) ([9858a0b](https://github.com/AqueGen/model-routing/commit/9858a0b866e80e46152a8c2fba0e75b62170b276))
+
 ## [0.16.2](https://github.com/AqueGen/model-routing/compare/v0.16.1...v0.16.2) (2026-09-17)
 
 
