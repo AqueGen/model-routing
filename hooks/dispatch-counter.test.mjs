@@ -1545,8 +1545,51 @@ test("a routed-down agent priced above its session model is named with both amou
   metaFor(dir, "b", "model-routing:test-runner");
   try {
     const out = run(["tokens"], cfg);
-    assert.match(out, /Routed down but priced higher than staying on the session model: model-routing:implementer on opus-5 from fable-5-1 \$5\.00 vs \$2\.50 \(cache reads \$0\.50 vs \$0\.25 per MTok\)\./);
+    assert.match(out, /Routed down but priced higher than the same tokens on the session model: model-routing:implementer on opus-5 from fable-5-1 \$5\.00 vs \$2\.50 \(cache reads \$0\.50 vs \$0\.25 per MTok\)\./);
+    assert.match(out, /model-routing:implementer: the model= on these dispatches cost more than model=<session model> would have/);
+    assert.doesNotMatch(out, /evidence for revisiting that pin/);
     assert.doesNotMatch(out, /test-runner on/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a tier set by nothing the report can see gets no model= advice", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-fable-5-1"}\n');
+  // Another plugin's agent on its own opus pin: no model=, no pin this plugin knows.
+  writeFileSync(join(dir, "agent-a.jsonl"), costLine("claude-opus-5", { cacheRead: 10e6 }) + "\n");
+  metaFor(dir, "a", "other:heavy-agent");
+  // model=sonnet asked, opus ran (a fallback): the model= did not set the tier.
+  writeFileSync(join(dir, "agent-b.jsonl"), costLine("claude-opus-5", { cacheRead: 10e6 }) + "\n");
+  metaFor(dir, "b", "general-purpose", "sonnet");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /other:heavy-agent on opus-5 from fable-5-1 \$5\.00 vs \$2\.50/);
+    assert.match(out, /general-purpose on opus-5 from fable-5-1 \$5\.00 vs \$2\.50/);
+    assert.match(out, / (other:heavy-agent, general-purpose|general-purpose, other:heavy-agent): no model= or pin this report can see set the tier that ran/);
+    assert.doesNotMatch(out, /model=<session model> would have|evidence for revisiting that pin/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a pin at the tier that ran is named as evidence, and bare volume stays with the bare line", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-fable-5-1"}\n');
+  // reviewer runs its own opus pin: $5.00 against $2.50 on fable-5.1.
+  writeFileSync(join(dir, "agent-a.jsonl"), costLine("claude-opus-5", { cacheRead: 10e6 }) + "\n");
+  metaFor(dir, "a", "model-routing:reviewer");
+  // A bare Explore capped at opus: same amounts, but inheritance, not a choice.
+  writeFileSync(join(dir, "agent-b.jsonl"), costLine("claude-opus-5", { cacheRead: 10e6 }) + "\n");
+  metaFor(dir, "b", "Explore");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /Routed down but priced higher than the same tokens on the session model: model-routing:reviewer on opus-5 from fable-5-1 \$5\.00 vs \$2\.50/);
+    assert.match(out, /model-routing:reviewer: the agent's own pin is the tier that ran, so this is evidence for revisiting that pin, not a reason to dispatch below it\./);
+    assert.doesNotMatch(out, /model=<session model> would have/);
+    assert.doesNotMatch(out, /Explore on opus-5/);
+    assert.match(out, /Inherited the session model bare: 10\.0M \(50% of the volume seen here\) - Explore 10\.0M/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 

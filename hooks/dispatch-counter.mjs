@@ -990,15 +990,43 @@ if (process.argv[2] === "tokens") {
         if (tm != null && tsess != null) ss.cmpVol += vol;
         if (down) ss.downVol += vol;
         if (!pa) continue;
+        // Bare inheritance: an agent with no pin this plugin knows about, no
+        // model= on the dispatch, that ran THE session's own model - the
+        // accidental-inheritance case the dispatch report counts, and the whole
+        // reason this section exists, so the test is deliberately the strict
+        // one. Same-tier is not enough: an agent from another plugin pinning
+        // opus-4-8 under an opus-5 session sits at the same tier and inherited
+        // nothing, which is the exact false positive that made the count-based
+        // warning overstate leaks. The session model compared against is the
+        // one the dispatching assistant line names, so a mid-session switch or
+        // a quota fallback moves this test with it; the only agents left
+        // unresolved are those whose parent line could not be found at all,
+        // which fall back to launch time and then to the transcript head.
+        // Same reasoning as the belowPin call below: a FOREIGN_AGENT_PINS entry
+        // must never suppress this check. If the entry is stale or simply
+        // wrong, this is the only thing left that would still catch the agent
+        // genuinely inheriting the session model - ownPinnedModel keeps that
+        // possible no matter what the curated table claims.
+        // A bare Explore under a session above opus ran opus by the cap, which
+        // is still inheritance rather than a routing choice.
+        const bare = !ownPinnedModel(typed.agentType) && typed.model == null && tsess > 2
+          && (model === sessionModel || (typed.agentType === "Explore" && tierOf(model) === tierOf(exploreModel(sessionModel))));
         // Priced only where the agent ran below the session tier: above-tier work
         // costing more is the documented intent, while a routed-down agent costing
         // more is the case the tier share reports as a win. Keyed by the model
         // pair, not the agent type alone: whether a lower tier bills higher is a
         // property of the pair, and one type's cheap sonnet runs under an opus
         // session would otherwise cancel out its expensive opus runs under Fable.
-        if (down && ran != null && inherited != null) {
-          const key = `${model}\n${sessionModel}`;
-          const c = pa.downCost.get(key) ?? { model, session: sessionModel, ran: 0, inherited: 0 };
+        // Bare volume stays out: it was never a routing choice, and the bare line
+        // already prescribes a cheaper model= for it.
+        if (down && !bare && ran != null && inherited != null) {
+          // What set the tier that ran decides the advice, so it is part of the
+          // key: this agent's own pin, a model= that ran as asked, or neither -
+          // a pin from another plugin, an env override, or a fallback.
+          const setBy = tierOf(ownPinnedModel(typed.agentType)) === tm ? "pin"
+            : typed.model != null && tierOf(typed.model) === tm ? "model" : "unseen";
+          const key = `${model}\n${sessionModel}\n${setBy}`;
+          const c = pa.downCost.get(key) ?? { model, session: sessionModel, setBy, ran: 0, inherited: 0 };
           c.ran += ran; c.inherited += inherited;
           pa.downCost.set(key, c);
         }
@@ -1021,27 +1049,7 @@ if (process.argv[2] === "tokens") {
         // a pin this plugin can vouch for, never on the FOREIGN_AGENT_PINS
         // guess `report` uses (see the comment on ownPinnedModel above).
         if (belowPin({ agent: typed.agentType, model, session: sessionModel }, ownPinnedModel)) pa.belowPinVol += vol;
-        // Bare inheritance: an agent with no pin this plugin knows about, no
-        // model= on the dispatch, that ran THE session's own model - the
-        // accidental-inheritance case the dispatch report counts, and the whole
-        // reason this section exists, so the test is deliberately the strict
-        // one. Same-tier is not enough: an agent from another plugin pinning
-        // opus-4-8 under an opus-5 session sits at the same tier and inherited
-        // nothing, which is the exact false positive that made the count-based
-        // warning overstate leaks. The session model compared against is the
-        // one the dispatching assistant line names, so a mid-session switch or
-        // a quota fallback moves this test with it; the only agents left
-        // unresolved are those whose parent line could not be found at all,
-        // which fall back to launch time and then to the transcript head.
-        // Same reasoning as the belowPin call above: a FOREIGN_AGENT_PINS entry
-        // must never suppress this check. If the entry is stale or simply
-        // wrong, this is the only thing left that would still catch the agent
-        // genuinely inheriting the session model - ownPinnedModel keeps that
-        // possible no matter what the curated table claims.
-        // A bare Explore under a session above opus ran opus by the cap, which
-        // is still inheritance rather than a routing choice.
-        else if (!ownPinnedModel(typed.agentType) && typed.model == null && tsess > 2
-          && (model === sessionModel || (typed.agentType === "Explore" && tierOf(model) === tierOf(exploreModel(sessionModel))))) pa.bareVol += vol;
+        else if (bare) pa.bareVol += vol;
       }
     }
   };
@@ -1185,9 +1193,21 @@ if (process.argv[2] === "tokens") {
       ...(bareVol ? [`  Inherited the session model bare: ${fmtN(bareVol)} (${Math.round((bareVol / Math.max(1, agentVol)) * 100)}% of the volume seen here) - ${worst((s) => s.bareVol)}. Agent types with no pin, dispatched with no model=: pass one (sonnet default), give the type a pin, or - for a workflow-subagent row - set the model opt on the agent() call that spawned it. A workflow-subagent sidecar never records a model, so that row means "ran on the session model", which a model opt equal to the session model would also produce.`] : []),
       ...(bareVol && envN ? [`  Read that with one caveat this window earns: ${plural(envN, "dispatch")} in it ran with CLAUDE_CODE_SUBAGENT_MODEL set, which decides the model only for agents with no pin and no model=; a bare unpinned dispatch under it ran the env model, not the session model, so it is not inheritance.`] : []),
       // After the env caveat, never between it and the bare-inheritance line it
-      // qualifies. The advice stays pin-neutral: for a role pinned at the tier
-      // that ran, going lower is the below-pin case above, not a saving.
-      ...(costlier.length ? [`  Routed down but priced higher than staying on the session model: ${costlier.slice(0, 3).map((c) => `${c.agent} on ${shortModel(c.model)} from ${shortModel(c.session)} ${fmtUsd(c.ran)} vs ${fmtUsd(c.inherited)} (cache reads ${cacheReadRate(c.model)} vs ${cacheReadRate(c.session)} per MTok)`).join(", ")}${costlier.length > 3 ? `, and ${costlier.length - 3} more` : ""}. A lower tier is not always a lower rate, and cache reads are usually most of the volume. For a role pinned to that tier, the cheaper option is keeping the work in the session; otherwise check whether a lower tier holds.`] : []),
+      // qualifies. The amounts compare a subagent with the same subagent on the
+      // session model, so that is the option named - but only for a model= the
+      // dispatch chose. Where the agent's own pin sits at the tier that ran, the
+      // pin is a rule, and going lower is the below-pin case above. Where this
+      // report cannot see what set the tier, it names none.
+      ...(costlier.length ? (() => {
+        const names = (list) => [...new Set(list.map((c) => c.agent))].join(", ");
+        const chosen = costlier.filter((c) => c.setBy === "model");
+        const pinned = costlier.filter((c) => c.setBy === "pin");
+        const unseen = costlier.filter((c) => c.setBy === "unseen");
+        return [`  Routed down but priced higher than the same tokens on the session model: ${costlier.slice(0, 3).map((c) => `${c.agent} on ${shortModel(c.model)} from ${shortModel(c.session)} ${fmtUsd(c.ran)} vs ${fmtUsd(c.inherited)} (cache reads ${cacheReadRate(c.model)} vs ${cacheReadRate(c.session)} per MTok)`).join(", ")}${costlier.length > 3 ? `, and ${costlier.length - 3} more` : ""}. A lower tier is not always a lower rate, and cache reads are usually most of the volume.`
+          + (chosen.length ? ` ${names(chosen)}: the model= on these dispatches cost more than model=<session model> would have; a cheaper tier is also open, down to the agent's own pin if it has one.` : "")
+          + (pinned.length ? ` ${names(pinned)}: the agent's own pin is the tier that ran, so this is evidence for revisiting that pin, not a reason to dispatch below it.` : "")
+          + (unseen.length ? ` ${names(unseen)}: no model= or pin this report can see set the tier that ran (a pin from another plugin, an env override, or a fallback), so check that before changing a dispatch.` : "")];
+      })() : []),
       ...(metaless ? [`  ${plural(metaless, "transcript")} had no readable agent-<id>.meta.json sidecar and are absent from this section only - every total elsewhere in this report still counts them.`] : []),
     ] : []),
     ...(unknownAgents ? ["", `${unknownAgents} agents not tier-comparable (${fmtN(unknownVol)}), excluded from routed-down math - either the agent ran an unrecognized model family (extend TIER_PATTERNS in dispatch-counter.mjs) or no model could be read from the parent session transcript, which happens when the transcript is gone or names no model anywhere.`] : []),
