@@ -29,7 +29,8 @@ Think in tiers, not model names - names rot, tiers do not:
 - **strongest** - the main-session model the user picked (Fable, Opus,
   whatever their plan offers). Highest reasoning quality, highest cost.
 - **mid** - one step down (e.g. Opus when the session runs Fable, Sonnet
-  when the session runs Opus).
+  when the session runs Opus). One step down is not always cheaper: see the
+  Fable 5.1 cache-read bullet for the implementer exception.
 - **cheap** - Sonnet/Haiku class. Mechanical work.
 
 ## Effort, not just tier
@@ -321,7 +322,9 @@ actually ran with `/model-routing:stats`.
   same level that just failed.
 - The escalation ladder generalizes: any failed or visibly weak subagent
   RESULT (wrong answer, broken diff, report that dodges the question)
-  retries exactly one step up - next tier via the Agent `model` param, or
+  retries exactly one step up - next tier via the Agent `model` param (for
+  an implementer on a Fable 5.1 or Mythos 5.1 session, the session model -
+  see the cache-read bullet), or
   the same tier at higher effort when the miss looks like shallow thinking
   rather than missing capability. One step, not a leap to the top: most
   failures clear one tier up, and jumping straight to the strongest model

@@ -570,7 +570,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   const leakLines = [];
   if (capable.length) {
     const rate = leaks.length / capable.length;
-    leakLines.push("", `Tier leaks: ${leaks.length} of ${capable.length} dispatches on agent types with no MODEL pin this plugin knows (${Math.round(rate * 100)}%) went out bare on a strong session - each inherited that session model unless its own frontmatter pinned one.`);
+    leakLines.push("", `Tier leaks: ${leaks.length} of ${capable.length} dispatches on agent types with no MODEL pin this plugin knows (${Math.round(rate * 100)}%) went out bare on a strong session - each inherited that session model (Explore capped at opus) unless its own frontmatter pinned one.`);
   }
   if (unrankable) {
     leakLines.push(
