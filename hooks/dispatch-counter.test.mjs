@@ -1546,6 +1546,10 @@ test("a routed-down agent priced above its session model is named with both amou
   try {
     const out = run(["tokens"], cfg);
     assert.match(out, /Routed down but priced higher than staying on the session model: model-routing:implementer on opus-5 from fable-5-1 \$5\.00 vs \$2\.50 \(cache reads \$0\.50 vs \$0\.25 per MTok\)\./);
+    // The advice matches what the amounts compare and the routing rule for this
+    // case: a subagent on the session model, never work pulled into the session.
+    assert.match(out, /The cheaper option measured here is dispatching with model=<session model>; a tier lower than the one that ran is an option only where the agent's pin allows it\./);
+    assert.doesNotMatch(out, /keeping the work in the session/);
     assert.doesNotMatch(out, /test-runner on/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
