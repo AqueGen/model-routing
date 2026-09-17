@@ -1045,6 +1045,20 @@ test("report separates inherited effort from pinned, and flags inferred levels",
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
+test("report collapses the effort section to one line when nothing inherited", () => {
+  const cfg = freshConfigDir();
+  const now = Date.now();
+  writeLog(cfg, [
+    { ts: now, agent: "model-routing:scout", session: "claude-fable-5-1", effort: "high", effortFrom: "settings" },
+    { ts: now, agent: "model-routing:test-runner", session: "claude-fable-5-1", effort: "high", effortFrom: "default" },
+  ]);
+  try {
+    const out = run(["report"], cfg);
+    assert.match(out, /^Effort: all 2 dispatches ran on agent types that pin their own effort\.$/m);
+    assert.doesNotMatch(out, /Source order is|documented model default rather than/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
 test("report omits the effort section when no entry recorded one", () => {
   const cfg = freshConfigDir();
   writeLog(cfg, [{ ts: Date.now(), agent: "general-purpose", model: "sonnet", session: "claude-opus-5" }]);
@@ -1460,6 +1474,38 @@ test("below-pin volume is judged on the model the transcript actually ran", () =
     const out = run(["tokens"], cfg);
     assert.match(out, /Below the agent's own pin: 4k \(100% of the volume seen here\) - model-routing:reviewer 4k/);
     assert.doesNotMatch(out, /Inherited the session model bare/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a routed-down agent priced above its session model is named with both amounts", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-fable-5-1"}\n');
+  // 10M cache reads: opus-5 at 0.1x of $5 = $5.00, fable-5.1 at 0.025x of $10 = $2.50.
+  writeFileSync(join(dir, "agent-a.jsonl"), costLine("claude-opus-5", { cacheRead: 10e6 }) + "\n");
+  metaFor(dir, "a", "model-routing:implementer", "opus");
+  // Base input: haiku $1.00 against fable $10.00 - cheaper, so never named.
+  writeFileSync(join(dir, "agent-b.jsonl"), costLine("claude-haiku-4-5", { input: 1e6 }) + "\n");
+  metaFor(dir, "b", "model-routing:test-runner");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /Routed down but priced higher than staying on the session model: model-routing:implementer \$5\.00 vs \$2\.50\./);
+    assert.doesNotMatch(out, /test-runner \$/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("above-tier work costing more than the session model is not called out", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-opus-5"}\n');
+  writeFileSync(join(dir, "agent-a.jsonl"), costLine("claude-fable-5", { input: 1e6 }) + "\n");
+  metaFor(dir, "a", "general-purpose", "fable");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /difference\s+-\$5\.00/);
+    assert.doesNotMatch(out, /Routed down but priced higher/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
