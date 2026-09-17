@@ -305,7 +305,7 @@ let Claude route via the skill:
   a compact pass/fail report instead of a wall of logs.
 - "Implement tasks 1-3 from the plan" - Claude dispatches `implementer`
   (sonnet) with self-contained task descriptions; multi-file or subtle
-  work goes out with `model=opus`.
+  work goes out with `model=opus` (`model=<session model>` on a Fable 5.1 or Mythos 5.1 session).
 - "Review the diff" - Claude dispatches `reviewer` (opus). For high-risk
   diffs, ask for review in the main session instead - one expensive pass
   is cheaper than a missed bug.
@@ -596,7 +596,7 @@ By agent - which role processed the volume:
   Inherited the session model bare: 1.8M (0% of the volume seen here) - Explore 1.7M, claude 86k, general-purpose 73k.
 ```
 
-The two callout lines are the same two problems the dispatch report flags, now with a size beside them. Both verdicts are re-derived from the model each transcript ACTUALLY ran on, which is the one thing this side of the report has and the dispatch log does not: an override the harness declined and a fallback mid-run both reach the usage lines, while the log can only ever record what was asked for.
+The two callout lines above are the same two problems the dispatch report flags, now with a size beside them. A third line, printed only when it applies, names agent and model pairs that ran below the session tier yet priced above the same tokens on the session model - in practice opus-class work under a Fable 5.1 session, where cache reads cost twice the session rate. Both verdicts are re-derived from the model each transcript ACTUALLY ran on, which is the one thing this side of the report has and the dispatch log does not: an override the harness declined and a fallback mid-run both reach the usage lines, while the log can only ever record what was asked for.
 
 Neither report is the authority on everything, and it is worth knowing which half each one owns. **What model ran, and how much it processed** - only the transcripts know that; the log records a request. **What was asked for** - only the log knows that; it records the request. Both sides now stamp the session at dispatch time: the log writes the model it is on when the dispatch fires, and this side matches the agent's sidecar `toolUseId` back to the assistant line that dispatched it and takes that line's model, falling back to the model in effect at the agent's launch and then to the transcript head only when no such line can be found. So a below-pin verdict here is measured on the agent's side and read from the dispatching line on the session's, and a mid-session `/model` switch moves both reports together. Read a disagreement as each report describing the half it can see.
 

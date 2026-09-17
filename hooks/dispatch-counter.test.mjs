@@ -1545,12 +1545,31 @@ test("a routed-down agent priced above its session model is named with both amou
   metaFor(dir, "b", "model-routing:test-runner");
   try {
     const out = run(["tokens"], cfg);
-    assert.match(out, /Routed down but priced higher than staying on the session model: model-routing:implementer on opus-5 from fable-5-1 \$5\.00 vs \$2\.50 \(cache reads \$0\.50 vs \$0\.25 per MTok\)\./);
-    // The advice matches what the amounts compare and the routing rule for this
-    // case: a subagent on the session model, never work pulled into the session.
-    assert.match(out, /The cheaper option measured here is dispatching with model=<session model>; a tier lower than the one that ran is an option only where the agent's pin allows it\./);
-    assert.doesNotMatch(out, /keeping the work in the session/);
+    assert.match(out, /Routed down but priced higher than the same tokens on the session model: model-routing:implementer on opus-5 from fable-5-1 \$5\.00 vs \$2\.50 \(cache reads \$0\.50 vs \$0\.25 per MTok\)\./);
+    assert.match(out, /model-routing:implementer: the model= on these dispatches cost more than model=<session model> would have/);
+    assert.doesNotMatch(out, /evidence for revisiting that pin/);
     assert.doesNotMatch(out, /test-runner on/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a pin at the tier that ran is named as evidence, and bare volume stays with the bare line", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-fable-5-1"}\n');
+  // reviewer runs its own opus pin: $5.00 against $2.50 on fable-5.1.
+  writeFileSync(join(dir, "agent-a.jsonl"), costLine("claude-opus-5", { cacheRead: 10e6 }) + "\n");
+  metaFor(dir, "a", "model-routing:reviewer");
+  // A bare Explore capped at opus: same amounts, but inheritance, not a choice.
+  writeFileSync(join(dir, "agent-b.jsonl"), costLine("claude-opus-5", { cacheRead: 10e6 }) + "\n");
+  metaFor(dir, "b", "Explore");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /Routed down but priced higher than the same tokens on the session model: model-routing:reviewer on opus-5 from fable-5-1 \$5\.00 vs \$2\.50/);
+    assert.match(out, /model-routing:reviewer: the agent's own pin is the tier that ran, so this is evidence for revisiting that pin, not a reason to dispatch below it\./);
+    assert.doesNotMatch(out, /model=<session model> would have/);
+    assert.doesNotMatch(out, /Explore on opus-5/);
+    assert.match(out, /Inherited the session model bare: 10\.0M \(50% of the volume seen here\) - Explore 10\.0M/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
