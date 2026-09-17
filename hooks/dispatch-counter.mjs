@@ -126,8 +126,18 @@ const pinnedModel = (agent) => AGENT_PINS[agent]?.model ?? FOREIGN_AGENT_PINS[ag
 // measures anything, so it may as well trust the best guess it has.
 const ownPinnedModel = (agent) => AGENT_PINS[agent]?.model ?? null;
 const pinnedEffort = (agent) => AGENT_PINS[agent]?.effort ?? null;
-// Unpinned agent types that are inherently cheap dispatch targets.
-const CHEAP_AGENTS = new Set(["Explore"]);
+// Built-in Explore has inherited the session model since Claude Code 2.1.198,
+// capped at opus on the Claude API; before that it always ran haiku, which is
+// why it used to be exempted here as inherently cheap. The cap survives FORCE
+// with no env model. On other providers the cap does not apply, so a Fable
+// session's Explore there runs Fable and this reads it one tier low - the log
+// records no provider to tell them apart.
+const exploreModel = (session) => session && (tierOf(session) ?? 0) > tierOf("opus") ? "opus" : session ?? null;
+// Built-in Explore and Plan carry a model in their own definitions, so a plain
+// CLAUDE_CODE_SUBAGENT_MODEL does not move either, per the subagent docs.
+const BUILTIN_AGENTS = new Set(["Explore", "Plan"]);
+const builtinModel = (e) => e.agent === "Explore" ? exploreModel(e.session) : e.session ?? null;
+const envDecides = (e) => Boolean(e.env) && !BUILTIN_AGENTS.has(e.agent);
 
 function configDir() {
   return process.env.CLAUDE_CONFIG_DIR?.trim()
@@ -382,8 +392,8 @@ function lastModelIn(file, bytes) {
 // the docs rank the pin first. Accepted - the tables cannot see foreign
 // frontmatter at all, and this is the rarer of the two ways to be wrong.
 const effectiveModel = (e) => e.envForce
-  ? (e.env ?? e.session ?? null)
-  : (e.model ?? pinnedModel(e.agent) ?? e.env ?? null);
+  ? (e.env ?? (e.agent === "Explore" ? exploreModel(e.session) : e.session) ?? null)
+  : (e.model ?? pinnedModel(e.agent) ?? (BUILTIN_AGENTS.has(e.agent) ? builtinModel(e) : e.env) ?? null);
 
 // A pinned agent has a FLOOR as well as a ceiling. The pin states how much
 // reasoning the role needs - reviewer on opus because a missed bug costs more
@@ -418,7 +428,7 @@ function belowPin(e, pinLookup = pinnedModel) {
 }
 
 // The documented fallback for entries the tier comparison cannot judge: cheap =
-// a known cheap agent, or sonnet tier or below. Ranked via tierOf so dashed full
+// sonnet tier or below. Ranked via tierOf so dashed full
 // ids ("claude-sonnet-5...") classify the same as short names.
 //
 // It used to open with a tier comparison of its own, which was dead code: its
@@ -426,7 +436,7 @@ function belowPin(e, pinLookup = pinnedModel) {
 // branch could never be entered. Two copies of the same rule, one unreachable,
 // is how the two drift apart unnoticed.
 function isCheapByHeuristic(e) {
-  return CHEAP_AGENTS.has(e.agent) || (tierOf(effectiveModel(e)) ?? 99) <= 2;
+  return (tierOf(effectiveModel(e)) ?? 99) <= 2;
 }
 
 if (process.argv[2] === "stats" || process.argv[2] === "report") {
@@ -500,7 +510,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     const key = e.envForce ? `${e.agent} (forced=${e.env ?? "session"})`
       : e.model ? `${e.agent} (model=${e.model}${under ? `, pin=${pinnedModel(e.agent)}` : ""})`
       : pinnedModel(e.agent) ? `${e.agent} (pin=${pinnedModel(e.agent)})`
-      : e.env ? `${e.agent} (env=${e.env})`
+      : envDecides(e) ? `${e.agent} (env=${e.env})`
       : e.agent;
     const s = byAgent.get(key) ?? { n: 0, down: 0, up: 0, unknown: 0, underPin: 0 };
     s.n++;
@@ -537,8 +547,8 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   // from another plugin is still invisible, so this section counts dispatches
   // that COULD have inherited and says so; the measured answer is in `tokens`,
   // which reads the model each subagent actually ran on. Bundled agents are
-  // frontmatter-pinned and never leak; Explore is inherently cheap.
-  const BUNDLED = new Set([...Object.keys(AGENT_PINS), ...Object.keys(FOREIGN_AGENT_PINS), ...CHEAP_AGENTS]);
+  // frontmatter-pinned and never leak.
+  const BUNDLED = new Set([...Object.keys(AGENT_PINS), ...Object.keys(FOREIGN_AGENT_PINS)]);
   const unpinned = entries.filter((e) => !BUNDLED.has(e.agent));
   // The question "did this inherit a STRONG session model" is only answerable
   // where the session model is both recorded and rankable. An entry without one
@@ -554,12 +564,13 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   // CLAUDE_CODE_SUBAGENT_MODEL_FORCE with no env model the dispatch DOES run
   // the session model, but that is the machine-wide setting doing exactly what
   // it says, so it is excluded here too: the remedy is one variable, not one
-  // dispatch.
-  const leaks = capable.filter((e) => !e.env && !e.envForce && !e.model && tierOf(e.session) > 2);
+  // dispatch. The plain env var does not move the built-in agents, so a bare
+  // Explore or Plan under it still inherited.
+  const leaks = capable.filter((e) => !envDecides(e) && !e.envForce && !e.model && tierOf(e.session) > 2);
   const leakLines = [];
   if (capable.length) {
     const rate = leaks.length / capable.length;
-    leakLines.push("", `Tier leaks: ${leaks.length} of ${capable.length} dispatches on agent types with no MODEL pin this plugin knows (${Math.round(rate * 100)}%, Explore excepted as inherently cheap) went out bare on a strong session - each inherited that session model unless its own frontmatter pinned one.`);
+    leakLines.push("", `Tier leaks: ${leaks.length} of ${capable.length} dispatches on agent types with no MODEL pin this plugin knows (${Math.round(rate * 100)}%) went out bare on a strong session - each inherited that session model (Explore capped at opus) unless its own frontmatter pinned one.`);
   }
   if (unrankable) {
     leakLines.push(
@@ -1027,7 +1038,10 @@ if (process.argv[2] === "tokens") {
         // wrong, this is the only thing left that would still catch the agent
         // genuinely inheriting the session model - ownPinnedModel keeps that
         // possible no matter what the curated table claims.
-        else if (!ownPinnedModel(typed.agentType) && typed.model == null && model === sessionModel && tsess > 2) pa.bareVol += vol;
+        // A bare Explore under a session above opus ran opus by the cap, which
+        // is still inheritance rather than a routing choice.
+        else if (!ownPinnedModel(typed.agentType) && typed.model == null && tsess > 2
+          && (model === sessionModel || (typed.agentType === "Explore" && tierOf(model) === tierOf(exploreModel(sessionModel))))) pa.bareVol += vol;
       }
     }
   };
