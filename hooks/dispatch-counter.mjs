@@ -156,12 +156,15 @@ function dataFile() {
 // in the precedence Claude Code itself applies:
 //   1. CLAUDE_CODE_EFFORT_LEVEL - overrides settings for the session, and is the
 //      only place `max` is accepted. `auto` means "use the model default".
-//   2. the settings cascade, local > project > user. Settings accept only
-//      low/medium/high/xhigh; `max` and `ultracode` are session-only there and
-//      are rejected in a settings file.
-//   3. the model default, which is what an unset key actually means - `high`
-//      wherever effort is supported, `xhigh` on Opus 4.7. Recording it beats
-//      omitting the most common configuration of all.
+//   2. the settings cascade, local > project > user. In each file a level saved
+//      for the model under `modelSettings` outranks the top-level `effortLevel`,
+//      and the first file holding either decides. A user-file top-level
+//      `effortLevel` does not apply to Opus 5.5 or later models. Settings accept
+//      only low/medium/high/xhigh; `max` and `ultracode` are session-only there
+//      and are rejected in a settings file.
+//   3. the model default, which is what an unset key actually means - see
+//      defaultEffortFor. Recording it beats omitting the most common
+//      configuration of all.
 // A `/effort` change or a `--effort` flag inside a running session is invisible
 // to all three, and an agent may carry its own effort pin this script cannot
 // see; the report states both limits rather than implying precision it lacks.
@@ -193,26 +196,34 @@ const EFFORT_SUPPORT = [
 const EFFORT_LADDER = ["low", "medium", "high", "xhigh", "max"];
 const effortLevelsFor = (m) => (m ? EFFORT_SUPPORT.find(([re]) => re.test(m))?.[1] ?? null : null);
 
-// "The API default is high" - on every model that supports effort, with no
-// exception. Opus 4.7 and 4.8 RECOMMEND starting at xhigh for coding and
-// agentic work, and this table used to record that recommendation as if it were
-// the default, which mislabelled every unset 4.7 session as xhigh when it ran
-// high. A recommendation is what you should pass; a default is what runs when
-// you pass nothing, and only the second one can be inferred from an empty
-// config. No support, no default - an unlisted or unrecognized session model
-// never receives a fabricated level.
+// Claude Code's own model default (Model configuration, "Adjust effort level"):
+// "`high` on every model that supports effort, except that Opus 5.5 defaults to
+// `medium`, Opus 4.7 defaults to `xhigh`". This is Claude Code's default, not
+// the API's - the API runs Opus 4.7 at high - and a session's effort is what
+// Claude Code sends. No support, no default - an unlisted or unrecognized
+// session model never receives a fabricated level.
 function defaultEffortFor(sessionModel) {
-  return effortLevelsFor(sessionModel) ? "high" : null;
+  if (!effortLevelsFor(sessionModel)) return null;
+  if (/opus-5-5/.test(sessionModel)) return "medium";
+  if (/opus-4-7/.test(sessionModel)) return "xhigh";
+  return "high";
 }
+
+// Models that ignore a top-level `effortLevel` in the USER settings file ("Opus
+// 5.5 and models released after it"); project, local and managed files still
+// apply it to every model. Extend when a later model ships.
+const IGNORES_USER_EFFORT_LEVEL = /opus-5-5/;
+
+// `modelSettings` keys are canonical names ("claude-opus-5-5") that also match
+// the model's `[1m]` and date-suffixed ids.
+const canonicalModel = (m) => m.replace(/\[1m\]$/, "").replace(/-\d{8}$/, "");
 
 // "If you set a level the active model does not support, Claude Code falls back
 // to the highest supported level at or below the one you set. For example,
 // xhigh runs as high on Opus 4.6." So a configured level is not necessarily the
 // level that applies, and the clamp closes the gap this hook CAN see. Others it
-// cannot: an organization effort cap, and the model-default hold that Fable 5,
-// Opus 4.8 and Opus 4.7 apply on first run "even if you previously set a
-// different level", overriding a persisted setting until an explicit choice is
-// made. The report names both rather than claiming more than it knows.
+// cannot: an organization effort cap, and a per-model `maxEffortLevel` cap. The
+// report names both rather than claiming more than it knows.
 // No session model means the
 // clamp cannot be computed, so nothing is recorded: a configured `high` on a
 // session whose transcript could not be read might have been a Haiku 4.5
@@ -245,21 +256,29 @@ function sessionEffort(cwd, sessionModel) {
     // level the session did NOT run on.
     return ENV_EFFORTS.has(env) ? asRan(env, "env") : null;
   }
+  const userFile = join(configDir(), "settings.json");
+  const canonical = sessionModel ? canonicalModel(sessionModel) : null;
   for (const f of [
     join(cwd, ".claude", "settings.local.json"),
     join(cwd, ".claude", "settings.json"),
-    join(configDir(), "settings.json"),
+    userFile,
   ]) {
     let parsed;
     // An unreadable or malformed file is ignored wholesale by the harness too,
     // so deferring to the next rung matches what actually happens.
     try { parsed = JSON.parse(readFileSync(f, "utf-8")); } catch { continue; }
-    if (!parsed || typeof parsed !== "object" || !Object.hasOwn(parsed, "effortLevel")) continue;
+    if (!parsed || typeof parsed !== "object") continue;
+    const saved = canonical && parsed.modelSettings && typeof parsed.modelSettings === "object"
+      ? Object.entries(parsed.modelSettings).find(([k, v]) => canonicalModel(k) === canonical && v && Object.hasOwn(v, "effortLevel"))?.[1]
+      : undefined;
+    const topApplies = Object.hasOwn(parsed, "effortLevel")
+      && !(f === userFile && sessionModel && IGNORES_USER_EFFORT_LEVEL.test(sessionModel));
+    if (!saved && !topApplies) continue;
     // A file that DEFINES the key ends the walk whether or not the value is
     // usable. Falling through on a bad value would log the next rung's level,
     // which is not the level this session ran on - a wrong data point is worse
     // than a missing one.
-    const v = parsed.effortLevel;
+    const v = saved ? saved.effortLevel : parsed.effortLevel;
     return typeof v === "string" && SETTINGS_EFFORTS.has(v) ? asRan(v, "settings") : null;
   }
   return fromDefault();
@@ -292,7 +311,7 @@ const shortModel = (m) => m ? m.replace(/^claude-/, "").replace(/-\d{8}$/, "") :
 // (Opus 4.1 bills at three times Opus 4.5) and a loose pattern would quietly
 // misprice a retired model. A model absent from this table is reported as
 // unpriced volume, never as zero.
-const PRICES_ASOF = "2026-09-09";
+const PRICES_ASOF = "2026-09-23";
 const PRICES = [
   // Retired families first: a looser pattern below must not claim them.
   [/opus-4-1-|opus-4-20/, () => [15, 75]],
@@ -302,6 +321,8 @@ const PRICES = [
   // 5.1 cache reads at 0.025x base input, ahead of the looser 5.x row below.
   [/fable-5-1|mythos-5-1/, () => [10, 50, 0.025]],
   [/fable-5|mythos-5/, () => [10, 50]],
+  // Opus 5.5 cache reads at 0.05x ($0.20/MTok), ahead of the looser opus-5 row.
+  [/opus-5-5/, () => [4, 20, 0.05]],
   [/opus-5|opus-4-8|opus-4-7|opus-4-6|opus-4-5/, () => [5, 25]],
   // Permanent $2/$10: the scheduled increase to $3/$15 on 2026-09-01 was
   // called off.
@@ -312,7 +333,8 @@ const PRICES = [
 // Prompt-caching multipliers, quoted from the same page: a 5-minute cache write
 // costs 1.25x base input, a 1-hour write 2x. Cache reads are 0.1x base input
 // for every model except where the page states otherwise (Fable 5.1 and
-// Mythos 5.1 read at 0.025x - the row's third element overrides CACHE_READ).
+// Mythos 5.1 read at 0.025x, Opus 5.5 at 0.05x - the row's third element
+// overrides CACHE_READ).
 const CACHE_WRITE_5M = 1.25, CACHE_WRITE_1H = 2, CACHE_READ = 0.1;
 
 // Billable input volume: everything the model read, however it was cached.
@@ -604,7 +626,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
       `Effort: ${inherited.length} of ${withEffort.length} dispatches ran on an agent type carrying no EFFORT pin this plugin knows about, and so inherited the session level${byLevel ? ` (${byLevel})` : ""}. Only the bundled agents pin effort here - a foreign agent with a known model pin still counts as inheriting effort.`,
       `  The bundled agents pin theirs in frontmatter, so routing a mechanical errand through a role agent buys a cheaper effort as well as a cheaper tier. An agent from anywhere else may pin its own effort, which is invisible here and counted as inherited.`,
       ...(inferred ? [`  ${inferred} of these levels are the documented model default rather than an observed setting.`] : []),
-      `  Source order is CLAUDE_CODE_EFFORT_LEVEL, then settings effortLevel, then the model default. Four states can override that and none are visible here: a /effort or --effort choice inside a running session, ultracode, an organization effort cap, and the model-default hold Fable 5 / Opus 4.8 / Opus 4.7 apply on first run over a previously set level.`,
+      `  Source order is CLAUDE_CODE_EFFORT_LEVEL, then the level saved for the model in modelSettings or a settings effortLevel, then the model default (medium on Opus 5.5, xhigh on Opus 4.7, high elsewhere). Four states can override that and none are visible here: a /effort or --effort choice inside a running session, ultracode, an organization effort cap, and a per-model maxEffortLevel cap.`,
     );
   }
   // Grouped sections instead of per-row v/- markers: the reader should not
@@ -1236,7 +1258,7 @@ if (process.argv[2] === "tokens") {
         "This is a counterfactual, not a bill: on a subscription you pay none of it, and the difference is the same upper bound the volume chart is - it assumes every subagent would otherwise have inherited the session model, which pinned agents from other plugins would not.",
         "The difference is conservative for a documented reason. Models from Opus 4.7, Sonnet 5 and Fable 5 onward use a tokenizer producing about 30% more tokens for the same text than Sonnet 4.6 and earlier, so re-pricing a cheap model's token count at an expensive model's rate understates the inherited side, and with it the difference. It does not touch what actually ran.",
       ] : []),
-      "Two more modifiers understate every figure here. Cache writes whose transcript line names no TTL are charged at the cheapest write rate. And nothing in a usage line reveals whether fast mode (which doubles Opus 5 and Opus 4.8 rates) or US-only inference (1.1x on everything from 4.6) was in effect, so neither is applied.",
+      "Two more modifiers understate every figure here. Cache writes whose transcript line names no TTL are charged at the cheapest write rate. And nothing in a usage line reveals whether fast mode (which doubles Opus 5.5, Opus 5 and Opus 4.8 rates) or US-only inference (1.1x on everything from 4.6) was in effect, so neither is applied.",
       "Rates are first-party Claude API list prices - Bedrock and Google Cloud bill separately and are not modelled. They are transcribed from the Anthropic pricing page on the date above and will drift; a window straddling a price change is priced wholly at the rates in effect at its end. Re-check PRICES in dispatch-counter.mjs before quoting a figure.",
     ] : []),
     "",

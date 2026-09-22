@@ -30,7 +30,7 @@ Read this before installing, because the honest answer has two halves and
 
 **A subagent is not free.** It starts with an empty context, so everything it
 reads is a cache *write*, while your main session pays cache *read* - 12.5x
-cheaper, 50x on Fable 5.1 and Mythos 5.1 - for what it already has. Delegation converts cheap re-reads into
+cheaper, 25x on Opus 5.5, 50x on Fable 5.1 and Mythos 5.1 - for what it already has. Delegation converts cheap re-reads into
 expensive first-reads, and that bill lands whether or not this plugin is
 installed.
 
@@ -87,7 +87,7 @@ reason written down in `evals/forced-dispatch-tier/NOTES.md`.)
 | `agents/surveyor.md` | haiku | low | Read-only breadth: enumerate, list, trace a chain end to end. Measured correct on the cheap tier where `scout`'s judgement work is not. |
 | `agents/test-runner.md` | haiku | low | Run tests/builds/linters, report failures compactly. Never fixes anything. |
 | `agents/e2e-runner.md` | sonnet | medium | Drive Playwright/E2E scenarios, interpret failures (product bug vs test bug vs flake). |
-| `agents/implementer.md` | sonnet | medium | Implement one well-defined task from an approved plan. Verifies its own work. Dispatch with `model=opus` for multi-file/architectural/subtle work (`model=<session model>` on a Fable 5.1 or Mythos 5.1 session). |
+| `agents/implementer.md` | sonnet | medium | Implement one well-defined task from an approved plan. Verifies its own work. Dispatch with `model=opus` for multi-file/architectural/subtle work. |
 | `agents/reviewer.md` | opus | high | Review a diff for correctness bugs, ranked by severity. |
 | `agents/verifier.md` | haiku | low | Cheap gate on a subagent's diff: does it match the task (scope, completeness, obvious breakage)? Not a code review. |
 | `skills/model-routing/` | - | - | The routing table and delegation rules Claude follows when deciding where work goes. |
@@ -165,7 +165,7 @@ The honest reading: the automatic half is fully attributable, the behavioural ha
 
 For the behavioural half there is now a control group, just a much smaller one: [`evals/`](evals/README.md) runs the same question with and without the plugin loaded. The behavioural claim holds - on a codebase question the plugin arm delegated to `scout` in 3 of 3 runs and the plugin-free arm in 0 of 3, grepping inline despite having `Explore` available.
 
-The money is a more interesting answer than "it saves". On a wide-reading question across a four-turn session, the expensive tier drops either way - opus spend down 14%, its input volume down about 25% - but the shipped configuration ends up **23% more expensive in total than not having the plugin at all**, because a fresh subagent pays cache *write* for everything it reads while a main session pays cache *read*, 12.5x cheaper (50x on Fable 5.1 and Mythos 5.1), for what it already has. So what this plugin reliably buys is room in the expensive model's context, not a smaller bill; where the bill also falls is a narrower claim, and it depends on the tier.
+The money is a more interesting answer than "it saves". On a wide-reading question across a four-turn session, the expensive tier drops either way - opus spend down 14%, its input volume down about 25% - but the shipped configuration ends up **23% more expensive in total than not having the plugin at all**, because a fresh subagent pays cache *write* for everything it reads while a main session pays cache *read*, 12.5x cheaper (25x on Opus 5.5, 50x on Fable 5.1 and Mythos 5.1), for what it already has. So what this plugin reliably buys is room in the expensive model's context, not a smaller bill; where the bill also falls is a narrower claim, and it depends on the tier.
 
 Running that same question with `scout` pinned to haiku lands about a tenth *below* the no-plugin baseline - which looked like the fix until the tier was asked something subtler. On a question whose code contains a confident-looking wrong answer, haiku took the bait once in three runs and sonnet in none. Three runs cannot pin a failure rate, and the pin did not stay on sonnet because of the rate: it stayed because the failure is asymmetric, since a wrong answer sends the main session back to read the files itself and costs more than the cheaper tier saves. What the two results together support is a split rather than a pin change - breadth to `surveyor` (haiku), judgement to `scout` (sonnet). [`evals/README.md`](evals/README.md) carries the numbers, the arithmetic, and the three isolation attempts that produced numbers worth throwing away.
 
@@ -247,9 +247,10 @@ For local development: clone the repo and
 1. Pick your session model with `/model` (opus, fable, whatever your
    plan offers). The plugin never changes it - the main session is where
    planning and decisions happen, so give it the strongest tier you are
-   willing to pay for. Session effort: left unset, you get the model's own
-   default - high on every model that has the knob, and some models have no
-   effort knob at all (see [the effort ladder](#model-tiers-and-effort-ladder));
+   willing to pay for. Session effort: left unset, you get Claude Code's
+   per-model default - medium on Opus 5.5, xhigh on Opus 4.7, high on every
+   other model that has the knob, and some models have no effort knob at all
+   (see [the effort ladder](#model-tiers-and-effort-ladder));
    dropping the session to medium is the cost-conscious pick when the main
    session mostly coordinates - the bundled agents pin their own either way.
 2. Work normally. Mechanical work routes down automatically:
@@ -305,7 +306,7 @@ let Claude route via the skill:
   a compact pass/fail report instead of a wall of logs.
 - "Implement tasks 1-3 from the plan" - Claude dispatches `implementer`
   (sonnet) with self-contained task descriptions; multi-file or subtle
-  work goes out with `model=opus` (`model=<session model>` on a Fable 5.1 or Mythos 5.1 session).
+  work goes out with `model=opus`.
 - "Review the diff" - Claude dispatches `reviewer` (opus). For high-risk
   diffs, ask for review in the main session instead - one expensive pass
   is cheaper than a missed bug.
@@ -330,9 +331,9 @@ earns its cost (the knobs themselves:
 | Situation | Model | Effort | Why this model | Why this effort |
 | --------- | ----- | ------ | -------------- | --------------- |
 | Exploration (`scout`) | sonnet | low | Finding and tracing code is retrieval, not reasoning - a cheap tier reports as well as a costly one, and the file volume stays in the subagent regardless. | The work is mechanical lookup; extra thinking buys nothing. |
-| Ordinary implementation (`implementer`) | sonnet | medium | Sonnet is near-opus quality on single-file, clear-shape coding at a fraction of the price (permanently priced at $2/$10, ~2.5x cheaper than opus) - for work whose approach the plan already decided, the margin never changes the outcome. | The plan already decided the approach; the agent executes real logic, not design. |
-| Complex implementation (`implementer` `model=opus`) | opus | medium (pinned) | Multi-file or cross-layer changes, security/money/migrations/concurrency/public contracts, or a retry after a weak sonnet result - a wrong approach is expensive, and Opus 5 stepped the tier up at UNCHANGED price, so escalate when in doubt - on a Fable 5.1 or Mythos 5.1 session with `model=<session model>` instead, where opus reads cache at twice the session's rate and measured more expensive for implementer work. (Ambiguous tasks are not an escalation case: implementer stops on ambiguity by contract - clarify first.) | The `model=opus` dispatch changes the model only - the Agent tool has no effort param, so the pinned medium stays; the escalation buys the tier, not extra thinking. |
-| Code review (`reviewer`) | opus | high | Review is an asymmetric bet - one pass guards against a bug that costs far more if it ships, so it is the one place to prefer the top tier by default. | High: subtle correctness bugs hide from shallow reading. Anthropic reports Opus 5 review holds at lower effort - medium is a future eval candidate; the pin stays high until measured. |
+| Ordinary implementation (`implementer`) | sonnet | medium | Sonnet is near-opus quality on single-file, clear-shape coding at a fraction of the price (permanently priced at $2/$10, 2x cheaper than Opus 5.5 at $4/$20) - for work whose approach the plan already decided, the margin never changes the outcome. | The plan already decided the approach; the agent executes real logic, not design. |
+| Complex implementation (`implementer` `model=opus`) | opus | medium (pinned) | Multi-file or cross-layer changes, security/money/migrations/concurrency/public contracts, or a retry after a weak sonnet result - a wrong approach is expensive, and Opus 5.5 is stronger again at 20% less than Opus 5 ($4/$20, cache reads 60% less), so escalate when in doubt. This holds on every session model, Fable included: Opus 5.5 is cheaper than Fable 5.1 on every token type. (Ambiguous tasks are not an escalation case: implementer stops on ambiguity by contract - clarify first.) | The `model=opus` dispatch changes the model only - the Agent tool has no effort param, so the pinned medium stays; the escalation buys the tier, not extra thinking. |
+| Code review (`reviewer`) | opus | high | Review is an asymmetric bet - one pass guards against a bug that costs far more if it ships, so it is the one place to prefer the top tier by default. | High: subtle correctness bugs hide from shallow reading. The case for `medium` grew with Opus 5.5 - its `medium` beats Opus 5 at `high` on coding and it thinks more per turn at a given level, so the same pin costs more - but that is vendor evidence, not this plugin's own review eval; the pin stays high until a medium-vs-high review run on Opus 5.5 is measured. |
 | Tests / builds (`test-runner`) | haiku | low | Running a command and summarizing output is mechanical; the value is keeping raw logs out of the main context, not the model doing it. | Low: no reasoning, just report. |
 | Diff sanity gate (`verifier`) | haiku | low | Checking a diff matches its task (scope, completeness, obvious breakage) is a cheap spot-check, not a quality judgment. | Low: pattern-matching against the task, not deep analysis. |
 | E2E / failure interpretation (`e2e-runner`) | sonnet | medium | Driving a browser and telling a product bug from a flake needs some judgment, but not top-tier reasoning. | Medium: real interpretation, clear method. |
@@ -383,24 +384,32 @@ exact numbers live on
 
 | Family | Cost vs opus | Role in this plugin |
 | ------ | ------------ | ------------------- |
-| fable | ~2x | Frontier reasoning. A main-session choice for all-hard-reasoning days (architecture, subtle debugging hunts). The one routing use: the implementer's escalation on a Fable 5.1 or Mythos 5.1 session, where it is the session model. |
-| opus | 1x | The escalation tier: code review, multi-file/cross-layer implementation, security/money/concurrency-sensitive changes. Opus 5 made this tier a step stronger at the same price. |
-| sonnet | ~0.4x (permanent $2/$10) | The workhorse: ordinary implementation from an approved plan, exploration, E2E driving. Near-opus on clear-shape coding. |
-| haiku | ~0.2x | Mechanical grind: test/build runs, diff sanity checks, trivial sweeps. |
+| fable | 2.5x | Frontier reasoning. A main-session choice for all-hard-reasoning days (architecture, subtle debugging hunts) - not a dispatch target. |
+| opus | 1x | The escalation tier: code review, multi-file/cross-layer implementation, security/money/concurrency-sensitive changes. Opus 5 made this tier a step stronger at the same price; Opus 5.5 stronger again at a lower one ($4/$20). |
+| sonnet | 0.5x (permanent $2/$10) | The workhorse: ordinary implementation from an approved plan, exploration, E2E driving. Near-opus on clear-shape coding. |
+| haiku | 0.25x | Mechanical grind: test/build runs, diff sanity checks, trivial sweeps. |
 
-Generation notes (as of the Opus 5 launch, July 2026 - these rot
-fastest, re-verify against Anthropic's model overview): per Anthropic's
-launch figures Opus 5 lands near the fable-class tier on coding at half
-its price, which is what lowered the escalation bar in 0.9.0; Sonnet 5 at medium is
+Generation notes (as of the Opus 5.5 launch, September 2026 - these rot
+fastest, re-verify against Anthropic's model overview): Opus 5.5 is
+cheaper than Opus 5 ($4/$20 vs $5/$25), defaults to `medium` effort in
+Claude Code rather than `high`, and per Anthropic is stronger at that
+lower default than Opus 5 was at `high` - which is what lowered the
+escalation bar further. Notes still true from the Opus 5 launch: per
+Anthropic's launch figures Opus 5 lands near the fable-class tier on
+coding at half its price, which is what lowered the escalation bar in
+0.9.0; Sonnet 5 at medium is
 comparable to Sonnet 4.6 at high (per Anthropic's effort guidance),
 which is why the medium pins survived the generation jump unchanged;
 the fable-class tier is built for long-horizon frontier work - a
 session-model choice, not a dispatch target.
 
-The effort ladder - the second knob. Unset effort means `high` on every
-model that supports effort, with no exception: Opus 4.7 and 4.8 recommend
-starting at `xhigh` for coding and agentic work, but a recommendation is
-a value you pass, not the level that runs when you pass nothing. Support
+The effort ladder - the second knob. Unset effort means Claude Code's
+per-model default: `high` on every model that supports effort, except
+`medium` on Opus 5.5 and `xhigh` on Opus 4.7 - a recommendation is
+a value you pass, and on Opus 4.7 that recommendation IS what runs when
+you pass nothing; Opus 4.8 still defaults to `high`. Levels are saved
+per model under `modelSettings`, and a top-level `effortLevel` in the
+user settings file no longer reaches Opus 5.5. Support
 itself is an explicit list rather than a
 version cutoff: Fable 5, Mythos 5, Opus 5, Sonnet 5, Opus 4.8 and Opus 4.7
 take the whole ladder, Opus 4.6 and Sonnet 4.6 take everything but `xhigh`, and a
@@ -412,15 +421,18 @@ per-generation ([effort
 reference](https://platform.claude.com/docs/en/build-with-claude/effort)):
 Opus 4.7 and 4.8 start coding and agentic work at `xhigh`, while Opus 5
 starts at `high`, steps up to `xhigh` for demanding coding and agentic
-work, and treats `low` and `medium` as the primary cost control. The
+work, and treats `low` and `medium` as the primary cost control. Opus 5.5
+moves the scale again: Anthropic reports its `medium` above Opus 5 at
+`high` on coding and knowledge work, and at any given level it thinks
+more per turn than Opus 5 did. The
 pins below are this plugin's cost-first reading of that: start low,
 step up on evidence.
 
 | Effort | What it buys | Where the plugin uses it |
 | ------ | ------------ | ------------------------ |
 | low | Most efficient: significant token savings with some capability reduction. On the Opus 5 generation low/medium punch well above their weight. | Pins: `scout`, `test-runner`, `verifier`. |
-| medium | Balanced: real logic whose approach is already decided, at moderate savings. | Pins: `implementer`, `e2e-runner`. Recommended session setting. |
-| high | Full capability - the product default. Complex reasoning, subtle debugging, high-risk review. | Pin: `reviewer`. Main-session planning and final review. |
+| medium | Balanced: real logic whose approach is already decided, at moderate savings. On Opus 5.5 this is the model's own default, not a step down from it. | Pins: `implementer`, `e2e-runner`. Recommended session setting. |
+| high | Full capability - Claude Code's per-model default except on Opus 5.5 (medium) and Opus 4.7 (xhigh). Complex reasoning, subtle debugging, high-risk review. | Pin: `reviewer`. Main-session planning and final review. |
 | xhigh | Extended capability for long-horizon agentic/coding runs (multi-hour, token budgets in the millions). | Session-level or Workflow `effort` opt only - never an agent pin. |
 | max | Unconstrained token spend for frontier-grade problems; Anthropic notes diminishing returns and overthinking risk on routine work. | Not used by any pin - reach for it deliberately or not at all. |
 
@@ -440,7 +452,8 @@ coordination, and final review. That makes the balanced default:
   where the whole session sits in the seat that tier is worth. Drop to a
   **Sonnet** session for pure-implementation days with no hard decisions.
 - **Effort: medium** as the everyday session setting - a deliberate step
-  DOWN from Claude's product default of high. Use **high** for sessions
+  DOWN from Claude Code's per-model default of high (Opus 5.5 excepted:
+  there medium already IS the default). Use **high** for sessions
   built around architecture or subtle debugging. Session effort mainly
   governs main-session work - the bundled agents pin their own - so raise
   it when the thinking you keep in the main seat is genuinely hard, not
@@ -451,9 +464,12 @@ the main session*, not for the average task - the average task gets routed
 down anyway.
 
 Generation jumps are free: agent pins name model FAMILIES (opus, sonnet,
-haiku), so when a new family member ships (Opus 4.8 -> Opus 5 at the same
-price), reviewer and every `model=opus` escalation upgrade automatically -
-no plugin update, no config change. `/model-routing:stats` shows which
+haiku), so when a new family member ships (Opus 5 -> Opus 5.5 in Claude
+Code 2.1.280), reviewer and every `model=opus` escalation upgrade
+automatically - no plugin update, no config change. Prices and every
+rule derived from them do not follow the alias, though: the stats price
+table and the cost-driven exceptions above need a check on each launch.
+`/model-routing:stats` shows which
 models actually ran. One behavioral note for Opus 5 sessions: the model
 delegates to subagents more readily than its predecessors, which makes
 the conscious-tier rule (explicit `model=` on unpinned dispatches) more
@@ -579,9 +595,9 @@ If the cheap tier really was right for that work, the fix is to pick an agent wh
 
 `report` also prints how many dispatches ran on an agent type carrying no effort pin, and therefore inherited whatever the session was set to. That is the failure a tier-only report scores as a win: a mechanical errand sent to `general-purpose` with `model=sonnet` still thinks as hard as your session does, while `scout` would have run the same errand at `low`.
 
-Effort is reconstructed rather than observed, because transcripts do not record it. The sources are read in the order Claude Code applies them: `CLAUDE_CODE_EFFORT_LEVEL` first (the only place `max` is accepted), then `effortLevel` from the settings cascade (local, then project, then user - these accept `low`/`medium`/`high`/`xhigh` only), then the documented model default described in [the effort ladder](#model-tiers-and-effort-ladder). Levels that came from that last rung are counted separately in the report, so an inferred default never reads as a setting somebody chose, and a level the session model does not support is recorded as the one Claude Code falls back to instead. Two cases contribute nothing to the line rather than a guess: a session on a model the docs give no effort support, and a session whose model could not be read at all, since the same configured level means different things on different models.
+Effort is reconstructed rather than observed, because transcripts do not record it. The sources are read in the order Claude Code applies them: `CLAUDE_CODE_EFFORT_LEVEL` first (the only place `max` is accepted), then the level saved for the model in `modelSettings` or, failing that, an `effortLevel` from the settings cascade (local, then project, then user - these accept `low`/`medium`/`high`/`xhigh` only), then the documented model default described in [the effort ladder](#model-tiers-and-effort-ladder). Levels that came from that last rung are counted separately in the report, so an inferred default never reads as a setting somebody chose, and a level the session model does not support is recorded as the one Claude Code falls back to instead. Two cases contribute nothing to the line rather than a guess: a session on a model the docs give no effort support, and a session whose model could not be read at all, since the same configured level means different things on different models.
 
-The line states its limits rather than hiding them, and there are more than the sources suggest. Four documented states override the reconstruction and none of them are visible to a hook: a `/effort` or `--effort` choice made inside a running session, ultracode (which sends `xhigh`), an organization effort cap, and the model-default hold that Fable 5, Opus 4.8 and Opus 4.7 apply on first run over a level you previously set. Only the pins of the bundled agents are known here too - an agent from another plugin may pin its own effort and will still be counted as inheriting. Read the figure as what the visible sources resolve to, not as a measurement.
+The line states its limits rather than hiding them, and there are more than the sources suggest. Four documented states override the reconstruction and none of them are visible to a hook: a `/effort` or `--effort` choice made inside a running session, ultracode (which sends `xhigh`), an organization effort cap, and a per-model `maxEffortLevel` cap. Only the pins of the bundled agents are known here too - an agent from another plugin may pin its own effort and will still be counted as inheriting. Read the figure as what the visible sources resolve to, not as a measurement.
 
 ### The by-agent section
 
@@ -596,7 +612,7 @@ By agent - which role processed the volume:
   Inherited the session model bare: 1.8M (0% of the volume seen here) - Explore 1.7M, claude 86k, general-purpose 73k.
 ```
 
-The two callout lines above are the same two problems the dispatch report flags, now with a size beside them. A third line, printed only when it applies, names agent and model pairs that ran below the session tier yet priced above the same tokens on the session model - in practice opus-class work under a Fable 5.1 session, where cache reads cost twice the session rate. Both verdicts are re-derived from the model each transcript ACTUALLY ran on, which is the one thing this side of the report has and the dispatch log does not: an override the harness declined and a fallback mid-run both reach the usage lines, while the log can only ever record what was asked for.
+The two callout lines above are the same two problems the dispatch report flags, now with a size beside them. A third line, printed only when it applies, names agent and model pairs that ran below the session tier yet priced above the same tokens on the session model - this was opus-class work dispatched from a Fable 5.1 session on Opus 5, where cache reads cost twice the session rate; on Opus 5.5 that no longer happens, since it reads cache cheaper than Fable 5.1 does. Both verdicts are re-derived from the model each transcript ACTUALLY ran on, which is the one thing this side of the report has and the dispatch log does not: an override the harness declined and a fallback mid-run both reach the usage lines, while the log can only ever record what was asked for.
 
 Neither report is the authority on everything, and it is worth knowing which half each one owns. **What model ran, and how much it processed** - only the transcripts know that; the log records a request. **What was asked for** - only the log knows that; it records the request. Both sides now stamp the session at dispatch time: the log writes the model it is on when the dispatch fires, and this side matches the agent's sidecar `toolUseId` back to the assistant line that dispatched it and takes that line's model, falling back to the model in effect at the agent's launch and then to the transcript head only when no such line can be found. So a below-pin verdict here is measured on the agent's side and read from the dispatching line on the session's, and a mid-session `/model` switch moves both reports together. Read a disagreement as each report describing the half it can see.
 
@@ -636,9 +652,9 @@ At API list prices (rates as of 2026-09-09), this is what the volume above would
 
 Read it as a counterfactual, which is exactly what it is: on a subscription you pay none of this, and the difference carries the same assumption as the volume figures above - that every subagent would otherwise have inherited the session model, which agents pinned by other plugins would not.
 
-The arithmetic is per token type rather than per token, because they are priced an order of magnitude apart: base input at the model rate, cache reads at 0.1x (0.025x on Fable 5.1 and Mythos 5.1), five-minute cache writes at 1.25x, one-hour writes at 2x, and output at its own rate. Cache reads dominate real transcripts, so a flat volume multiply would overstate the bill several times over. Transcripts break cache writes down by TTL; a line carrying only a total is charged at the cheaper five-minute rate.
+The arithmetic is per token type rather than per token, because they are priced an order of magnitude apart: base input at the model rate, cache reads at 0.05x on Opus 5.5, 0.025x on Fable 5.1 and Mythos 5.1, 0.1x elsewhere, five-minute cache writes at 1.25x, one-hour writes at 2x, and output at its own rate. Cache reads dominate real transcripts, so a flat volume multiply would overstate the bill several times over. Transcripts break cache writes down by TTL; a line carrying only a total is charged at the cheaper five-minute rate.
 
-Several documented modifiers push these figures DOWNWARD, so treat them as conservative rather than optimistic. Models from Opus 4.7, Sonnet 5 and Fable 5 onward use a tokenizer producing roughly 30% more tokens for the same text than Sonnet 4.6 and earlier, so re-pricing a cheap model's token count at an expensive model's rate understates what that work would really have cost there. Nothing in a usage line reveals whether fast mode (double rates on Opus 5 and Opus 4.8) or US-only inference (1.1x from 4.6 onward) applied, so neither is added. And a model absent from the price table is excluded from every figure and declared on its own line, never counted as free - a window where nothing can be priced prints that declaration instead of figures, because silence would read as "this cost nothing".
+Several documented modifiers push these figures DOWNWARD, so treat them as conservative rather than optimistic. Models from Opus 4.7, Sonnet 5 and Fable 5 onward use a tokenizer producing roughly 30% more tokens for the same text than Sonnet 4.6 and earlier, so re-pricing a cheap model's token count at an expensive model's rate understates what that work would really have cost there. Nothing in a usage line reveals whether fast mode (double rates on Opus 5.5, Opus 5 and Opus 4.8) or US-only inference (1.1x from 4.6 onward) applied, so neither is added. And a model absent from the price table is excluded from every figure and declared on its own line, never counted as free - a window where nothing can be priced prints that declaration instead of figures, because silence would read as "this cost nothing".
 
 The rates are first-party Claude API list prices; Bedrock and Google Cloud bill separately and are not modelled.
 
