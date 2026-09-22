@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.4](https://github.com/AqueGen/model-routing/compare/v0.16.3...v0.16.4) (2026-09-22)
+
+
+### Bug Fixes
+
+* update pricing and routing for Opus 5.5 ([#50](https://github.com/AqueGen/model-routing/issues/50)) ([f074b54](https://github.com/AqueGen/model-routing/commit/f074b54ff0da64ff4f1c6db2f225bf420bd8637e))
+
 ## [0.16.3](https://github.com/AqueGen/model-routing/compare/v0.16.2...v0.16.3) (2026-09-17)
 
 
