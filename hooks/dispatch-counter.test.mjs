@@ -992,14 +992,47 @@ test("an unset effortLevel records the documented model default", () => {
   const opus5 = dispatchWithSettings({ sessionModel: "claude-opus-5" });
   assert.equal(opus5.effort, "high");
   assert.equal(opus5.effortFrom, "default");
-  // Opus 4.7 is NOT an exception, however much its guidance reads like one.
-  // The docs recommend starting it at xhigh for coding and agentic work and
-  // state in the same breath that "the API default is high". Recording the
-  // recommendation here labelled every unset 4.7 session with a level it never
-  // ran, which is the one thing this reconstruction must not do.
+  // Claude Code's defaults, not the API's: Opus 5.5 medium, Opus 4.7 xhigh.
+  const opus55 = dispatchWithSettings({ sessionModel: "claude-opus-5-5" });
+  assert.equal(opus55.effort, "medium");
+  assert.equal(opus55.effortFrom, "default");
   const opus47 = dispatchWithSettings({ sessionModel: "claude-opus-4-7" });
-  assert.equal(opus47.effort, "high");
+  assert.equal(opus47.effort, "xhigh");
   assert.equal(opus47.effortFrom, "default");
+  const auto55 = dispatchWithSettings({ sessionModel: "claude-opus-5-5", env: { CLAUDE_CODE_EFFORT_LEVEL: "auto" } });
+  assert.equal(auto55.effort, "medium");
+});
+
+test("a user-file top-level effortLevel does not reach Opus 5.5, a project one does", () => {
+  const user = dispatchWithSettings({ sessionModel: "claude-opus-5-5", settings: { user: { effortLevel: "high" } } });
+  assert.equal(user.effort, "medium");
+  assert.equal(user.effortFrom, "default");
+  const project = dispatchWithSettings({ sessionModel: "claude-opus-5-5", settings: { project: { effortLevel: "low" } } });
+  assert.equal(project.effort, "low");
+  assert.equal(project.effortFrom, "settings");
+  const opus5 = dispatchWithSettings({ sessionModel: "claude-opus-5", settings: { user: { effortLevel: "low" } } });
+  assert.equal(opus5.effort, "low");
+});
+
+test("a level saved for the model in modelSettings outranks effortLevel in the same file", () => {
+  const e = dispatchWithSettings({
+    sessionModel: "claude-opus-5-5",
+    settings: { user: { effortLevel: "low", modelSettings: { "claude-opus-5-5": { effortLevel: "xhigh" } } } },
+  });
+  assert.equal(e.effort, "xhigh");
+  assert.equal(e.effortFrom, "settings");
+  // Another model's entry is not this session's level.
+  const other = dispatchWithSettings({
+    sessionModel: "claude-opus-5",
+    settings: { user: { effortLevel: "low", modelSettings: { "claude-opus-5-5": { effortLevel: "xhigh" } } } },
+  });
+  assert.equal(other.effort, "low");
+  // Across files the higher-precedence file decides, whichever key it holds.
+  const cross = dispatchWithSettings({
+    sessionModel: "claude-opus-5-5",
+    settings: { user: { modelSettings: { "claude-opus-5-5": { effortLevel: "xhigh" } } }, project: { effortLevel: "low" } },
+  });
+  assert.equal(cross.effort, "low");
 });
 
 test("no default is invented for a model absent from the support table", () => {
@@ -1079,7 +1112,7 @@ test("report separates inherited effort from pinned, and flags inferred levels",
     // must be the inherited subset - 1 here, not the 3 in the whole population.
     assert.match(out, /1 of these levels are the documented model default rather than an observed setting/);
     // The source order and the invisible-change limit are stated, not implied.
-    assert.match(out, /CLAUDE_CODE_EFFORT_LEVEL, then settings effortLevel, then the model default/);
+    assert.match(out, /CLAUDE_CODE_EFFORT_LEVEL, then the level saved for the model in modelSettings or a settings effortLevel, then the model default \(medium on Opus 5\.5/);
     assert.match(out, /an agent from anywhere else may pin its own effort/i);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
@@ -1183,6 +1216,20 @@ test("fable-5.1 cache reads price at 0.025x, sonnet-5 stays at $2/$10", () => {
   try {
     const out = run(["tokens"], cfg);
     assert.match(out, /as it ran\s+\$2\.25/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("opus-5.5 prices at $4/$20 with cache reads at 0.05x, not the opus-5 row", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), usageLine("claude-fable-5-1", 1) + "\n");
+  // 1M input $4 + 1M cache read $0.20 + 1M 5m write $5 + 1M 1h write $8 + 1M output $20 = $37.20
+  writeFileSync(join(dir, "agent-a.jsonl"),
+    costLine("claude-opus-5-5", { input: 1e6, cacheRead: 1e6, cw5: 1e6, cw1h: 1e6, out: 1e6 }) + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /as it ran\s+\$37\.20/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
@@ -1549,6 +1596,20 @@ test("a routed-down agent priced above its session model is named with both amou
     assert.match(out, /model-routing:implementer: the model= on these dispatches cost more than model=<session model> would have/);
     assert.doesNotMatch(out, /evidence for revisiting that pin/);
     assert.doesNotMatch(out, /test-runner on/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("opus-5.5 under a fable-5.1 session is cheaper even on cache reads, so it is not named", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-fable-5-1"}\n');
+  // 10M cache reads: opus-5.5 at 0.05x of $4 = $2.00, fable-5.1 at 0.025x of $10 = $2.50.
+  writeFileSync(join(dir, "agent-a.jsonl"), costLine("claude-opus-5-5", { cacheRead: 10e6 }) + "\n");
+  metaFor(dir, "a", "model-routing:implementer", "opus");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.doesNotMatch(out, /Routed down but priced higher/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
