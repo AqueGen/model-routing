@@ -53,5 +53,6 @@ Report format (your final message):
 1. What was changed: file list with a one-line purpose each.
 2. Verification: commands run and their results (pass/fail + counts).
 3. Deviations: anything you did differently from the task and why.
-4. Open items: anything the task asked for that you could not complete, or
+4. Open items: anything the task asked for that you could not complete,
+   each with what blocks it or "not started" when nothing does, or
    an escalation block if you stopped to ask for a decision.

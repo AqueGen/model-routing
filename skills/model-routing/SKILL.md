@@ -237,7 +237,8 @@ actually earns its cost:
   strong model at low effort beats a weak model at high effort for a
   fraction of the cost. On the Opus 5 generation this is amplified:
   low/medium punch well above their weight - when a dispatch feels too
-  expensive, step the EFFORT down before the tier; when a result is too
+  expensive, step the EFFORT down before the tier - on a Workflow stage,
+  or by choosing an agent pinned lower; when a result is too
   shallow, step effort up before tier up - on a Workflow stage, where the `effort` opt exists; a plain dispatch has only the tier.
 - **The fable-to-opus price gap is exactly the sticker.** The documented
   ~30% token inflation is measured against models from BEFORE Opus 4.7,
@@ -352,8 +353,8 @@ with `/model-routing:stats`.
   task description is where it starts, the agent's Open items line is
   where it comes back - and when a turn ends with items left and no
   blocker named, send one short message naming them (SendMessage where
-  the harness offers it, otherwise a fresh dispatch carrying the open
-  items). An escalation block is always a blocker named; an Open items
+  the harness offers it, otherwise a fresh dispatch carrying both what is
+  already done and what is left, so the new agent does not redo it). An escalation block is always a blocker named; an Open items
   entry counts as one only where it says what prevents progress, since
   "implement B, test C" is unfinished work rather than a blocker. Such a
   return is a continuation, not a weak result - continue it at the same

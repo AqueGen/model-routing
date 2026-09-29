@@ -435,7 +435,7 @@ step up on evidence.
 
 | Effort | What it buys | Where the plugin uses it |
 | ------ | ------------ | ------------------------ |
-| low | Most efficient: significant token savings with some capability reduction. On the Opus 5 generation low/medium punch well above their weight. | Pins: `scout`, `surveyor`, `test-runner`, `verifier`. |
+| low | Most efficient: significant token savings with some capability reduction. On the Opus 5 generation low/medium punch well above their weight. | Pins: `scout`, `surveyor`, `test-runner`, `verifier` (haiku has no effort knob, so those three pins only document intent). |
 | medium | Balanced: real logic whose approach is already decided, at moderate savings. On Opus 5.5 and Sonnet 5.5 this is the model's own default, so a pin at medium steps down only from a session running high or above. | Pins: `implementer`, `e2e-runner`. Recommended session setting. |
 | high | Full capability - Claude Code's per-model default except on Opus 5.5 and Sonnet 5.5 (medium) and Opus 4.7 (xhigh). Complex reasoning, subtle debugging, high-risk review. | Pin: `reviewer`. Main-session planning and final review. |
 | xhigh | Extended capability for long-horizon agentic/coding runs (multi-hour, token budgets in the millions). | Session-level or Workflow `effort` opt only - never an agent pin. |
