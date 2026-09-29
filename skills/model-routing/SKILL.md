@@ -88,11 +88,14 @@ example use case for `low` is subagents.
   Sonnet 5.5's levels are recalibrated against Sonnet 5 - the same name
   buys a different amount of thinking than it did, and Anthropic does not
   say in which direction, so re-sweep rather than carry a level over.
-  Note also what this costs the plugin: on a sonnet-pinned agent `medium`
-  IS Claude Code's default for Sonnet 5.5, so `implementer` and
-  `e2e-runner` no longer save anything through effort - their saving is
-  the tier alone, and only `scout`, `surveyor`, `test-runner` and
-  `verifier` still sit below their model's default.
+  Note what an effort pin is measured against: the level the dispatch
+  would otherwise INHERIT from the session, not the pinned model's own
+  default. So `implementer` at `medium` still steps down from a session
+  running `high` or above - a Fable 5.1 session at its default, say - and
+  buys nothing on a session already at `medium`, which is now the Claude
+  Code default for both Opus 5.5 and Sonnet 5.5 sessions. The three haiku
+  agents are a separate case: Haiku 4.5 has no effort knob at all, so
+  their `low` pins document intent and cost nothing either way.
 - **high** - genuinely hard reasoning: architecture, subtle debugging,
   high-risk final review, anything where a wrong approach is expensive
   to unwind.
@@ -122,9 +125,12 @@ call; any other Agent dispatch inherits the session effort. The Agent
 tool has NO effort param, so dispatching a pinned agent with `model=opus`
 changes the model, not the effort - the frontmatter pin still applies.
 Vary effort across workloads, not inside one conversation: changing the
-effort value between requests invalidates the cached prompt prefix, so
-per-agent pins and per-`agent()` opts - each with its own context - are
-the cache-safe way to differ.
+top-level effort value between requests invalidates the cached prompt
+prefix, so per-agent pins and per-`agent()` opts - each with its own
+context - are the cache-safe way to differ. (The API has a per-message
+effort change in beta that keeps the cache, on Fable 5.1, Opus 5.5 and
+Sonnet 5.5; Claude Code's `/effort` is not it, so inside a session the
+rule above still holds.)
 
 ## Routing table
 
@@ -196,12 +202,15 @@ actually earns its cost:
   introduced. What routing down still buys is half price on everything
   else: $2 against $4 for the first read of a file, $2.50 against $5 to
   cache it, $10 against $20 for output. Count the dollars, not the
-  tokens: cache reads are most of the VOLUME in any agentic loop and
-  still a small part of its BILL, so the tier keeps saving 30-45% on
-  measured profiles - this plugin's own scout eval (74k written, 451k
-  re-read, 6k out) comes to $0.335 on sonnet against $0.58 on opus. The
-  saving only flattens when re-reads reach tens of MTok against a small
-  write-and-output share. The parity is also specific to that pair: a
+  tokens: cache reads are most of the VOLUME in any agentic loop and a
+  minority of its BILL while writes and output carry the rest. The one
+  profile measured here, the scout eval (74k written, 451k re-read, 6k
+  out), comes to $0.335 on sonnet against $0.58 on opus - 42% off. The
+  arithmetic around it: 50% with no re-reads at all, about 30% once
+  re-reads pass roughly 20x the written-plus-output tokens, and 5% at
+  1k written and 1k out against 1M re-read, where there is almost
+  nothing left for the halved rates to halve. It is the share of the
+  bill that decides, not a token count. The parity is also specific to that pair: a
   Fable 5.1 session reads at $0.25 and an Opus 5 one at $0.50, so against
   those the cheaper tier still wins on every token type.
 - **Review -> opus/high.** Review is one cheap pass guarding against
@@ -252,10 +261,11 @@ actually earns its cost:
   phase left at the default pays top-tier rates for depth it did not
   need. It does not replace the tier decision - dispatching that phase
   to sonnet is cheaper still. Sweep Workflow `effort` opts the same way.
-- **A refusal is a redirect, not a weak result.** Every current tier ships
-  safety classifiers that can decline a request outright rather than
-  answer it badly - Sonnet 5.5 included, which makes it the most common
-  dispatch this can happen to. A declined dispatch is the one failure the
+- **A refusal is a redirect, not a weak result.** Fable 5.1, Fable 5,
+  Opus 5.5, Opus 5 and Sonnet 5.5 ship safety classifiers that can
+  decline a request outright rather than answer it badly - Sonnet 5.5
+  included, which makes it the most common dispatch this can happen to,
+  while Haiku 4.5 and Sonnet 5 carry no documented categories. A declined dispatch is the one failure the
   escalation ladder below does not fix, and a step up no longer reliably
   clears it: Opus 5.5 runs cybersecurity and biology classifiers like
   Fable 5.1's, and both it and Sonnet 5.5 add a `reasoning_extraction`
@@ -479,6 +489,29 @@ what changes cost there.
   replaces the 25-agent threshold, and ultracode sessions suppress the
   warning entirely. The runtime caps a run at 16 concurrent agents and
   1000 agents total.
+- **Time is a third knob, next to tier and effort.** Opus 5.5 pays close
+  attention to elapsed time, and Anthropic's guidance for a lead agent
+  delegating to subagents is to feed it one: either a budget line at the
+  end of each message (`elapsed 340s / 1200s`) or, where no sensible
+  budget exists, the sentence "Time matters here: do not spend time that
+  can be avoided, and the earlier a correct result is obtained, the
+  better." In their evaluations of small agent teams both signals made
+  teams finish sooner than a single agent, with a budget keeping answer
+  quality comparable. It is not a cheaper effort level in disguise:
+  lowering effort cuts the work itself, while a budget mostly keeps more
+  agents running in parallel. Two caveats before reaching for it - the
+  budget is advisory, so keep your own timeout if you need a hard stop,
+  and under time pressure the model searches and verifies a little less,
+  which is exactly what `verifier` exists to catch.
+- **A text-only end of turn is a report, not a finished task.** On long
+  multi-part work these models end a turn with a progress update rather
+  than a tool call, and a loop that reads that as completion stops there.
+  Keep the parts in a checklist the agent updates, send one short message
+  naming what is still open when a turn ends with items left and no
+  blocker stated, and stop after two or three such continuations so a
+  genuinely stuck run ends and gets looked at. If something the agent
+  started is still running - a background command, a nested agent - wait
+  for it and feed the output back before calling the task done.
 - **Permissions.** Workflow subagents always run in `acceptEdits` and
   inherit the allowlist regardless of the session's permission mode -
   file edits are auto-approved. A broad allowlist therefore applies to
