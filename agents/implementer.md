@@ -30,7 +30,9 @@ Rules:
   to ask when you cannot go on without the caller or before a risky step.
   A batched task is done when every part of it is done, not when the first
   part is. The two cases below override this: in a batch, finish the parts
-  that are not blocked and list the blocked one under Open items.
+  that are not blocked and list the blocked one under Open items, unless
+  the blocker changes how the other parts should be done - then stop and
+  hand back the whole batch.
 
 When to escalate instead of grinding:
 

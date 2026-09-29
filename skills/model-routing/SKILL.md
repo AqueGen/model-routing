@@ -68,10 +68,10 @@ also the newest level and absent on some models that support `max`
 and re-sweep effort on your own evals after a model change instead of
 carrying old settings across generations. This plugin tunes for cost: pins sit at the lowest level
 the task shape allows and step up on evidence (a weak result retries
-one step up). That deliberate step below the product default, wherever
-the task allows one, is where the effort savings come from - measured
-against the level the dispatch would otherwise inherit from the session,
-which is what a pin actually replaces.
+one step up). That deliberate step down, wherever the task allows one,
+is where the effort savings come from - measured against the level the
+dispatch would otherwise inherit from the session, which is what a pin
+actually replaces.
 
 Effort is not only thinking depth - it shapes every token in the
 response, tool calls included. At lower effort the model folds
@@ -115,7 +115,11 @@ example use case for `low` is subagents.
   where this is rare. And on a session running `xhigh` or `max`, review
   what the plan, the user or these rules asked for - `reviewer` on a
   finished diff, `verifier` on batched output - and do not open a second
-  round on top of it because the level invites one.
+  round on top of it because the level invites one. A round is the
+  review, the fixes it asked for, and a check that each finding is fixed;
+  that check belongs to the same round. A fresh review of the whole diff
+  is a second one: open it when the fixes changed more than the findings
+  called for, or when the user asks.
 - **max** - exceptional frontier-grade problems only, not a routine level
   anywhere in this table.
 
@@ -209,10 +213,10 @@ actually earns its cost:
   as that stops being true. For identical token usage it is 50% with no
   cache reads at all; the one profile measured here, the scout eval (74k
   written, 451k re-read, 6k out), costs $0.3352 on sonnet against $0.5802
-  on opus, 42.2% off; holding that write-and-output mix, it is about 30%
-  once cache reads reach 20 times the written-plus-output tokens, and
-  about 5.6% at 1k written and 1k out against 1M re-read, where there is
-  almost nothing left for the halved rates to halve. The share of the
+  on opus, 42.2% off; at that same write-and-output mix it is about 30%
+  once cache reads reach 20 times the written-plus-output tokens; and on
+  a profile of 1k written, 1k out and 1M re-read it is about 5.6%, where
+  there is almost nothing left for the halved rates to halve. The share of the
   bill decides, not an absolute token count. The parity is also specific to that pair: a
   Fable 5.1 session reads at $0.25 and an Opus 5 one at $0.50, so against
   those the cheaper tier still wins on every token type.
@@ -234,7 +238,7 @@ actually earns its cost:
   fraction of the cost. On the Opus 5 generation this is amplified:
   low/medium punch well above their weight - when a dispatch feels too
   expensive, step the EFFORT down before the tier; when a result is too
-  shallow, step effort up before tier up.
+  shallow, step effort up before tier up - on a Workflow stage, where the `effort` opt exists; a plain dispatch has only the tier.
 - **The fable-to-opus price gap is exactly the sticker.** The documented
   ~30% token inflation is measured against models from BEFORE Opus 4.7,
   which is the generation whose tokenizer Fable 5 uses - it is not a gap
@@ -348,12 +352,17 @@ with `/model-routing:stats`.
   task description is where it starts, the agent's Open items line is
   where it comes back - and when a turn ends with items left and no
   blocker named, send one short message naming them (SendMessage where
-  the harness offers it). An Open items entry or an escalation block IS a
-  blocker named. Stop after two or three such continuations, so a run
-  that is genuinely stuck ends and gets looked at rather than looping.
-  And if something the agent started is still running - a background
-  command, a nested agent - wait for it and feed the output back before
-  calling the task done.
+  the harness offers it, otherwise a fresh dispatch carrying the open
+  items). An escalation block is always a blocker named; an Open items
+  entry counts as one only where it says what prevents progress, since
+  "implement B, test C" is unfinished work rather than a blocker. Such a
+  return is a continuation, not a weak result - continue it at the same
+  tier rather than climbing one. Stop after two or three continuations
+  and take it to the main session, the same place a second failure goes,
+  so a run that is genuinely stuck ends instead of looping. And if
+  something the agent started is still running - a background command, a
+  nested agent - wait for it and feed the output back before calling the
+  task done.
 - Subagents cannot see the conversation. Write self-contained task
   descriptions: goal, files, constraints, verification commands.
 - Repo-specific policies override this table (e.g. "unit tests only,
@@ -398,13 +407,13 @@ with `/model-routing:stats`.
   chosen direction) so the new agent starts from the decision, not from
   zero.
 - When the user re-asks the same question or calls the answer shallow,
-  redo it one step up - a higher tier or higher effort - never at the
+  redo it one step up - a higher tier, or higher effort where a Workflow opt can set it - never at the
   same level that just failed.
 - The escalation ladder generalizes: any failed or visibly weak subagent
   RESULT (wrong answer, broken diff, report that dodges the question)
   retries exactly one step up - next tier via the Agent `model` param, or
   the same tier at higher effort when the miss looks like shallow thinking
-  rather than missing capability. One step, not a leap to the top: most
+  rather than missing capability and a Workflow opt is there to raise it. One step, not a leap to the top: most
   failures clear one tier up, and jumping straight to the strongest model
   forfeits the middle tier's price. A second failure at the higher step
   means the task was mis-scoped, not under-powered - stop climbing and

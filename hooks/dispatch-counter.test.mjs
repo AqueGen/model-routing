@@ -1021,6 +1021,9 @@ test("the effort footer names the same per-model defaults the log records", () =
     // The footer explains where a recorded level came from; a model missing
     // from it contradicts the level printed above it.
     assert.match(out, /the model default \(medium on Opus 5\.5 and Sonnet 5\.5, xhigh on Opus 4\.7, high elsewhere\)/);
+    // The sentence above it promises what a pin buys; an unconditional claim
+    // there is wrong for a haiku agent and for a session already at the pin.
+    assert.match(out, /can buy a cheaper model tier and, where that model supports effort and the pinned level is lower than the one it would otherwise inherit, a lower effort too/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
