@@ -42,13 +42,14 @@ which model, and how hard it thinks.
 
 The full ladder is `low / medium / high / xhigh / max`. What runs when
 nothing sets a level is Claude Code's per-model default: `high` on every
-model that supports effort, except `medium` on Opus 5.5 and `xhigh` on
-Opus 4.7. The API's own default can differ (it runs Opus 4.7 at `high`),
-but a session's effort is what Claude Code sends. Levels are saved per
-model under `modelSettings`, and a top-level `effortLevel` in the user
-settings file no longer reaches Opus 5.5 - so a session that ran Opus 5
-at a saved level starts Opus 5.5 at `medium` until a level is chosen for
-it.
+model that supports effort, except `medium` on Opus 5.5 and Sonnet 5.5
+and `xhigh` on Opus 4.7. The API's own default can differ (it runs both
+Opus 4.7 and Sonnet 5.5 at `high`), but a session's effort is what Claude
+Code sends. Levels are saved per model under `modelSettings`, and a
+top-level `effortLevel` in the user settings file no longer reaches Opus
+5.5 or any model released after it, Sonnet 5.5 included - so a session
+that ran Opus 5 or Sonnet 5 at a saved level starts its 5.5 successor at
+`medium` until a level is chosen for that model.
 Which levels exist at all is a per-model list rather than a version
 cutoff, and setting a level the model does not support runs the highest
 supported level at or below it. The per-model recommendation moves with the generation: Opus
@@ -79,16 +80,29 @@ example use case for `low` is subagents.
 - **low** - mechanical or well-scoped work: exploration, renames, running
   tests, reading a diff for a known-shape change.
 - **medium** - normal implementation: real logic, but the approach is
-  already clear. On Sonnet 5 this level is described as comparable to
-  Sonnet 4.6 at `high` - the sonnet/medium pins are not a downgrade to
-  last year's quality.
+  already clear. It is also where Sonnet 5.5 is told to start agentic
+  coding and multistep tool use on well-specified tasks, moving to
+  `high` for harder or longer ones - the same line this plugin draws
+  between `implementer` on an approved plan and work that stays in the
+  session. Its levels are recalibrated against Sonnet 5, so the same
+  name buys a different amount of thinking than it did: re-sweep rather
+  than carry a level over.
 - **high** - genuinely hard reasoning: architecture, subtle debugging,
   high-risk final review, anything where a wrong approach is expensive
   to unwind.
 - **xhigh** - long-horizon agentic or coding work (multi-hour runs, token
   budgets in the millions) that genuinely earns the extra reasoning. In
   this plugin that is a session-level or Workflow `effort` choice, never
-  an agent pin.
+  an agent pin. These two levels also change what a model does after the
+  work is done: at `xhigh` and `max` Sonnet 5.5 starts its own rounds of
+  review and verification and launches reviewer subagents where the
+  harness offers them. Anthropic measured a system-prompt instruction
+  against that - stop and report once the checks pass, no self-started
+  review rounds, no reviewer subagents unless asked - cutting session
+  cost by about a third at `max` with no quality change. Routine work
+  belongs at `high` or below, where this is rare and where the plugin's
+  own `verifier` and `reviewer` steps are not racing a second review the
+  session started on its own.
 - **max** - exceptional frontier-grade problems only, not a routine level
   anywhere in this table.
 
@@ -141,14 +155,15 @@ actually earns its cost:
   path is retrieval, not reasoning. A cheap model at low effort reads and
   reports as well as an expensive one; the cost is in the file volume,
   which stays in the subagent regardless of tier.
-- **Ordinary implementation -> sonnet/medium.** Sonnet is near-opus
-  quality on single-file, clear-shape coding at a fraction of the price
-  (sonnet is permanently priced at $2/$10, 2x cheaper than Opus 5.5 at
-  $4/$20). For
-  work whose approach the plan already decided, that margin does not
-  change the outcome, so
-  sonnet stays the value default. Medium effort because the agent
-  executes, it does not design.
+- **Ordinary implementation -> sonnet/medium.** Sonnet 5.5 is sold as
+  the best combination of speed and intelligence, and Anthropic still
+  points at an Opus model for the hardest long-horizon work - which is
+  the split this table has always drawn. It stays permanently priced at
+  $2/$10 against Opus 5.5's $4/$20, so for work whose approach the plan
+  already decided, the margin does not change the outcome and sonnet
+  stays the value default. Medium effort because the agent executes, it
+  does not design - and medium is where Sonnet 5.5's own guidance starts
+  well-specified agentic coding.
 - **Complex implementation -> opus, still at the agent's pinned medium**
   (the dispatch changes the model only - see the effort section).
   Escalate from sonnet when
@@ -165,6 +180,18 @@ actually earns its cost:
   this table was tuned - when in doubt between sonnet and opus for
   implementation, take opus. That holds on every session model, Fable
   included - see the cache-read bullet below.
+- **The tier gap closed on cache reads and stayed open everywhere else.**
+  Opus 5.5 reads cache at $0.20/MTok and so does Sonnet 5.5 (0.05x of $4
+  against the standard 0.1x of $2), so the tokens a subagent re-reads
+  turn by turn cost the same on either model. What routing down still
+  buys is half price on everything else: $2 against $4 for the first
+  read of a file, $2.50 against $5 to cache it, $10 against $20 for
+  output. Read it as a change of shape, not of direction - a dispatch
+  that reads a lot once and writes a lot still halves on sonnet, while a
+  long agentic loop that mostly re-reads its own accumulated context
+  saves little from the tier alone. There the other knobs do the work:
+  a lower effort, a smaller batch, or keeping it in the session whose
+  cache already holds the context.
 - **Review -> opus/high.** Review is one cheap pass guarding against
   expensive misses - an asymmetric bet where the strongest reasoning at
   high effort is worth it, because a bug that ships costs far more than
@@ -233,11 +260,13 @@ than benchmarks alone would suggest.
 
 Model names in agent pins are FAMILY aliases (opus, sonnet, haiku), not
 versions - the harness resolves them to the current model of each family,
-so a generation jump (Opus 5 -> Opus 5.5 in Claude Code 2.1.280) upgrades
-reviewer and every `model=opus` escalation automatically. Prices and
-every rule derived from them do not follow the alias: the stats price
-table and the cost-driven exceptions above need a check on every launch.
-Verify what actually ran with `/model-routing:stats`.
+so a generation jump (Opus 5 -> Opus 5.5, then Sonnet 5 -> Sonnet 5.5 on
+2026-09-28) upgrades `reviewer`, every sonnet-pinned agent and every
+`model=opus` escalation automatically, with no plugin change. Prices,
+effort defaults and every rule derived from them do NOT follow the alias:
+the stats price table, the per-model effort defaults and the cost-driven
+exceptions above need a check on every launch. Verify what actually ran
+with `/model-routing:stats`.
 
 ## Rules
 
@@ -383,7 +412,14 @@ Verify what actually ran with `/model-routing:stats`.
   in the session combined. See **Workflows** below for the full set.
 - If an entire session is one phase (pure implementation), suggest the
   user switch /model instead of delegating everything - a session on the
-  right model beats a swarm of subagents.
+  right model beats a swarm of subagents. Suggest it between phases
+  rather than mid-task: a thinking block is bound to the model that
+  wrote it, and the families no longer read each other's - Sonnet 5.5
+  reads Sonnet 5, Opus 4.8 and Haiku 4.5 blocks but not Opus 5, Opus 5.5
+  or any Fable one, and nothing reads Sonnet 5.5's. The API drops what
+  the new model cannot read, unbilled and without an error, so the turns
+  after a switch run without the reasoning that led to them. A dispatch
+  does not have this problem: a subagent starts empty either way.
 
 ## Workflows
 
@@ -440,9 +476,9 @@ already consented to, so the savings come from making each node cheap.
 
 - `fallbackModel` in settings.json: `["opus", "sonnet"]` - the harness
   falls back down the tier ladder when the primary model is unavailable
-  or its quota is exhausted. Match the context variant to the session model: a `["opus", ...]` chain falls back to the 200K-window alias, which cannot hold a session already past 200K - on an `opus[1m]` session the fallback wants `opus[1m]` too.
+  or its quota is exhausted. Match the context variant to the session model: a `["opus", ...]` chain falls back to the 200K-window alias, which cannot hold a session already past 200K - on an `opus[1m]` session the fallback wants `opus[1m]` too. A fallback also crosses a model boundary, so the thinking blocks the previous model wrote are dropped for the turns that run on the fallback (see the /model rule above); the requests succeed, and the reasoning does not carry over.
 - `/advisor`, the `advisorModel` setting, or `--advisor`: a server-side tool that consults a stronger model at decision points - before committing to an approach, on a recurring error, before declaring a task done. Claude chooses when to call it, and the advisor receives the FULL conversation, so unlike a subagent it needs no state packaging and has no fresh-context blind spot. This is the advisor strategy above, productized. What to know before enabling it:
-  - The advisor must be at least as capable as the main model. An Opus 5 or Opus 5.5 session accepts Fable or Opus 5 and later (the API refuses Opus 4.7/4.8, Sonnet is rejected); an Opus 4.7/4.8 session accepts Fable or Opus 4.7+; a Sonnet 5 session accepts Fable, Opus 4.7+ or Sonnet 5; a Fable 5.1 session accepts only Fable 5.1.
+  - The advisor must be at least as capable as the main model, and the accepted list is per model rather than per tier. An Opus 5 or Opus 5.5 session accepts Fable or Opus 5 and later (the API refuses Opus 4.7/4.8, Sonnet is rejected); an Opus 4.7/4.8 session accepts Fable or Opus 4.7+; a Sonnet 5.5 session accepts Fable, Mythos, Opus 5, Opus 5.5 or Sonnet 5.5 itself, and rejects the Opus 4.7/4.8 and Sonnet 5 advisors a Sonnet 5 session still accepts; a Fable 5.1 session accepts only Fable 5.1. A saved advisor that was valid on Sonnet 5 therefore starts failing on Sonnet 5.5 with a 400 rather than quietly running without one.
   - Fable as advisor needs Fable access and, on plans that bill Fable to usage credits, the one-time consent from `/model fable`. Before that consent a saved `"fable"` sends requests without the advisor.
   - Subagents inherit the configured advisor and re-run the pairing check against their own model. A sonnet `implementer` with an opus advisor is exactly the pairing the advisor strategy measures, applied automatically.
   - Cost scales with conversation length, not task size: each call re-reads the whole transcript at the advisor's rates and is never cached. It does not appear in `/model-routing:stats` - a server tool is not an Agent dispatch - so `/usage` is where it lands.

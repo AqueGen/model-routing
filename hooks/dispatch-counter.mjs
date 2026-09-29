@@ -197,22 +197,23 @@ const EFFORT_LADDER = ["low", "medium", "high", "xhigh", "max"];
 const effortLevelsFor = (m) => (m ? EFFORT_SUPPORT.find(([re]) => re.test(m))?.[1] ?? null : null);
 
 // Claude Code's own model default (Model configuration, "Adjust effort level"):
-// "`high` on every model that supports effort, except that Opus 5.5 defaults to
-// `medium`, Opus 4.7 defaults to `xhigh`". This is Claude Code's default, not
-// the API's - the API runs Opus 4.7 at high - and a session's effort is what
-// Claude Code sends. No support, no default - an unlisted or unrecognized
-// session model never receives a fabricated level.
+// "Opus 5.5 and Sonnet 5.5 default to `medium`", Opus 4.7 to `xhigh`, `high` on
+// every other model that supports effort. This is Claude Code's default, not the
+// API's - the API runs both Opus 4.7 and Sonnet 5.5 at `high` - and a session's
+// effort is what Claude Code sends. No support, no default - an unlisted or
+// unrecognized session model never receives a fabricated level.
 function defaultEffortFor(sessionModel) {
   if (!effortLevelsFor(sessionModel)) return null;
-  if (/opus-5-5/.test(sessionModel)) return "medium";
+  if (/opus-5-5|sonnet-5-5/.test(sessionModel)) return "medium";
   if (/opus-4-7/.test(sessionModel)) return "xhigh";
   return "high";
 }
 
 // Models that ignore a top-level `effortLevel` in the USER settings file ("Opus
 // 5.5 and models released after it"); project, local and managed files still
-// apply it to every model. Extend when a later model ships.
-const IGNORES_USER_EFFORT_LEVEL = /opus-5-5/;
+// apply it to every model. Sonnet 5.5 shipped after Opus 5.5, so that sentence
+// covers it too. Extend when a later model ships.
+const IGNORES_USER_EFFORT_LEVEL = /opus-5-5|sonnet-5-5/;
 
 // `modelSettings` keys are canonical names ("claude-opus-5-5") that also match
 // the model's `[1m]` and date-suffixed ids.
@@ -311,7 +312,7 @@ const shortModel = (m) => m ? m.replace(/^claude-/, "").replace(/-\d{8}$/, "") :
 // (Opus 4.1 bills at three times Opus 4.5) and a loose pattern would quietly
 // misprice a retired model. A model absent from this table is reported as
 // unpriced volume, never as zero.
-const PRICES_ASOF = "2026-09-23";
+const PRICES_ASOF = "2026-09-29";
 const PRICES = [
   // Retired families first: a looser pattern below must not claim them.
   [/opus-4-1-|opus-4-20/, () => [15, 75]],
@@ -325,7 +326,9 @@ const PRICES = [
   [/opus-5-5/, () => [4, 20, 0.05]],
   [/opus-5|opus-4-8|opus-4-7|opus-4-6|opus-4-5/, () => [5, 25]],
   // Permanent $2/$10: the scheduled increase to $3/$15 on 2026-09-01 was
-  // called off.
+  // called off. Sonnet 5.5 rides this row - "the same prices as Claude Sonnet 5,
+  // including prompt caching and batch processing rates" - so its cache reads
+  // stay at the standard 0.1x, $0.20/MTok, the rate Opus 5.5 also charges.
   [/sonnet-5/, () => [2, 10]],
   [/sonnet-4-6|sonnet-4-5|sonnet-4-20/, () => [3, 15]],
   [/haiku-4-5/, () => [1, 5]],
