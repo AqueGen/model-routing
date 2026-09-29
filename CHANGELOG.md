@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.5](https://github.com/AqueGen/model-routing/compare/v0.16.4...v0.16.5) (2026-09-29)
+
+
+### Bug Fixes
+
+* take Sonnet 5.5 into the routing rules, effort defaults and price table ([#52](https://github.com/AqueGen/model-routing/issues/52)) ([fde13c8](https://github.com/AqueGen/model-routing/commit/fde13c810c9226589a3e2128494149e139499276))
+
 ## [0.16.4](https://github.com/AqueGen/model-routing/compare/v0.16.3...v0.16.4) (2026-09-22)
 
 
