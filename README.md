@@ -435,7 +435,7 @@ step up on evidence.
 
 | Effort | What it buys | Where the plugin uses it |
 | ------ | ------------ | ------------------------ |
-| low | Most efficient: significant token savings with some capability reduction. On the Opus 5 generation low/medium punch well above their weight. | Pins: `scout`, `test-runner`, `verifier`. |
+| low | Most efficient: significant token savings with some capability reduction. On the Opus 5 generation low/medium punch well above their weight. | Pins: `scout`, `surveyor`, `test-runner`, `verifier`. |
 | medium | Balanced: real logic whose approach is already decided, at moderate savings. On Opus 5.5 and Sonnet 5.5 this is the model's own default, so a pin at medium steps down only from a session running high or above. | Pins: `implementer`, `e2e-runner`. Recommended session setting. |
 | high | Full capability - Claude Code's per-model default except on Opus 5.5 and Sonnet 5.5 (medium) and Opus 4.7 (xhigh). Complex reasoning, subtle debugging, high-risk review. | Pin: `reviewer`. Main-session planning and final review. |
 | xhigh | Extended capability for long-horizon agentic/coding runs (multi-hour, token budgets in the millions). | Session-level or Workflow `effort` opt only - never an agent pin. |
@@ -500,7 +500,7 @@ good lazy default:
 
 (Opus plans, Sonnet executes - no plugin needed.)
 
-For a stronger model at decision points without running it throughout, the harness has a built-in advisor tool - `/advisor opus`, or `"advisorModel": "opus"` in settings. It runs server-side, sees the whole conversation, and Claude decides when to consult it, which makes it the productized form of the advisor pattern this plugin describes. Two traps worth knowing: the accepted advisors are listed per model rather than per tier (an Opus 5 or 5.5 session takes Fable or Opus 5+, a Sonnet 5.5 session takes Fable, Mythos, Opus 5, Opus 5.5 or Sonnet 5.5 and rejects the Opus 4.7/4.8 and Sonnet 5 advisors a Sonnet 5 session accepts), and Fable as advisor needs Fable access plus the one-time consent from `/model fable` - before that a saved `"fable"` attaches no advisor and raises no error. Advisor calls never show up in `/model-routing:stats`, because a server tool is not an Agent dispatch; they land in `/usage`.
+For a stronger model at decision points without running it throughout, the harness has a built-in advisor tool - `/advisor opus`, or `"advisorModel": "opus"` in settings. It runs server-side, sees the whole conversation, and Claude decides when to consult it, which makes it the productized form of the advisor pattern this plugin describes. Two traps worth knowing: the accepted advisors are listed per model rather than per tier (an Opus 5 or 5.5 session takes Fable or Opus 5+, a Sonnet 5.5 session takes Fable, Mythos, Opus 5, Opus 5.5 or Sonnet 5.5 and rejects the Opus 4.7/4.8 and Sonnet 5 advisors a Sonnet 5 session accepts), and Fable as advisor needs Fable access plus, on plans that bill Fable to usage credits, the one-time consent from `/model fable` - before that a saved `"fable"` attaches no advisor and raises no error. Advisor calls never show up in `/model-routing:stats`, because a server tool is not an Agent dispatch; they land in `/usage`.
 
 ### Dynamic workflows
 

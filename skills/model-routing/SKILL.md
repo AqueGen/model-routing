@@ -69,7 +69,9 @@ and re-sweep effort on your own evals after a model change instead of
 carrying old settings across generations. This plugin tunes for cost: pins sit at the lowest level
 the task shape allows and step up on evidence (a weak result retries
 one step up). That deliberate step below the product default, wherever
-the task allows one, is where the effort savings come from.
+the task allows one, is where the effort savings come from - measured
+against the level the dispatch would otherwise inherit from the session,
+which is what a pin actually replaces.
 
 Effort is not only thinking depth - it shapes every token in the
 response, tool calls included. At lower effort the model folds
@@ -128,9 +130,9 @@ Vary effort across workloads, not inside one conversation: changing the
 top-level effort value between requests invalidates the cached prompt
 prefix, so per-agent pins and per-`agent()` opts - each with its own
 context - are the cache-safe way to differ. (The API has a per-message
-effort change in beta that keeps the cache, on Fable 5.1, Opus 5.5 and
-Sonnet 5.5; Claude Code's `/effort` is not it, so inside a session the
-rule above still holds.)
+effort change in beta that keeps the cache, on Fable 5.1, Mythos 5.1,
+Opus 5, Opus 5.5 and Sonnet 5.5; nothing documents Claude Code's
+`/effort` using it, so inside a session assume the rule above holds.)
 
 ## Routing table
 
@@ -202,15 +204,16 @@ actually earns its cost:
   introduced. What routing down still buys is half price on everything
   else: $2 against $4 for the first read of a file, $2.50 against $5 to
   cache it, $10 against $20 for output. Count the dollars, not the
-  tokens: cache reads are most of the VOLUME in any agentic loop and a
-  minority of its BILL while writes and output carry the rest. The one
-  profile measured here, the scout eval (74k written, 451k re-read, 6k
-  out), comes to $0.335 on sonnet against $0.58 on opus - 42% off. The
-  arithmetic around it: 50% with no re-reads at all, about 30% once
-  re-reads pass roughly 20x the written-plus-output tokens, and 5% at
-  1k written and 1k out against 1M re-read, where there is almost
-  nothing left for the halved rates to halve. It is the share of the
-  bill that decides, not a token count. The parity is also specific to that pair: a
+  tokens: cache reads are most of the VOLUME in an agentic loop while
+  writes and output usually carry most of the BILL, and the saving falls
+  as that stops being true. For identical token usage it is 50% with no
+  cache reads at all; the one profile measured here, the scout eval (74k
+  written, 451k re-read, 6k out), costs $0.3352 on sonnet against $0.5802
+  on opus, 42.2% off; holding that write-and-output mix, it is about 30%
+  once cache reads reach 20 times the written-plus-output tokens, and
+  about 5.6% at 1k written and 1k out against 1M re-read, where there is
+  almost nothing left for the halved rates to halve. The share of the
+  bill decides, not an absolute token count. The parity is also specific to that pair: a
   Fable 5.1 session reads at $0.25 and an Opus 5 one at $0.50, so against
   those the cheaper tier still wins on every token type.
 - **Review -> opus/high.** Review is one cheap pass guarding against
@@ -338,6 +341,19 @@ with `/model-routing:stats`.
   below is not a formality.
 - Batch related plan tasks per subagent. Each subagent re-reads files from
   scratch; one tiny task per agent costs more than it saves.
+- A text-only end of turn does not by itself mean the task is finished. On
+  long multi-part work these models end a turn with a progress update
+  rather than a tool call, and a caller that reads that as completion
+  stops there. Keep the parts in a list the agent reports against - the
+  task description is where it starts, the agent's Open items line is
+  where it comes back - and when a turn ends with items left and no
+  blocker named, send one short message naming them (SendMessage where
+  the harness offers it). An Open items entry or an escalation block IS a
+  blocker named. Stop after two or three such continuations, so a run
+  that is genuinely stuck ends and gets looked at rather than looping.
+  And if something the agent started is still running - a background
+  command, a nested agent - wait for it and feed the output back before
+  calling the task done.
 - Subagents cannot see the conversation. Write self-contained task
   descriptions: goal, files, constraints, verification commands.
 - Repo-specific policies override this table (e.g. "unit tests only,
@@ -499,19 +515,17 @@ what changes cost there.
   teams finish sooner than a single agent, with a budget keeping answer
   quality comparable. It is not a cheaper effort level in disguise:
   lowering effort cuts the work itself, while a budget mostly keeps more
-  agents running in parallel. Two caveats before reaching for it - the
-  budget is advisory, so keep your own timeout if you need a hard stop,
-  and under time pressure the model searches and verifies a little less,
-  which is exactly what `verifier` exists to catch.
-- **A text-only end of turn is a report, not a finished task.** On long
-  multi-part work these models end a turn with a progress update rather
-  than a tool call, and a loop that reads that as completion stops there.
-  Keep the parts in a checklist the agent updates, send one short message
-  naming what is still open when a turn ends with items left and no
-  blocker stated, and stop after two or three such continuations so a
-  genuinely stuck run ends and gets looked at. If something the agent
-  started is still running - a background command, a nested agent - wait
-  for it and feed the output back before calling the task done.
+  agents running in parallel. Three caveats before reaching for it. The
+  clock comes from the harness, not the agent: a Workflow script or a
+  hook has to append the line, and a plain Agent dispatch has nowhere to
+  put one, so there only the sentence is available. The budget is
+  advisory - keep your own timeout if you need a hard stop. And under
+  time pressure the model searches and verifies a little less, so the
+  checks stay where they were: `verifier` on batched implementer diffs,
+  `reviewer` on the code, the main session on a high-risk diff. A budget
+  buys pace, it does not waive any of them. The measurement behind all of
+  this is on Opus 5.5; whether the same signals move a sonnet or haiku
+  stage is untested here.
 - **Permissions.** Workflow subagents always run in `acceptEdits` and
   inherit the allowlist regardless of the session's permission mode -
   file edits are auto-approved. A broad allowlist therefore applies to

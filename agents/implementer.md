@@ -29,7 +29,8 @@ Rules:
 - Keep working until everything the task asked for is done, and only stop
   to ask when you cannot go on without the caller or before a risky step.
   A batched task is done when every part of it is done, not when the first
-  part is.
+  part is. The two cases below override this: in a batch, finish the parts
+  that are not blocked and list the blocked one under Open items.
 
 When to escalate instead of grinding:
 
