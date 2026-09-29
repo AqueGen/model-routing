@@ -26,6 +26,13 @@ Rules:
   the task or repo policy allows. A task is not done until it compiles and
   its tests pass.
 - Do not commit unless the task explicitly says to.
+- Keep working until everything the task asked for is done, and only stop
+  to ask when you cannot go on without the caller or before a risky step.
+  A batched task is done when every part of it is done, not when the first
+  part is. The two cases below override this: in a batch, finish the parts
+  that are not blocked and list the blocked one under Open items, unless
+  the blocker changes how the other parts should be done - then stop and
+  hand back the whole batch.
 
 When to escalate instead of grinding:
 
@@ -46,5 +53,6 @@ Report format (your final message):
 1. What was changed: file list with a one-line purpose each.
 2. Verification: commands run and their results (pass/fail + counts).
 3. Deviations: anything you did differently from the task and why.
-4. Open items: anything the task asked for that you could not complete, or
+4. Open items: anything the task asked for that you could not complete,
+   each with what blocks it or "not started" when nothing does, or
    an escalation block if you stopped to ask for a decision.

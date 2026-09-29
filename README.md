@@ -248,7 +248,7 @@ For local development: clone the repo and
    plan offers). The plugin never changes it - the main session is where
    planning and decisions happen, so give it the strongest tier you are
    willing to pay for. Session effort: left unset, you get Claude Code's
-   per-model default - medium on Opus 5.5, xhigh on Opus 4.7, high on every
+   per-model default - medium on Opus 5.5 and Sonnet 5.5, xhigh on Opus 4.7, high on every
    other model that has the knob, and some models have no effort knob at all
    (see [the effort ladder](#model-tiers-and-effort-ladder));
    dropping the session to medium is the cost-conscious pick when the main
@@ -331,7 +331,7 @@ earns its cost (the knobs themselves:
 | Situation | Model | Effort | Why this model | Why this effort |
 | --------- | ----- | ------ | -------------- | --------------- |
 | Exploration (`scout`) | sonnet | low | Finding and tracing code is retrieval, not reasoning - a cheap tier reports as well as a costly one, and the file volume stays in the subagent regardless. | The work is mechanical lookup; extra thinking buys nothing. |
-| Ordinary implementation (`implementer`) | sonnet | medium | Sonnet is near-opus quality on single-file, clear-shape coding at a fraction of the price (permanently priced at $2/$10, 2x cheaper than Opus 5.5 at $4/$20) - for work whose approach the plan already decided, the margin never changes the outcome. | The plan already decided the approach; the agent executes real logic, not design. |
+| Ordinary implementation (`implementer`) | sonnet | medium | Sonnet 5.5 pairs speed with intelligence at half the opus price ($2/$10 against $4/$20) - for work whose approach the plan already decided, the margin never changes the outcome. | The plan already decided the approach; the agent executes real logic, not design, and medium is where Sonnet 5.5's own guidance starts well-specified agentic coding. |
 | Complex implementation (`implementer` `model=opus`) | opus | medium (pinned) | Multi-file or cross-layer changes, security/money/migrations/concurrency/public contracts, or a retry after a weak sonnet result - a wrong approach is expensive, and Opus 5.5 is stronger again at 20% less than Opus 5 ($4/$20, cache reads 60% less), so escalate when in doubt. This holds on every session model, Fable included: Opus 5.5 is cheaper than Fable 5.1 on every token type. (Ambiguous tasks are not an escalation case: implementer stops on ambiguity by contract - clarify first.) | The `model=opus` dispatch changes the model only - the Agent tool has no effort param, so the pinned medium stays; the escalation buys the tier, not extra thinking. |
 | Code review (`reviewer`) | opus | high | Review is an asymmetric bet - one pass guards against a bug that costs far more if it ships, so it is the one place to prefer the top tier by default. | High: subtle correctness bugs hide from shallow reading. The case for `medium` grew with Opus 5.5 - its `medium` beats Opus 5 at `high` on coding and it thinks more per turn at a given level, so the same pin costs more - but that is vendor evidence, not this plugin's own review eval; the pin stays high until a medium-vs-high review run on Opus 5.5 is measured. |
 | Tests / builds (`test-runner`) | haiku | low | Running a command and summarizing output is mechanical; the value is keeping raw logs out of the main context, not the model doing it. | Low: no reasoning, just report. |
@@ -386,32 +386,37 @@ exact numbers live on
 | ------ | ------------ | ------------------- |
 | fable | 2.5x | Frontier reasoning. A main-session choice for all-hard-reasoning days (architecture, subtle debugging hunts) - not a dispatch target. |
 | opus | 1x | The escalation tier: code review, multi-file/cross-layer implementation, security/money/concurrency-sensitive changes. Opus 5 made this tier a step stronger at the same price; Opus 5.5 stronger again at a lower one ($4/$20). |
-| sonnet | 0.5x (permanent $2/$10) | The workhorse: ordinary implementation from an approved plan, exploration, E2E driving. Near-opus on clear-shape coding. |
+| sonnet | 0.5x (permanent $2/$10) | The workhorse: ordinary implementation from an approved plan, exploration, E2E driving. Sonnet 5.5 is the best speed-intelligence combination on offer; cache reads cost the same as opus ($0.20/MTok), so the tier saves on first reads, cache writes and output - 42% off on the one profile measured here, less as re-reads take over the bill. |
 | haiku | 0.25x | Mechanical grind: test/build runs, diff sanity checks, trivial sweeps. |
 
-Generation notes (as of the Opus 5.5 launch, September 2026 - these rot
-fastest, re-verify against Anthropic's model overview): Opus 5.5 is
-cheaper than Opus 5 ($4/$20 vs $5/$25), defaults to `medium` effort in
-Claude Code rather than `high`, and per Anthropic is stronger at that
-lower default than Opus 5 was at `high` - which is what lowered the
-escalation bar further. Notes still true from the Opus 5 launch: per
-Anthropic's launch figures Opus 5 lands near the fable-class tier on
-coding at half its price, which is what lowered the escalation bar in
-0.9.0; Sonnet 5 at medium is
-comparable to Sonnet 4.6 at high (per Anthropic's effort guidance),
-which is why the medium pins survived the generation jump unchanged;
-the fable-class tier is built for long-horizon frontier work - a
-session-model choice, not a dispatch target.
+Generation notes (as of the Sonnet 5.5 launch, 28 September 2026 - these rot
+fastest, re-verify against Anthropic's model overview): Sonnet 5.5 keeps
+Sonnet 5's prices exactly, including a $0.20/MTok cache read - the rate
+Opus 5.5 also charges, so the two tiers cost the same per re-read token
+and differ only on first reads, cache writes and output - a parity Opus
+5.5 already had with Sonnet 5. It
+defaults to `medium` effort in Claude Code and starts well-specified
+agentic coding there. Opus 5.5 is cheaper than Opus 5 ($4/$20 vs $5/$25),
+defaults to `medium` too, and per Anthropic is stronger at that lower
+default than Opus 5 was at `high` - which is what lowered the escalation
+bar further. Sonnet 5.5 is told to start well-specified agentic coding at
+medium and move to high for harder work, which is why the medium pins
+survived the generation jump unchanged. Notes still true from the Opus 5
+launch: per Anthropic's launch figures Opus 5 lands near the fable-class
+tier on coding at half its price, which is what lowered the escalation
+bar in 0.9.0; the fable-class tier is built for long-horizon frontier
+work - a session-model choice, not a dispatch target.
 
 The effort ladder - the second knob. Unset effort means Claude Code's
 per-model default: `high` on every model that supports effort, except
-`medium` on Opus 5.5 and `xhigh` on Opus 4.7 - a recommendation is
+`medium` on Opus 5.5 and Sonnet 5.5 and `xhigh` on Opus 4.7 - a recommendation is
 a value you pass, and on Opus 4.7 that recommendation IS what runs when
 you pass nothing; Opus 4.8 still defaults to `high`. Levels are saved
 per model under `modelSettings`, and a top-level `effortLevel` in the
-user settings file no longer reaches Opus 5.5. Support
+user settings file no longer reaches Opus 5.5 or anything released after
+it, Sonnet 5.5 included. Support
 itself is an explicit list rather than a
-version cutoff: Fable 5, Mythos 5, Opus 5, Sonnet 5, Opus 4.8 and Opus 4.7
+version cutoff: Fable 5, Mythos 5, Opus 5 and Sonnet 5 with their 5.5 successors, Opus 4.8 and Opus 4.7
 take the whole ladder, Opus 4.6 and Sonnet 4.6 take everything but `xhigh`, and a
 model absent from that list - Haiku 4.5 among them - has no effort knob at
 all. Setting a level a model does not support runs the highest supported
@@ -430,9 +435,9 @@ step up on evidence.
 
 | Effort | What it buys | Where the plugin uses it |
 | ------ | ------------ | ------------------------ |
-| low | Most efficient: significant token savings with some capability reduction. On the Opus 5 generation low/medium punch well above their weight. | Pins: `scout`, `test-runner`, `verifier`. |
-| medium | Balanced: real logic whose approach is already decided, at moderate savings. On Opus 5.5 this is the model's own default, not a step down from it. | Pins: `implementer`, `e2e-runner`. Recommended session setting. |
-| high | Full capability - Claude Code's per-model default except on Opus 5.5 (medium) and Opus 4.7 (xhigh). Complex reasoning, subtle debugging, high-risk review. | Pin: `reviewer`. Main-session planning and final review. |
+| low | Most efficient: significant token savings with some capability reduction. On the Opus 5 generation low/medium punch well above their weight. | Pins: `scout`, `surveyor`, `test-runner`, `verifier` (haiku has no effort knob, so those three pins only document intent). |
+| medium | Balanced: real logic whose approach is already decided, at moderate savings. On Opus 5.5 and Sonnet 5.5 this is the model's own default, so a pin at medium steps down only from a session running high or above. | Pins: `implementer`, `e2e-runner`. Recommended session setting. |
+| high | Full capability - Claude Code's per-model default except on Opus 5.5 and Sonnet 5.5 (medium) and Opus 4.7 (xhigh). Complex reasoning, subtle debugging, high-risk review. | Pin: `reviewer`. Main-session planning and final review. |
 | xhigh | Extended capability for long-horizon agentic/coding runs (multi-hour, token budgets in the millions). | Session-level or Workflow `effort` opt only - never an agent pin. |
 | max | Unconstrained token spend for frontier-grade problems; Anthropic notes diminishing returns and overthinking risk on routine work. | Not used by any pin - reach for it deliberately or not at all. |
 
@@ -452,8 +457,8 @@ coordination, and final review. That makes the balanced default:
   where the whole session sits in the seat that tier is worth. Drop to a
   **Sonnet** session for pure-implementation days with no hard decisions.
 - **Effort: medium** as the everyday session setting - a deliberate step
-  DOWN from Claude Code's per-model default of high (Opus 5.5 excepted:
-  there medium already IS the default). Use **high** for sessions
+  DOWN from Claude Code's per-model default of high (Opus 5.5 and Sonnet
+  5.5 excepted: there medium already IS the default). Use **high** for sessions
   built around architecture or subtle debugging. Session effort mainly
   governs main-session work - the bundled agents pin their own - so raise
   it when the thinking you keep in the main seat is genuinely hard, not
@@ -464,9 +469,11 @@ the main session*, not for the average task - the average task gets routed
 down anyway.
 
 Generation jumps are free: agent pins name model FAMILIES (opus, sonnet,
-haiku), so when a new family member ships (Opus 5 -> Opus 5.5 in Claude
-Code 2.1.280), reviewer and every `model=opus` escalation upgrade
-automatically - no plugin update, no config change. Prices and every
+haiku), so when a new family member ships (Opus 5 -> Opus 5.5, then
+Sonnet 5 -> Sonnet 5.5), reviewer, the sonnet-pinned agents and every
+`model=opus` escalation upgrade automatically on the Anthropic API - no
+plugin update, no config change. The cloud platforms resolve the same
+aliases to older models, so the figures below are first-party ones. Prices and every
 rule derived from them do not follow the alias, though: the stats price
 table and the cost-driven exceptions above need a check on each launch.
 `/model-routing:stats` shows which
@@ -493,7 +500,7 @@ good lazy default:
 
 (Opus plans, Sonnet executes - no plugin needed.)
 
-For a stronger model at decision points without running it throughout, the harness has a built-in advisor tool - `/advisor opus`, or `"advisorModel": "opus"` in settings. It runs server-side, sees the whole conversation, and Claude decides when to consult it, which makes it the productized form of the advisor pattern this plugin describes. Two traps worth knowing: the advisor must be at least as capable as the main model (an Opus 4.7-or-later session accepts only another Opus 4.7+, not Sonnet 5), and Fable is not currently offered as an advisor - a saved `"fable"` attaches no advisor and raises no error. Advisor calls never show up in `/model-routing:stats`, because a server tool is not an Agent dispatch; they land in `/usage`.
+For a stronger model at decision points without running it throughout, the harness has a built-in advisor tool - `/advisor opus`, or `"advisorModel": "opus"` in settings. It runs server-side, sees the whole conversation, and Claude decides when to consult it, which makes it the productized form of the advisor pattern this plugin describes. Two traps worth knowing: the accepted advisors are listed per model rather than per tier (an Opus 5 or 5.5 session takes Fable or Opus 5+, a Sonnet 5.5 session takes Fable, Mythos, Opus 5, Opus 5.5 or Sonnet 5.5 and rejects the Opus 4.7/4.8 and Sonnet 5 advisors a Sonnet 5 session accepts), and Fable as advisor needs Fable access plus, on plans that bill Fable to usage credits, the one-time consent from `/model fable` - before that a saved `"fable"` attaches no advisor and raises no error. Advisor calls never show up in `/model-routing:stats`, because a server tool is not an Agent dispatch; they land in `/usage`.
 
 ### Dynamic workflows
 
