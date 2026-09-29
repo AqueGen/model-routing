@@ -416,7 +416,7 @@ per model under `modelSettings`, and a top-level `effortLevel` in the
 user settings file no longer reaches Opus 5.5 or anything released after
 it, Sonnet 5.5 included. Support
 itself is an explicit list rather than a
-version cutoff: Fable 5, Mythos 5, Opus 5, Sonnet 5 (both including their 5.5 successors), Opus 4.8 and Opus 4.7
+version cutoff: Fable 5, Mythos 5, Opus 5 and Sonnet 5 with their 5.5 successors, Opus 4.8 and Opus 4.7
 take the whole ladder, Opus 4.6 and Sonnet 4.6 take everything but `xhigh`, and a
 model absent from that list - Haiku 4.5 among them - has no effort knob at
 all. Setting a level a model does not support runs the highest supported
@@ -436,8 +436,8 @@ step up on evidence.
 | Effort | What it buys | Where the plugin uses it |
 | ------ | ------------ | ------------------------ |
 | low | Most efficient: significant token savings with some capability reduction. On the Opus 5 generation low/medium punch well above their weight. | Pins: `scout`, `test-runner`, `verifier`. |
-| medium | Balanced: real logic whose approach is already decided, at moderate savings. On Opus 5.5 this is the model's own default, not a step down from it. | Pins: `implementer`, `e2e-runner`. Recommended session setting. |
-| high | Full capability - Claude Code's per-model default except on Opus 5.5 (medium) and Opus 4.7 (xhigh). Complex reasoning, subtle debugging, high-risk review. | Pin: `reviewer`. Main-session planning and final review. |
+| medium | Balanced: real logic whose approach is already decided, at moderate savings. On Opus 5.5 and Sonnet 5.5 this is the model's own default, not a step down from it - so the sonnet-pinned agents save on tier, not on effort. | Pins: `implementer`, `e2e-runner`. Recommended session setting. |
+| high | Full capability - Claude Code's per-model default except on Opus 5.5 and Sonnet 5.5 (medium) and Opus 4.7 (xhigh). Complex reasoning, subtle debugging, high-risk review. | Pin: `reviewer`. Main-session planning and final review. |
 | xhigh | Extended capability for long-horizon agentic/coding runs (multi-hour, token budgets in the millions). | Session-level or Workflow `effort` opt only - never an agent pin. |
 | max | Unconstrained token spend for frontier-grade problems; Anthropic notes diminishing returns and overthinking risk on routine work. | Not used by any pin - reach for it deliberately or not at all. |
 
@@ -457,8 +457,8 @@ coordination, and final review. That makes the balanced default:
   where the whole session sits in the seat that tier is worth. Drop to a
   **Sonnet** session for pure-implementation days with no hard decisions.
 - **Effort: medium** as the everyday session setting - a deliberate step
-  DOWN from Claude Code's per-model default of high (Opus 5.5 excepted:
-  there medium already IS the default). Use **high** for sessions
+  DOWN from Claude Code's per-model default of high (Opus 5.5 and Sonnet
+  5.5 excepted: there medium already IS the default). Use **high** for sessions
   built around architecture or subtle debugging. Session effort mainly
   governs main-session work - the bundled agents pin their own - so raise
   it when the thinking you keep in the main seat is genuinely hard, not
@@ -469,9 +469,11 @@ the main session*, not for the average task - the average task gets routed
 down anyway.
 
 Generation jumps are free: agent pins name model FAMILIES (opus, sonnet,
-haiku), so when a new family member ships (Opus 5 -> Opus 5.5 in Claude
-Code 2.1.280), reviewer and every `model=opus` escalation upgrade
-automatically - no plugin update, no config change. Prices and every
+haiku), so when a new family member ships (Opus 5 -> Opus 5.5, then
+Sonnet 5 -> Sonnet 5.5), reviewer, the sonnet-pinned agents and every
+`model=opus` escalation upgrade automatically on the Anthropic API - no
+plugin update, no config change. The cloud platforms resolve the same
+aliases to older models, so the figures below are first-party ones. Prices and every
 rule derived from them do not follow the alias, though: the stats price
 table and the cost-driven exceptions above need a check on each launch.
 `/model-routing:stats` shows which
@@ -498,7 +500,7 @@ good lazy default:
 
 (Opus plans, Sonnet executes - no plugin needed.)
 
-For a stronger model at decision points without running it throughout, the harness has a built-in advisor tool - `/advisor opus`, or `"advisorModel": "opus"` in settings. It runs server-side, sees the whole conversation, and Claude decides when to consult it, which makes it the productized form of the advisor pattern this plugin describes. Two traps worth knowing: the advisor must be at least as capable as the main model (an Opus 4.7-or-later session accepts only another Opus 4.7+, not Sonnet 5), and Fable is not currently offered as an advisor - a saved `"fable"` attaches no advisor and raises no error. Advisor calls never show up in `/model-routing:stats`, because a server tool is not an Agent dispatch; they land in `/usage`.
+For a stronger model at decision points without running it throughout, the harness has a built-in advisor tool - `/advisor opus`, or `"advisorModel": "opus"` in settings. It runs server-side, sees the whole conversation, and Claude decides when to consult it, which makes it the productized form of the advisor pattern this plugin describes. Two traps worth knowing: the accepted advisors are listed per model rather than per tier (an Opus 5 or 5.5 session takes Fable or Opus 5+, a Sonnet 5.5 session takes Fable, Mythos, Opus 5, Opus 5.5 or Sonnet 5.5 and rejects the Opus 4.7/4.8 and Sonnet 5 advisors a Sonnet 5 session accepts), and Fable as advisor needs Fable access plus the one-time consent from `/model fable` - before that a saved `"fable"` attaches no advisor and raises no error. Advisor calls never show up in `/model-routing:stats`, because a server tool is not an Agent dispatch; they land in `/usage`.
 
 ### Dynamic workflows
 

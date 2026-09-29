@@ -26,6 +26,10 @@ Rules:
   the task or repo policy allows. A task is not done until it compiles and
   its tests pass.
 - Do not commit unless the task explicitly says to.
+- Keep working until everything the task asked for is done, and only stop
+  to ask when you cannot go on without the caller or before a risky step.
+  A batched task is done when every part of it is done, not when the first
+  part is.
 
 When to escalate instead of grinding:
 

@@ -1010,7 +1010,21 @@ test("an unset effortLevel records the documented model default", () => {
   assert.equal(sonnet5.effort, "high");
 });
 
-test("a user-file top-level effortLevel does not reach Opus 5.5, a project one does", () => {
+test("the effort footer names the same per-model defaults the log records", () => {
+  const cfg = freshConfigDir();
+  const now = Date.now();
+  writeLog(cfg, [
+    { ts: now, agent: "general-purpose", model: "sonnet", session: "claude-sonnet-5-5", effort: "medium", effortFrom: "default" },
+  ]);
+  try {
+    const out = run(["report"], cfg);
+    // The footer explains where a recorded level came from; a model missing
+    // from it contradicts the level printed above it.
+    assert.match(out, /the model default \(medium on Opus 5\.5 and Sonnet 5\.5, xhigh on Opus 4\.7, high elsewhere\)/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a user-file top-level effortLevel reaches neither Opus 5.5 nor Sonnet 5.5, a project one does", () => {
   const user = dispatchWithSettings({ sessionModel: "claude-opus-5-5", settings: { user: { effortLevel: "high" } } });
   assert.equal(user.effort, "medium");
   assert.equal(user.effortFrom, "default");
@@ -1026,6 +1040,21 @@ test("a user-file top-level effortLevel does not reach Opus 5.5, a project one d
   assert.equal(sonnet55.effortFrom, "default");
   const sonnet5 = dispatchWithSettings({ sessionModel: "claude-sonnet-5", settings: { user: { effortLevel: "low" } } });
   assert.equal(sonnet5.effort, "low");
+  // The exemption is the user file's top-level key only: a per-model entry in
+  // the same file, and a project file, still decide Sonnet 5.5.
+  const saved = dispatchWithSettings({
+    sessionModel: "claude-sonnet-5-5",
+    settings: { user: { effortLevel: "high", modelSettings: { "claude-sonnet-5-5": { effortLevel: "low" } } } },
+  });
+  assert.equal(saved.effort, "low");
+  assert.equal(saved.effortFrom, "settings");
+  const project55 = dispatchWithSettings({ sessionModel: "claude-sonnet-5-5", settings: { project: { effortLevel: "xhigh" } } });
+  assert.equal(project55.effort, "xhigh");
+  // A dated id is the same model to every table here. The `[1m]` form never
+  // reaches them: MODEL_RE reads the id out of the transcript and stops at the
+  // bracket, so only the settings side (canonicalModel) ever sees that suffix.
+  const datedSonnet5 = dispatchWithSettings({ sessionModel: "claude-sonnet-5-20260601" });
+  assert.equal(datedSonnet5.effort, "high");
 });
 
 test("a level saved for the model in modelSettings outranks effortLevel in the same file", () => {
@@ -1625,6 +1654,24 @@ test("sonnet-5.5 prices exactly as sonnet-5, cache reads included", () => {
     const out = run(["tokens"], cfg);
     assert.match(out, /as it ran\s+\$18\.70/);
     assert.match(out, /sonnet-5-5/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("sonnet-5.5 re-reading under an opus-5.5 session costs the same and is not named", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-opus-5-5"}\n');
+  // Both read cache at $0.20/MTok, so as-ran and inherited are equal: routed
+  // down on tier, level on price, and never a "priced higher" row.
+  writeFileSync(join(dir, "agent-a.jsonl"), costLine("claude-sonnet-5-5", { cacheRead: 10e6 }) + "\n");
+  metaFor(dir, "a", "model-routing:implementer", "sonnet");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /as it ran\s+\$2\.00/);
+    assert.match(out, /had every subagent inherited its session model\s+\$2\.00/);
+    assert.match(out, /opus-5-5: 10\.0M across 1 agents - 100% below session tier/);
+    assert.doesNotMatch(out, /Routed down but priced higher/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 

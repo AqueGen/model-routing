@@ -629,7 +629,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
       `Effort: ${inherited.length} of ${withEffort.length} dispatches ran on an agent type carrying no EFFORT pin this plugin knows about, and so inherited the session level${byLevel ? ` (${byLevel})` : ""}. Only the bundled agents pin effort here - a foreign agent with a known model pin still counts as inheriting effort.`,
       `  The bundled agents pin theirs in frontmatter, so routing a mechanical errand through a role agent buys a cheaper effort as well as a cheaper tier. An agent from anywhere else may pin its own effort, which is invisible here and counted as inherited.`,
       ...(inferred ? [`  ${inferred} of these levels are the documented model default rather than an observed setting.`] : []),
-      `  Source order is CLAUDE_CODE_EFFORT_LEVEL, then the level saved for the model in modelSettings or a settings effortLevel, then the model default (medium on Opus 5.5, xhigh on Opus 4.7, high elsewhere). Four states can override that and none are visible here: a /effort or --effort choice inside a running session, ultracode, an organization effort cap, and a per-model maxEffortLevel cap.`,
+      `  Source order is CLAUDE_CODE_EFFORT_LEVEL, then the level saved for the model in modelSettings or a settings effortLevel, then the model default (medium on Opus 5.5 and Sonnet 5.5, xhigh on Opus 4.7, high elsewhere). Four states can override that and none are visible here: a /effort or --effort choice inside a running session, ultracode, an organization effort cap, and a per-model maxEffortLevel cap.`,
     );
   }
   // Grouped sections instead of per-row v/- markers: the reader should not
