@@ -53,8 +53,8 @@ Superpowers dispatches opus subagents by default. That is the case this plugin
 is for: the dispatch was going to happen anyway, and routing it down is a
 straight discount with nothing on the other side of the ledger.
 
-Note what the surcharge is and is not. The plugin costs about 1.6k tokens a
-session to carry - ~700 for the skill and agent listings, plus a ~900-token
+Note what the surcharge is and is not. The plugin costs about 1.4k tokens a
+session to carry - ~700 for the skill and agent listings, plus a ~720-token
 routing anchor at session start - which is a couple of cents against sessions
 billing $1.40 to $2.00. The listing figure comes from
 `claude plugin details model-routing`, and its output is committed under

@@ -52,21 +52,13 @@ that ran Opus 5 or Sonnet 5 at a saved level starts its 5.5 successor at
 `medium` until a level is chosen for that model.
 Which levels exist at all is a per-model list rather than a version
 cutoff, and setting a level the model does not support runs the highest
-supported level at or below it. The per-model recommendation moves with the generation: Opus
-4.7 and 4.8 are told to start coding and agentic work at `xhigh`, while
-Opus 5 is told to start at `high`, step up to `xhigh` for demanding
-coding and agentic work, and use `low` and `medium` liberally as the
-primary control for token cost and response time wherever evals show
-quality holds. The step down got cheaper, not the step up. Opus 5.5
-moves the scale again: Anthropic reports its `medium` above Opus 5 at
-`high` on coding and knowledge work, and `low` close to it on several
-coding evals, while at any given level it thinks more per turn than Opus
-5 did - a level carried over from Opus 5 buys more depth and costs more
-tokens than it used to. `xhigh` is
-also the newest level and absent on some models that support `max`
-(e.g. the 4.6 generation), so check the model's own docs when in doubt -
-and re-sweep effort on your own evals after a model change instead of
-carrying old settings across generations. This plugin tunes for cost: pins sit at the lowest level
+supported level at or below it (`xhigh` is absent on the 4.6 generation).
+The recommendation moves with the generation: Anthropic reports Opus 5.5
+at `medium` above Opus 5 at `high` on coding and knowledge work, and `low`
+close to it on several coding evals, while at any given level it thinks
+more per turn than Opus 5 did - a level carried over buys more depth and
+costs more tokens than it used to. Re-sweep effort on your own evals
+after a model change instead of carrying old settings across generations. This plugin tunes for cost: pins sit at the lowest level
 the task shape allows and step up on evidence (a weak result retries
 one step up). That deliberate step down, wherever the task allows one,
 is where the effort savings come from - measured against the level the
@@ -248,15 +240,9 @@ actually earns its cost:
   2.5x on base input and output against Opus 5.5 ($10/$50 vs $4/$20).
   Cache reads no longer run the other way either: Fable 5.1 reads at
   $0.25/MTok and Opus 5.5 at $0.20, so opus is the cheaper step on every
-  token type, whatever the mix. This retired a rule. On Opus 5 (cache
-  reads $0.50) opus implementers dispatched from Fable 5.1 sessions
-  priced at $275.55 over the author's 7 days to 2026-09-17, against
-  $221.52 for the same tokens at Fable 5.1 rates, and the implementer's
-  step above sonnet on those sessions was the session model. The same
-  token mix on Opus 5.5 prices at about $133. `/model-routing:stats`
-  still names any agent and model pair that ran below the session tier
-  yet priced above it - the evidence to reopen the rule on if a later
-  model moves the rates again.
+  token type, whatever the mix. `/model-routing:stats` names any agent
+  and model pair that ran below the session tier yet priced above it -
+  the evidence to revisit this on if a later model moves the rates.
   Where the inflation does bite is any comparison against a Sonnet
   4.6-era baseline: re-pricing today's token counts at yesterday's rates
   understates the difference.
