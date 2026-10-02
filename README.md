@@ -56,16 +56,16 @@ straight discount with nothing on the other side of the ledger.
 Note what the surcharge is and is not. The plugin costs about 1.8k tokens a
 session to carry - ~700 for the skill and agent listings, plus a ~1.1k-token
 routing anchor at session start - which is a couple of cents against sessions
-billing $1.40 to $2.00. The anchor figure is its 3225 bytes at the ratio its
-last cut measured: on the same eval case and CLI, the 3225-byte anchor wrote
-about 625 fewer cache tokens per run than the 5114-byte one it replaced
+billing $1.40 to $2.00. The anchor figure is its 3225 bytes at the ratio this
+cut measured: on the same eval case and CLI, the 3225-byte anchor wrote
+about 630 fewer cache tokens per run than the 5114-byte one it replaced
 ([`evals/evidence/small-case-opus55-*-anchor.json`](evals/evidence/)). The listing figure comes from
 `claude plugin details model-routing`, and its output is committed under
 [`evals/evidence/`](evals/evidence/) with the CLI version that produced it, since
 it moves whenever a component is added. That is not where the 23% comes from. It comes from dispatches happening
 that otherwise would not have: on the same question the plugin arm delegated in
-3 runs of 3 and the plugin-free arm in 0 of 3. That was 2026-08-17, before the
-opus alias moved to Opus 5.5; on 2026-10-02 an Opus 5.5 session answered the
+3 runs of 3 and the plugin-free arm in 0 of 3. That was measured on 2026-08-17; on
+2026-10-02 an Opus 5.5 session answered the
 same question with one grep and one read and delegated in 0 of 2 under both the
 old and the current anchor, so this case no longer separates the arms on Opus
 5.5 ([`evals/evidence/small-case-opus55-*-anchor.json`](evals/evidence/)). Where dispatches already happen,
