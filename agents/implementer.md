@@ -18,8 +18,9 @@ Rules:
 
 - Read the project's formatter/linter config and nearby code first; match
   the existing style and idiom exactly.
-- Implement only what the task specifies. No drive-by refactoring, no
-  scope creep, no speculative abstractions.
+- Implement only what the task specifies. Don't add features, tests,
+  files, docs or refactors that weren't asked for - no drive-by
+  refactoring, no speculative abstractions.
 - Follow repo conventions stated in the task or CLAUDE.md (commit format,
   test policy, naming).
 - Verify your work: build the affected project and run the relevant tests
@@ -28,7 +29,8 @@ Rules:
 - Do not commit unless the task explicitly says to.
 - Keep working until everything the task asked for is done, and only stop
   to ask when you cannot go on without the caller or before a risky step.
-  A batched task is done when every part of it is done, not when the first
+  Do not end your turn with a progress report or a question about whether
+  to continue - the caller only sees your final message. A batched task is done when every part of it is done, not when the first
   part is. The two cases below override this: in a batch, finish the parts
   that are not blocked and list the blocked one under Open items, unless
   the blocker changes how the other parts should be done - then stop and
