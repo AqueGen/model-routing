@@ -1,0 +1,88 @@
+{
+  "model": "opus",
+  "runs": 2,
+  "arms": [
+    "with"
+  ],
+  "cases": [
+    {
+      "name": "delegates-codebase-question",
+      "arms": {
+        "with": [
+          {
+            "exitCode": 0,
+            "costUsd": 0.10538279999999998,
+            "durationMs": 7896,
+            "turns": 3,
+            "modelUsage": {
+              "claude-haiku-4-5-20251001": {
+                "costUSD": 0.000964,
+                "inputTokens": 909,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "outputTokens": 11
+              },
+              "claude-opus-5-5": {
+                "costUSD": 0.10441879999999999,
+                "inputTokens": 6,
+                "cacheReadInputTokens": 97414,
+                "cacheCreationInputTokens": 9254,
+                "outputTokens": 544
+              }
+            },
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "delegated-to-a-subagent",
+                "pass": false
+              },
+              {
+                "grader": "scout-was-the-agent",
+                "pass": false
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 0.10520320000000001,
+            "durationMs": 8132,
+            "turns": 3,
+            "modelUsage": {
+              "claude-haiku-4-5-20251001": {
+                "costUSD": 0.000959,
+                "inputTokens": 909,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "outputTokens": 10
+              },
+              "claude-opus-5-5": {
+                "costUSD": 0.10424420000000001,
+                "inputTokens": 6,
+                "cacheReadInputTokens": 97381,
+                "cacheCreationInputTokens": 9228,
+                "outputTokens": 546
+              }
+            },
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "delegated-to-a-subagent",
+                "pass": false
+              },
+              {
+                "grader": "scout-was-the-agent",
+                "pass": false
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

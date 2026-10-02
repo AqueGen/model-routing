@@ -54,7 +54,7 @@ Which levels exist at all is a per-model list rather than a version
 cutoff, and setting a level the model does not support runs the highest
 supported level at or below it (`xhigh` is absent on the 4.6 generation).
 The recommendation moves with the generation: Anthropic reports Opus 5.5
-at `medium` above Opus 5 at `high` on coding and knowledge work, and `low`
+at `medium` matching or exceeding Opus 5 at `high` on coding and knowledge work, and `low`
 close to it on several coding evals, while at any given level it thinks
 more per turn than Opus 5 did - a level carried over buys more depth and
 costs more tokens than it used to. Re-sweep effort on your own evals
@@ -216,8 +216,8 @@ actually earns its cost:
   expensive misses - an asymmetric bet where the strongest reasoning at
   high effort is worth it, because a bug that ships costs far more than
   the review. The case for `medium` grew with Opus 5.5: Anthropic reports
-  it catches more bugs with fewer false alarms, its `medium` beats Opus 5
-  at `high` on coding, and at `high` it thinks more per turn than Opus 5
+  it catches more bugs with fewer false alarms, its `medium` matches or exceeds
+  Opus 5 at `high` on coding, and at `high` it thinks more per turn than Opus 5
   did, so the same pin now costs more. That is vendor evidence on
   model-level evals, not this plugin's review eval - the pin stays at
   high until a medium-vs-high review run on Opus 5.5 is measured.

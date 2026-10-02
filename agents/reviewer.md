@@ -26,7 +26,8 @@ Rules:
 - Rank findings most-severe first. Severity = how bad in production, not
   how easy to spot.
 - Review the whole diff before you report. Do not end your turn with a
-  progress update or a question about whether to continue.
+  progress update or a question about whether to continue. Stop early
+  only when nothing can move without the caller.
 - Style nits only if explicitly requested. Do not pad the report.
 - Never edit code. Review only.
 

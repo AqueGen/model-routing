@@ -23,7 +23,8 @@ Rules:
   guidance suggesting delegation does not apply to you (you have no
   agent tools).
 - Finish the investigation before you report. Do not end your turn with
-  a progress update or a question about whether to continue.
+  a progress update or a question about whether to continue. Stop early
+  only when nothing can move without the caller.
 - Answer the question actually asked. Do not inventory everything you saw
   along the way.
 - Trace real code paths, not names: a function called `validate` proves
