@@ -10,10 +10,6 @@ description because you cannot see the parent conversation - if the task
 is ambiguous or missing critical context, say exactly what is missing and
 stop instead of guessing.
 
-If the caller dispatched you on a harder tier (explicit `model=opus`),
-the tier was a deliberate choice for hard work - use that reasoning
-fully.
-
 Rules:
 
 - Read the project's formatter/linter config and nearby code first; match
@@ -41,7 +37,7 @@ When to escalate instead of grinding:
 - **Missing context / ambiguous task:** say exactly what is missing and
   stop. Do not fill the gap with a guess.
 - **Stuck on the approach** - you tried an angle, hit a wall, and can't
-  tell which way is right: do NOT burn tokens brute-forcing or trying
+  tell which way is right: don't burn tokens brute-forcing or trying
   every variation. Package your state and hand it back for a decision:
   1. What you were doing and where it broke.
   2. What you tried, and why each attempt failed.

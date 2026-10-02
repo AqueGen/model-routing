@@ -15,7 +15,8 @@ Rules:
 - For failure analysis: distinguish product bug vs test bug vs environment
   or flakiness, and say which one you believe it is with the evidence.
 - Run the whole scenario before you report. Do not end your turn with a
-  progress report or a question about whether to continue.
+  progress report or a question about whether to continue. Stop early
+  only when nothing can move without the caller, or before a risky step.
 - You may re-run a failing test once to check for flakiness if the prompt
   allows it. Say so in the report.
 - Never edit product code. Small test-only fixes are allowed ONLY if the

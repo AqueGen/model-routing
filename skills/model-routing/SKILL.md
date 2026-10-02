@@ -52,21 +52,13 @@ that ran Opus 5 or Sonnet 5 at a saved level starts its 5.5 successor at
 `medium` until a level is chosen for that model.
 Which levels exist at all is a per-model list rather than a version
 cutoff, and setting a level the model does not support runs the highest
-supported level at or below it. The per-model recommendation moves with the generation: Opus
-4.7 and 4.8 are told to start coding and agentic work at `xhigh`, while
-Opus 5 is told to start at `high`, step up to `xhigh` for demanding
-coding and agentic work, and use `low` and `medium` liberally as the
-primary control for token cost and response time wherever evals show
-quality holds. The step down got cheaper, not the step up. Opus 5.5
-moves the scale again: Anthropic reports its `medium` above Opus 5 at
-`high` on coding and knowledge work, and `low` close to it on several
-coding evals, while at any given level it thinks more per turn than Opus
-5 did - a level carried over from Opus 5 buys more depth and costs more
-tokens than it used to. `xhigh` is
-also the newest level and absent on some models that support `max`
-(e.g. the 4.6 generation), so check the model's own docs when in doubt -
-and re-sweep effort on your own evals after a model change instead of
-carrying old settings across generations. This plugin tunes for cost: pins sit at the lowest level
+supported level at or below it (`xhigh` is absent on the 4.6 generation).
+The recommendation moves with the generation: Anthropic reports Opus 5.5
+at `medium` matching or exceeding Opus 5 at `high` on coding and knowledge work, and `low`
+close to it on several coding evals, while at any given level it thinks
+more per turn than Opus 5 did - a level carried over buys more depth and
+costs more tokens than it used to. Re-sweep effort on your own evals
+after a model change instead of carrying old settings across generations. This plugin tunes for cost: pins sit at the lowest level
 the task shape allows and step up on evidence (a weak result retries
 one step up). That deliberate step down, wherever the task allows one,
 is where the effort savings come from - measured against the level the
@@ -224,8 +216,8 @@ actually earns its cost:
   expensive misses - an asymmetric bet where the strongest reasoning at
   high effort is worth it, because a bug that ships costs far more than
   the review. The case for `medium` grew with Opus 5.5: Anthropic reports
-  it catches more bugs with fewer false alarms, its `medium` beats Opus 5
-  at `high` on coding, and at `high` it thinks more per turn than Opus 5
+  it catches more bugs with fewer false alarms, its `medium` matches or exceeds
+  Opus 5 at `high` on coding, and at `high` it thinks more per turn than Opus 5
   did, so the same pin now costs more. That is vendor evidence on
   model-level evals, not this plugin's review eval - the pin stays at
   high until a medium-vs-high review run on Opus 5.5 is measured.
@@ -248,15 +240,9 @@ actually earns its cost:
   2.5x on base input and output against Opus 5.5 ($10/$50 vs $4/$20).
   Cache reads no longer run the other way either: Fable 5.1 reads at
   $0.25/MTok and Opus 5.5 at $0.20, so opus is the cheaper step on every
-  token type, whatever the mix. This retired a rule. On Opus 5 (cache
-  reads $0.50) opus implementers dispatched from Fable 5.1 sessions
-  priced at $275.55 over the author's 7 days to 2026-09-17, against
-  $221.52 for the same tokens at Fable 5.1 rates, and the implementer's
-  step above sonnet on those sessions was the session model. The same
-  token mix on Opus 5.5 prices at about $133. `/model-routing:stats`
-  still names any agent and model pair that ran below the session tier
-  yet priced above it - the evidence to reopen the rule on if a later
-  model moves the rates again.
+  token type, whatever the mix. `/model-routing:stats` names any agent
+  and model pair that ran below the session tier yet priced above it -
+  the evidence to revisit this on if a later model moves the rates.
   Where the inflation does bite is any comparison against a Sonnet
   4.6-era baseline: re-pricing today's token counts at yesterday's rates
   understates the difference.
@@ -549,7 +535,7 @@ already consented to, so the savings come from making each node cheap.
 
 - `fallbackModel` in settings.json: `["opus", "sonnet"]` - the harness
   falls back down the tier ladder when the primary model is unavailable
-  or its quota is exhausted. Match the context variant to the session model: a `["opus", ...]` chain falls back to the 200K-window alias, which cannot hold a session already past 200K - on an `opus[1m]` session the fallback wants `opus[1m]` too. A fallback also crosses a model boundary, so any thinking block the fallback model cannot read is dropped for the turns that run on it (see the /model rule above). Which way a pair goes is per model, not per tier - Sonnet 5.5 reads Opus 4.8's blocks, while neither Opus 5.5 nor Fable reads Sonnet 5.5's - so the requests succeed either way and the reasoning carries over only where the pair allows it.
+  or its quota is exhausted. On the Anthropic API Opus 4.7+ and Sonnet 5+ run a native 1M window, so the bare aliases need no `[1m]` suffix; Claude Code skips a fallback with a smaller window than the primary's during compaction, which is where a 200K entry (an Opus/Sonnet 4.6 pin, or an alias on a cloud platform that still resolves to one) silently drops out. A fallback also crosses a model boundary, so any thinking block the fallback model cannot read is dropped for the turns that run on it (see the /model rule above). Which way a pair goes is per model, not per tier - Sonnet 5.5 reads Opus 4.8's blocks, while neither Opus 5.5 nor Fable reads Sonnet 5.5's - so the requests succeed either way and the reasoning carries over only where the pair allows it.
 - `/advisor`, the `advisorModel` setting, or `--advisor`: a server-side tool that consults a stronger model at decision points - before committing to an approach, on a recurring error, before declaring a task done. Claude chooses when to call it, and the advisor receives the FULL conversation, so unlike a subagent it needs no state packaging and has no fresh-context blind spot. This is the advisor strategy above, productized. What to know before enabling it:
   - The advisor must be at least as capable as the main model, and the accepted list is per model rather than per tier. An Opus 5 or Opus 5.5 session accepts Fable or Opus 5 and later (the API refuses Opus 4.7/4.8, Sonnet is rejected); an Opus 4.7/4.8 session accepts Fable, Opus 4.7+ or Sonnet 5.5; a Sonnet 5.5 session accepts Fable, Mythos, Opus 5, Opus 5.5 or Sonnet 5.5 itself, and rejects the Opus 4.7/4.8 and Sonnet 5 advisors a Sonnet 5 session still accepts; a Fable 5.1 session accepts only Fable 5.1. A saved advisor that was valid on Sonnet 5 therefore starts failing on Sonnet 5.5 with a 400 rather than quietly running without one.
   - Fable as advisor needs Fable access and, on plans that bill Fable to usage credits, the one-time consent from `/model fable`. Before that consent a saved `"fable"` sends requests without the advisor.

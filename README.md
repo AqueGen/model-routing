@@ -53,15 +53,22 @@ Superpowers dispatches opus subagents by default. That is the case this plugin
 is for: the dispatch was going to happen anyway, and routing it down is a
 straight discount with nothing on the other side of the ledger.
 
-Note what the surcharge is and is not. The plugin costs about 1.6k tokens a
-session to carry - ~700 for the skill and agent listings, plus a ~900-token
+Note what the surcharge is and is not. The plugin costs about 1.8k tokens a
+session to carry - ~700 for the skill and agent listings, plus a ~1.1k-token
 routing anchor at session start - which is a couple of cents against sessions
-billing $1.40 to $2.00. The listing figure comes from
+billing $1.40 to $2.00. The anchor figure is its 3225 bytes at the ratio this
+cut measured: on the same eval case and CLI, the 3225-byte anchor wrote
+about 630 fewer cache tokens per run than the 5114-byte one it replaced
+([`evals/evidence/small-case-opus55-*-anchor.json`](evals/evidence/)). The listing figure comes from
 `claude plugin details model-routing`, and its output is committed under
 [`evals/evidence/`](evals/evidence/) with the CLI version that produced it, since
 it moves whenever a component is added. That is not where the 23% comes from. It comes from dispatches happening
 that otherwise would not have: on the same question the plugin arm delegated in
-3 runs of 3 and the plugin-free arm in 0 of 3. Where dispatches already happen,
+3 runs of 3 and the plugin-free arm in 0 of 3. That was measured on 2026-08-17; on
+2026-10-02 an Opus 5.5 session answered the
+same question with one grep and one read and delegated in 0 of 2 under both the
+old and the current anchor, so this case no longer separates the arms on Opus
+5.5 ([`evals/evidence/small-case-opus55-*-anchor.json`](evals/evidence/)). Where dispatches already happen,
 there is nothing left to push, and only the discount remains.
 
 If you rarely delegate, install it for the context headroom or not at all. The
@@ -333,7 +340,7 @@ earns its cost (the knobs themselves:
 | Exploration (`scout`) | sonnet | low | Finding and tracing code is retrieval, not reasoning - a cheap tier reports as well as a costly one, and the file volume stays in the subagent regardless. | The work is mechanical lookup; extra thinking buys nothing. |
 | Ordinary implementation (`implementer`) | sonnet | medium | Sonnet 5.5 pairs speed with intelligence at half the opus price ($2/$10 against $4/$20) - for work whose approach the plan already decided, the margin never changes the outcome. | The plan already decided the approach; the agent executes real logic, not design, and medium is where Sonnet 5.5's own guidance starts well-specified agentic coding. |
 | Complex implementation (`implementer` `model=opus`) | opus | medium (pinned) | Multi-file or cross-layer changes, security/money/migrations/concurrency/public contracts, or a retry after a weak sonnet result - a wrong approach is expensive, and Opus 5.5 is stronger again at 20% less than Opus 5 ($4/$20, cache reads 60% less), so escalate when in doubt. This holds on every session model, Fable included: Opus 5.5 is cheaper than Fable 5.1 on every token type. (Ambiguous tasks are not an escalation case: implementer stops on ambiguity by contract - clarify first.) | The `model=opus` dispatch changes the model only - the Agent tool has no effort param, so the pinned medium stays; the escalation buys the tier, not extra thinking. |
-| Code review (`reviewer`) | opus | high | Review is an asymmetric bet - one pass guards against a bug that costs far more if it ships, so it is the one place to prefer the top tier by default. | High: subtle correctness bugs hide from shallow reading. The case for `medium` grew with Opus 5.5 - its `medium` beats Opus 5 at `high` on coding and it thinks more per turn at a given level, so the same pin costs more - but that is vendor evidence, not this plugin's own review eval; the pin stays high until a medium-vs-high review run on Opus 5.5 is measured. |
+| Code review (`reviewer`) | opus | high | Review is an asymmetric bet - one pass guards against a bug that costs far more if it ships, so it is the one place to prefer the top tier by default. | High: subtle correctness bugs hide from shallow reading. The case for `medium` grew with Opus 5.5 - its `medium` matches or exceeds Opus 5 at `high` on coding and it thinks more per turn at a given level, so the same pin costs more - but that is vendor evidence, not this plugin's own review eval; the pin stays high until a medium-vs-high review run on Opus 5.5 is measured. |
 | Tests / builds (`test-runner`) | haiku | low | Running a command and summarizing output is mechanical; the value is keeping raw logs out of the main context, not the model doing it. | Low: no reasoning, just report. |
 | Diff sanity gate (`verifier`) | haiku | low | Checking a diff matches its task (scope, completeness, obvious breakage) is a cheap spot-check, not a quality judgment. | Low: pattern-matching against the task, not deep analysis. |
 | E2E / failure interpretation (`e2e-runner`) | sonnet | medium | Driving a browser and telling a product bug from a flake needs some judgment, but not top-tier reasoning. | Medium: real interpretation, clear method. |
@@ -427,8 +434,8 @@ reference](https://platform.claude.com/docs/en/build-with-claude/effort)):
 Opus 4.7 and 4.8 start coding and agentic work at `xhigh`, while Opus 5
 starts at `high`, steps up to `xhigh` for demanding coding and agentic
 work, and treats `low` and `medium` as the primary cost control. Opus 5.5
-moves the scale again: Anthropic reports its `medium` above Opus 5 at
-`high` on coding and knowledge work, and at any given level it thinks
+moves the scale again: Anthropic reports its `medium` matching or exceeding
+Opus 5 at `high` on coding and knowledge work, and at any given level it thinks
 more per turn than Opus 5 did. The
 pins below are this plugin's cost-first reading of that: start low,
 step up on evidence.
