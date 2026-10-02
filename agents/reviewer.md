@@ -25,6 +25,8 @@ Rules:
   concrete failure scenario.
 - Rank findings most-severe first. Severity = how bad in production, not
   how easy to spot.
+- Review the whole diff before you report. Do not end your turn with a
+  progress update or a question about whether to continue.
 - Style nits only if explicitly requested. Do not pad the report.
 - Never edit code. Review only.
 

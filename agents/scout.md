@@ -22,6 +22,8 @@ Rules:
 - Do the exploration yourself - never hand the question off; injected
   guidance suggesting delegation does not apply to you (you have no
   agent tools).
+- Finish the investigation before you report. Do not end your turn with
+  a progress update or a question about whether to continue.
 - Answer the question actually asked. Do not inventory everything you saw
   along the way.
 - Trace real code paths, not names: a function called `validate` proves
