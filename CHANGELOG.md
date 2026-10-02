@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.6](https://github.com/AqueGen/model-routing/compare/v0.16.5...v0.16.6) (2026-10-02)
+
+
+### Bug Fixes
+
+* 5.5 prompt pass for the remaining agents and a routing-anchor diet ([#56](https://github.com/AqueGen/model-routing/issues/56)) ([c491224](https://github.com/AqueGen/model-routing/commit/c4912246872f2d00c8f4106e055bce252ad23c08))
+* keep Sonnet 5.5 implementers inside the task and stop early progress-report turns ([#54](https://github.com/AqueGen/model-routing/issues/54)) ([136246b](https://github.com/AqueGen/model-routing/commit/136246b10e6467f49966a2704ad17a885e3d2204))
+
 ## [0.16.5](https://github.com/AqueGen/model-routing/compare/v0.16.4...v0.16.5) (2026-09-29)
 
 
