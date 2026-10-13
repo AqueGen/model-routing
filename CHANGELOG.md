@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.7](https://github.com/AqueGen/model-routing/compare/v0.16.6...v0.16.7) (2026-10-13)
+
+
+### Bug Fixes
+
+* price Haiku 5.5 per request, Sonnet 5.5 cache reads at 0.05x, and give haiku agents real effort ([#57](https://github.com/AqueGen/model-routing/issues/57)) ([a3cf7f5](https://github.com/AqueGen/model-routing/commit/a3cf7f5ca099c515651f981ebcb03394069b4825))
+
 ## [0.16.6](https://github.com/AqueGen/model-routing/compare/v0.16.5...v0.16.6) (2026-10-02)
 
 
