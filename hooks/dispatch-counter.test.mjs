@@ -1008,6 +1008,17 @@ test("an unset effortLevel records the documented model default", () => {
   assert.equal(sonnet55.effortFrom, "default");
   const sonnet5 = dispatchWithSettings({ sessionModel: "claude-sonnet-5" });
   assert.equal(sonnet5.effort, "high");
+  const haiku55 = dispatchWithSettings({ sessionModel: "claude-haiku-5-5" });
+  assert.equal(haiku55.effort, "medium");
+  assert.equal(haiku55.effortFrom, "default");
+});
+
+test("haiku-5.5 supports the full effort ladder, unlike haiku-4.5", () => {
+  const xhigh = dispatchWithSettings({ sessionModel: "claude-haiku-5-5", settings: { project: { effortLevel: "xhigh" } } });
+  assert.equal(xhigh.effort, "xhigh");
+  assert.equal(xhigh.effortFrom, "settings");
+  const max = dispatchWithSettings({ sessionModel: "claude-haiku-5-5", env: { CLAUDE_CODE_EFFORT_LEVEL: "max" } });
+  assert.equal(max.effort, "max");
 });
 
 test("the effort footer names the same per-model defaults the log records", () => {
@@ -1020,7 +1031,7 @@ test("the effort footer names the same per-model defaults the log records", () =
     const out = run(["report"], cfg);
     // The footer explains where a recorded level came from; a model missing
     // from it contradicts the level printed above it.
-    assert.match(out, /the model default \(medium on Opus 5\.5 and Sonnet 5\.5, xhigh on Opus 4\.7, high elsewhere\)/);
+    assert.match(out, /the model default \(medium on Opus 5\.5, Sonnet 5\.5 and Haiku 5\.5, xhigh on Opus 4\.7, high elsewhere\)/);
     // The sentence above it promises what a pin buys; an unconditional claim
     // there is wrong for a haiku agent and for a session already at the pin.
     assert.match(out, /can buy a cheaper model tier and, where that model supports effort and the pinned level is lower than the one it would otherwise inherit, a lower effort too/);
@@ -1277,6 +1288,43 @@ test("opus-5.5 prices at $4/$20 with cache reads at 0.05x, not the opus-5 row", 
     const out = run(["tokens"], cfg);
     assert.match(out, /as it ran\s+\$37\.20/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+// Haiku 5.5 bills each request on the $0.10/$0.50 card up to 100K prompt tokens
+// and on $0.50/$2.50 above. 100 identical lines with no message.id are 100
+// requests, which lifts per-request cents to a figure the report prints exactly.
+const haiku55Requests = (n, usage) => Array(n).fill(costLine("claude-haiku-5-5", usage)).join("\n") + "\n";
+const tokensForHaiku55 = (body) => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), usageLine("claude-opus-5", 1) + "\n");
+  writeFileSync(join(dir, "agent-a.jsonl"), body);
+  try { return run(["tokens"], cfg); } finally { rmSync(cfg, { recursive: true, force: true }); }
+};
+
+test("haiku-5.5 prices each request of a loop on its own card by prompt length", () => {
+  // 100 x 60K in + 20K out on the base card: $0.006 + $0.010 = $1.60
+  // 100 x 150K in + 20K out on the long card: $0.075 + $0.050 = $12.50
+  const out = tokensForHaiku55(
+    haiku55Requests(100, { input: 60000, out: 20000 }) + haiku55Requests(100, { input: 150000, out: 20000 }));
+  assert.match(out, /as it ran\s+\$14\.10/);
+  // Opus 5 has no long card: 21M in x $5 + 4M out x $25 = $205.00, the totals
+  // untouched by the split.
+  assert.match(out, /had every subagent inherited its session model\s+\$205\.00/);
+});
+
+test("haiku-5.5 at exactly 100K prompt tokens stays on the base card", () => {
+  // 100 x 100K in at $0.10/MTok = $1.00 (the long card would be $5.00).
+  assert.match(tokensForHaiku55(haiku55Requests(100, { input: 100000 })), /as it ran\s+\$1\.00/);
+});
+
+test("haiku-5.5 cache reads and writes count toward the 100K threshold", () => {
+  // 10K input alone is under the threshold; with 100K cache reads and 8K 5m
+  // writes the prompt is 118K, so all three bill on the long card:
+  // 10K x $0.50 + 100K x $0.05 + 8K x $0.625 = $0.015 per request, $1.50 for 100.
+  // On the base card it would be $0.30.
+  assert.match(tokensForHaiku55(haiku55Requests(100, { input: 10000, cacheRead: 100000, cw5: 8000 })), /as it ran\s+\$1\.50/);
 });
 
 test("a cache-write bucket this code has never heard of is still charged", () => {
@@ -1645,33 +1693,32 @@ test("a routed-down agent priced above its session model is named with both amou
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
-test("sonnet-5.5 prices exactly as sonnet-5, cache reads included", () => {
+test("sonnet-5.5 prices at $2/$10 with cache reads at 0.05x, not the sonnet-5 row", () => {
   const cfg = freshConfigDir();
   const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), usageLine("claude-fable-5-1", 1) + "\n");
-  // 1M input $2 + 1M cache read $0.20 + 1M 5m write $2.50 + 1M 1h write $4 + 1M output $10 = $18.70
+  // 1M input $2 + 1M cache read $0.10 + 1M 5m write $2.50 + 1M 1h write $4 + 1M output $10 = $18.60
   writeFileSync(join(dir, "agent-a.jsonl"),
     costLine("claude-sonnet-5-5", { input: 1e6, cacheRead: 1e6, cw5: 1e6, cw1h: 1e6, out: 1e6 }) + "\n");
   try {
     const out = run(["tokens"], cfg);
-    assert.match(out, /as it ran\s+\$18\.70/);
+    assert.match(out, /as it ran\s+\$18\.60/);
     assert.match(out, /sonnet-5-5/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
-test("sonnet-5.5 re-reading under an opus-5.5 session costs the same and is not named", () => {
+test("sonnet-5.5 re-reading under an opus-5.5 session costs half and is not named", () => {
   const cfg = freshConfigDir();
   const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-opus-5-5"}\n');
-  // Both read cache at $0.20/MTok, so as-ran and inherited are equal: routed
-  // down on tier, level on price, and never a "priced higher" row.
+  // Both read cache at 0.05x of their input: $0.10/MTok against $0.20/MTok.
   writeFileSync(join(dir, "agent-a.jsonl"), costLine("claude-sonnet-5-5", { cacheRead: 10e6 }) + "\n");
   metaFor(dir, "a", "model-routing:implementer", "sonnet");
   try {
     const out = run(["tokens"], cfg);
-    assert.match(out, /as it ran\s+\$2\.00/);
+    assert.match(out, /as it ran\s+\$1\.00/);
     assert.match(out, /had every subagent inherited its session model\s+\$2\.00/);
     assert.match(out, /opus-5-5: 10\.0M across 1 agents - 100% below session tier/);
     assert.doesNotMatch(out, /Routed down but priced higher/);
