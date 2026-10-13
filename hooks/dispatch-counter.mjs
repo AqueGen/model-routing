@@ -87,6 +87,7 @@ const AGENT_PINS = {
   "model-routing:verifier": { model: "haiku", effort: "medium" },
   "model-routing:implementer": { model: "sonnet", effort: "medium" },
   "model-routing:reviewer": { model: "opus", effort: "high" },
+  "model-routing:task-reviewer": { model: "sonnet", effort: "high" },
 };
 // Model pins for OTHER plugins' agents, curated by hand from their frontmatter
 // the same way AGENT_PINS is - the difference is these files live outside this
