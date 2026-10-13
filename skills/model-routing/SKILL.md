@@ -150,7 +150,8 @@ carries no effort param:
 | Complex implementation: multi-file refactor, subtle concurrency/security | subagent | `implementer` with `model=opus` | medium (pinned) |
 | Trivial mechanical tasks: renames, boilerplate, mirrored constants | subagent | sonnet | low |
 | Small interactive edits, quick fixes | main session | strongest | low |
-| Code review of implemented work | subagent | `reviewer` (opus) | high |
+| Per-task review and scoped re-review inside a plan loop (Superpowers SDD) | subagent | `task-reviewer` (sonnet) | high |
+| Final/whole-branch, high-risk or pre-PR review of implemented work | subagent | `reviewer` (opus) | high |
 | Final review of high-risk or large diffs | main session | strongest | high |
 | Run tests/builds/linters, report failures | subagent | `test-runner` (haiku) | low |
 | Sanity-check a subagent's diff against its task | subagent | `verifier` (haiku) | medium |
@@ -191,8 +192,7 @@ actually earns its cost:
   Opus 5 was a step-change over Opus 4.8 at unchanged
   price, and Opus 5.5 is stronger again at 20% less ($4/$20, cache reads
   60% less), so the opus tier buys strictly more per dollar than when
-  this table was tuned - when in doubt between sonnet and opus for
-  implementation, take opus. That holds on every session model, Fable
+  this table was tuned. That holds on every session model, Fable
   included - see the fable-to-opus bullet below.
 - **Opus 5.5 to Sonnet 5.5 is a flat 50% off.** Both read cache at 0.05x
   of their own input, so every token type halves: the scout eval profile
@@ -206,7 +206,12 @@ actually earns its cost:
   Opus 5 at `high` on coding, and at `high` it thinks more per turn than Opus 5
   did, so the same pin now costs more. That is vendor evidence on
   model-level evals, not this plugin's review eval - the pin stays at
-  high until a medium-vs-high review run on Opus 5.5 is measured.
+  high until a medium-vs-high review run on Opus 5.5 is measured. The
+  per-task reviews and scoped re-reviews of a plan loop are the
+  exception: Superpowers SDD scales their model to the diff with a
+  mid-tier floor, so they go to `task-reviewer` (sonnet/high) rather than
+  to `reviewer` with `model=sonnet`, which undercuts its pin. Final, whole-branch, high-risk and
+  pre-PR review stays on `reviewer`.
 - **Tests / verification -> haiku.** Running a command and summarizing
   output is mechanical: `test-runner` stays at low effort, and the value
   is keeping raw output out of the main context, not the model doing it.
@@ -414,7 +419,8 @@ with `/model-routing:stats`.
   dispatch whose session model cannot be read is left unjudged rather than
   guessed at. When
   the cheap tier genuinely fits the work, pick an agent pinned for it
-  (`test-runner`, `verifier`) instead of overriding a role agent downward; the
+  (`test-runner`, `verifier`, `task-reviewer` for a sonnet-tier review)
+  instead of overriding a role agent downward; the
   dispatch report lists below-pin dispatches in their own section.
 - Against the session model, a pin is a ceiling. A pin says "this task never
   needs more than X"; the session model says what the user is willing to pay.

@@ -95,7 +95,8 @@ reason written down in `evals/forced-dispatch-tier/NOTES.md`.)
 | `agents/test-runner.md` | haiku | low | Run tests/builds/linters, report failures compactly. Never fixes anything. |
 | `agents/e2e-runner.md` | sonnet | medium | Drive Playwright/E2E scenarios, interpret failures (product bug vs test bug vs flake). |
 | `agents/implementer.md` | sonnet | medium | Implement one well-defined task from an approved plan. Verifies its own work. Dispatch with `model=opus` for multi-file/architectural/subtle work. |
-| `agents/reviewer.md` | opus | high | Review a diff for correctness bugs, ranked by severity. |
+| `agents/reviewer.md` | opus | high | Review a diff for correctness bugs, ranked by severity. Final/whole-branch, high-risk and pre-PR review. |
+| `agents/task-reviewer.md` | sonnet | high | Per-task reviews and scoped re-reviews inside a plan loop (Superpowers SDD), following the caller's review template. Flags diffs that need `reviewer` instead. |
 | `agents/verifier.md` | haiku | medium | Cheap gate on a subagent's diff: does it match the task (scope, completeness, obvious breakage)? Not a code review. |
 | `skills/model-routing/` | - | - | The routing table and delegation rules Claude follows when deciding where work goes. |
 | `hooks/routing-anchor.md` | - | - | Short routing anchor auto-injected at session start - zero config. |
@@ -199,6 +200,7 @@ flowchart LR
     C["'Implement tasks 1-3 from the plan'"] --> IM["implementer<br/>sonnet / medium"]
     D["'Refactor the payment pipeline'"] --> IMO["implementer<br/>model=opus / medium"]
     E["'Review the diff'"] --> RV["reviewer<br/>opus / high"]
+    G["'Review Task 2' (plan loop)"] --> TRV["task-reviewer<br/>sonnet / high"]
     F["'Design the architecture'"] --> MS["main session<br/>your strongest model"]
 ```
 
@@ -238,7 +240,7 @@ For local development: clone the repo and
 - Continuing a stuck agent uses `SendMessage` when the harness provides
   it; where it is absent the skill falls back to re-dispatching with the
   packaged state. Neither path is a hard requirement.
-- What "read-only" means here: scout, reviewer, verifier and test-runner
+- What "read-only" means here: scout, reviewer, task-reviewer, verifier and test-runner
   block the file-edit tools (`Edit`, `Write`, `NotebookEdit`) at the tool
   level via `disallowedTools`. `Bash` (needed to run tests and inspect
   repos) and MCP tools remain available and could in principle mutate
@@ -269,6 +271,7 @@ For local development: clone the repo and
    | "Run the tests" | `test-runner` | haiku / low |
    | "Implement tasks from the plan" | `implementer` | sonnet / medium (`model=opus` for complex work) |
    | "Review the diff" | `reviewer` | opus / high |
+   | Per-task review in a plan loop | `task-reviewer` | sonnet / high |
    | "Walk through the flow in the browser" | `e2e-runner` | sonnet / medium |
 
    The main session spends tokens only on planning, decisions, final
@@ -284,9 +287,10 @@ Works with any plan-driven process (superpowers or similar):
 2. Plan execution goes to `implementer` with a batch of related tasks
    per dispatch (one agent per batch, not per task - every fresh agent
    re-reads files from scratch).
-3. Verification: `test-runner` after each batch, `reviewer` on the
-   completed chunk, and for high-risk diffs a final review in the main
-   session.
+3. Verification: `test-runner` after each batch, `task-reviewer`
+   (sonnet) for the loop's per-task reviews and scoped re-reviews,
+   `reviewer` (opus) on the completed chunk or branch, and for high-risk
+   diffs a final review in the main session.
 
 ### "I don't want the expensive model"
 
@@ -316,7 +320,8 @@ let Claude route via the skill:
   work goes out with `model=opus`.
 - "Review the diff" - Claude dispatches `reviewer` (opus). For high-risk
   diffs, ask for review in the main session instead - one expensive pass
-  is cheaper than a missed bug.
+  is cheaper than a missed bug. Per-task reviews inside a plan loop go to
+  `task-reviewer` (sonnet).
 - "Walk through the checkout flow in the browser" - Claude dispatches
   `e2e-runner` (sonnet).
 
@@ -339,8 +344,9 @@ earns its cost (the knobs themselves:
 | --------- | ----- | ------ | -------------- | --------------- |
 | Exploration (`scout`) | sonnet | low | Finding and tracing code is retrieval, not reasoning - a cheap tier reports as well as a costly one, and the file volume stays in the subagent regardless. | The work is mechanical lookup; extra thinking buys nothing. |
 | Ordinary implementation (`implementer`) | sonnet | medium | Sonnet 5.5 pairs speed with intelligence at half the opus price ($2/$10 against $4/$20) - for work whose approach the plan already decided, the margin never changes the outcome. | The plan already decided the approach; the agent executes real logic, not design, and medium is where Sonnet 5.5's own guidance starts well-specified agentic coding. |
-| Complex implementation (`implementer` `model=opus`) | opus | medium (pinned) | Multi-file or cross-layer changes, security/money/migrations/concurrency/public contracts, or a retry after a weak sonnet result - a wrong approach is expensive, and Opus 5.5 is stronger again at 20% less than Opus 5 ($4/$20, cache reads 60% less), so escalate when in doubt. This holds on every session model, Fable included: Opus 5.5 is cheaper than Fable 5.1 on every token type. (Ambiguous tasks are not an escalation case: implementer stops on ambiguity by contract - clarify first.) | The `model=opus` dispatch changes the model only - the Agent tool has no effort param, so the pinned medium stays; the escalation buys the tier, not extra thinking. |
+| Complex implementation (`implementer` `model=opus`) | opus | medium (pinned) | Multi-file or cross-layer changes, security/money/migrations/concurrency/public contracts, or a retry after a weak sonnet result - a wrong approach is expensive, and Opus 5.5 is stronger again at 20% less than Opus 5 ($4/$20, cache reads 60% less). This holds on every session model, Fable included: Opus 5.5 is cheaper than Fable 5.1 on every token type. (Ambiguous tasks are not an escalation case: implementer stops on ambiguity by contract - clarify first.) | The `model=opus` dispatch changes the model only - the Agent tool has no effort param, so the pinned medium stays; the escalation buys the tier, not extra thinking. |
 | Code review (`reviewer`) | opus | high | Review is an asymmetric bet - one pass guards against a bug that costs far more if it ships, so it is the one place to prefer the top tier by default. | High: subtle correctness bugs hide from shallow reading. The case for `medium` grew with Opus 5.5 - its `medium` matches or exceeds Opus 5 at `high` on coding and it thinks more per turn at a given level, so the same pin costs more - but that is vendor evidence, not this plugin's own review eval; the pin stays high until a medium-vs-high review run on Opus 5.5 is measured. |
+| Per-task review in a plan loop (`task-reviewer`) | sonnet | high | Superpowers SDD scales the model of its per-task reviews and scoped re-reviews to the diff, with a mid-tier floor; a sonnet-pinned agent takes those seats instead of `reviewer` with `model=sonnet`, which undercuts its pin. Final, whole-branch, high-risk and pre-PR review stays on `reviewer`. | High: same correctness job as `reviewer`, on a smaller diff. |
 | Tests / builds (`test-runner`) | haiku | low | Running a command and summarizing output is mechanical; the value is keeping raw logs out of the main context, not the model doing it. | Low: no reasoning, just report. |
 | Diff sanity gate (`verifier`) | haiku | medium | Checking a diff matches its task (scope, completeness, obvious breakage) is a cheap spot-check, not a quality judgment. | Medium: completeness is the job, and at `low` Haiku 5.5 "is more likely to skip a search, stop early, or skip a check". |
 | E2E / failure interpretation (`e2e-runner`) | sonnet | medium | Driving a browser and telling a product bug from a flake needs some judgment, but not top-tier reasoning. | Medium: real interpretation, clear method. |
@@ -442,7 +448,7 @@ step up on evidence.
 | ------ | ------------ | ------------------------ |
 | low | Most efficient: significant token savings with some capability reduction. On the Opus 5 generation low/medium punch well above their weight. | Pins: `scout`, `test-runner` (on the cloud platforms `haiku` is Haiku 4.5, which has no effort knob, so there the haiku pins only document intent). |
 | medium | Balanced: real logic whose approach is already decided, at moderate savings. On Opus 5.5, Sonnet 5.5 and Haiku 5.5 this is the model's own default, so a pin at medium steps down only from a session running high or above. | Pins: `implementer`, `e2e-runner`, `surveyor`, `verifier`. Recommended session setting. |
-| high | Full capability - Claude Code's per-model default except on Opus 5.5, Sonnet 5.5 and Haiku 5.5 (medium) and Opus 4.7 (xhigh). Complex reasoning, subtle debugging, high-risk review. | Pin: `reviewer`. Main-session planning and final review. |
+| high | Full capability - Claude Code's per-model default except on Opus 5.5, Sonnet 5.5 and Haiku 5.5 (medium) and Opus 4.7 (xhigh). Complex reasoning, subtle debugging, high-risk review. | Pins: `reviewer`, `task-reviewer`. Main-session planning and final review. |
 | xhigh | Extended capability for long-horizon agentic/coding runs (multi-hour, token budgets in the millions). | Session-level or Workflow `effort` opt only - never an agent pin. |
 | max | Unconstrained token spend for frontier-grade problems; Anthropic notes diminishing returns and overthinking risk on routine work. | Not used by any pin - reach for it deliberately or not at all. |
 
