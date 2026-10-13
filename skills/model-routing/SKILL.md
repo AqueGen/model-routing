@@ -12,8 +12,8 @@ plugin).
 
 **Routing makes a dispatch cheaper; it does not make dispatching cheap.**
 A subagent starts empty, so everything it reads is a cache write, while
-the main session pays cache read - 12.5x less, 25x on Opus 5.5, 50x on
-Fable 5.1 and Mythos 5.1 - for context it already holds. That penalty is paid whether or not the tier is routed down, so the
+the main session pays cache read - 12.5x less, 25x on Opus 5.5 and
+Sonnet 5.5, 50x on Fable 5.1 and Mythos 5.1 - for context it already holds. That penalty is paid whether or not the tier is routed down, so the
 rules below only pay off on work that was going to be delegated anyway.
 On one wide-reading session, three runs: doing it inline cost $1.36 and
 delegating with the tier routed down $1.68, both measured; delegating at
@@ -42,8 +42,8 @@ which model, and how hard it thinks.
 
 The full ladder is `low / medium / high / xhigh / max`. What runs when
 nothing sets a level is Claude Code's per-model default: `high` on every
-model that supports effort, except `medium` on Opus 5.5 and Sonnet 5.5
-and `xhigh` on Opus 4.7. The API's own default can differ (it runs both
+model that supports effort, except `medium` on Opus 5.5, Sonnet 5.5 and
+Haiku 5.5 and `xhigh` on Opus 4.7. The API's own default can differ (it runs both
 Opus 4.7 and Sonnet 5.5 at `high`), but a session's effort is what Claude
 Code sends. Levels are saved per model under `modelSettings`, and a
 top-level `effortLevel` in the user settings file no longer reaches Opus
@@ -87,9 +87,11 @@ example use case for `low` is subagents.
   default. So `implementer` at `medium` still steps down from a session
   running `high` or above - a Fable 5.1 session at its default, say - and
   buys nothing on a session already at `medium`, which is now the Claude
-  Code default for both Opus 5.5 and Sonnet 5.5 sessions. The three haiku
-  agents are a separate case: Haiku 4.5 has no effort knob at all, so
-  their `low` pins document intent and cost nothing either way.
+  Code default for Opus 5.5, Sonnet 5.5 and Haiku 5.5 sessions. The three
+  haiku agents' pins are live on the Anthropic API, where `haiku` is
+  Haiku 5.5 with the full ladder. On Claude Platform on AWS, Bedrock,
+  Google Cloud and Foundry `haiku` is still Haiku 4.5, which has no effort
+  knob at all, so there the pins document intent and cost nothing.
 - **high** - genuinely hard reasoning: architecture, subtle debugging,
   high-risk final review, anything where a wrong approach is expensive
   to unwind.
@@ -143,15 +145,16 @@ carries no effort param:
 |------|-------|---------------|--------|
 | Planning, brainstorming, specs, docs, architecture | main session | strongest (user's /model choice) | high |
 | Codebase exploration ("where is X", "how does Y work") | subagent | `scout` (sonnet) | low |
-| Breadth sweeps: enumerate, list, trace a chain end to end | subagent | `surveyor` (haiku) | low |
+| Breadth sweeps: enumerate, list, trace a chain end to end | subagent | `surveyor` (haiku) | medium |
 | Implementing an approved plan/spec (ordinary: single-file, clear shape) | subagent | `implementer` (sonnet) | medium |
 | Complex implementation: multi-file refactor, subtle concurrency/security | subagent | `implementer` with `model=opus` | medium (pinned) |
 | Trivial mechanical tasks: renames, boilerplate, mirrored constants | subagent | sonnet | low |
 | Small interactive edits, quick fixes | main session | strongest | low |
-| Code review of implemented work | subagent | `reviewer` (opus) | high |
+| Per-task review and scoped re-review inside a plan loop (Superpowers SDD) | subagent | `task-reviewer` (sonnet) | high |
+| Final/whole-branch, high-risk or pre-PR review of implemented work | subagent | `reviewer` (opus) | high |
 | Final review of high-risk or large diffs | main session | strongest | high |
 | Run tests/builds/linters, report failures | subagent | `test-runner` (haiku) | low |
-| Sanity-check a subagent's diff against its task | subagent | `verifier` (haiku) | low |
+| Sanity-check a subagent's diff against its task | subagent | `verifier` (haiku) | medium |
 | Playwright/E2E scenarios, failure interpretation | subagent | `e2e-runner` (sonnet) | medium |
 | Fresh external context, knowledge-cutoff gap (new APIs, recent releases) | subagent | mid-tier agent with web access | medium |
 
@@ -189,29 +192,12 @@ actually earns its cost:
   Opus 5 was a step-change over Opus 4.8 at unchanged
   price, and Opus 5.5 is stronger again at 20% less ($4/$20, cache reads
   60% less), so the opus tier buys strictly more per dollar than when
-  this table was tuned - when in doubt between sonnet and opus for
-  implementation, take opus. That holds on every session model, Fable
+  this table was tuned. That holds on every session model, Fable
   included - see the fable-to-opus bullet below.
-- **Against Opus 5.5 the tier gap closed on cache reads and stayed open
-  everywhere else.** Opus 5.5 reads cache at $0.20/MTok and so does
-  Sonnet 5.5 (0.05x of $4 against the standard 0.1x of $2), so the tokens
-  a subagent re-reads turn by turn cost the same on either model - a
-  parity Opus 5.5 already had with Sonnet 5, not something Sonnet 5.5
-  introduced. What routing down still buys is half price on everything
-  else: $2 against $4 for the first read of a file, $2.50 against $5 to
-  cache it, $10 against $20 for output. Count the dollars, not the
-  tokens: cache reads are most of the VOLUME in an agentic loop while
-  writes and output usually carry most of the BILL, and the saving falls
-  as that stops being true. For identical token usage it is 50% with no
-  cache reads at all; the one profile measured here, the scout eval (74k
-  written, 451k re-read, 6k out), costs $0.3352 on sonnet against $0.5802
-  on opus, 42.2% off; at that same write-and-output mix it is about 30%
-  once cache reads reach 20 times the written-plus-output tokens; and on
-  a profile of 1k written, 1k out and 1M re-read it is about 5.6%, where
-  there is almost nothing left for the halved rates to halve. The share of the
-  bill decides, not an absolute token count. The parity is also specific to that pair: a
-  Fable 5.1 session reads at $0.25 and an Opus 5 one at $0.50, so against
-  those the cheaper tier still wins on every token type.
+- **Opus 5.5 to Sonnet 5.5 is a flat 50% off.** Both read cache at 0.05x
+  of their own input, so every token type halves: the scout eval profile
+  (74k written, 451k re-read, 6k out) costs $0.2901 on sonnet against
+  $0.5802 on opus, whatever the mix.
 - **Review -> opus/high.** Review is one cheap pass guarding against
   expensive misses - an asymmetric bet where the strongest reasoning at
   high effort is worth it, because a bug that ships costs far more than
@@ -220,11 +206,18 @@ actually earns its cost:
   Opus 5 at `high` on coding, and at `high` it thinks more per turn than Opus 5
   did, so the same pin now costs more. That is vendor evidence on
   model-level evals, not this plugin's review eval - the pin stays at
-  high until a medium-vs-high review run on Opus 5.5 is measured.
-- **Tests / verification -> haiku/low.** Running a command and
-  summarizing output, or checking a diff matches its task, is mechanical.
-  The cheapest tier at low effort suffices; the value is keeping raw
-  output out of the main context, not the model doing it.
+  high until a medium-vs-high review run on Opus 5.5 is measured. The
+  per-task reviews and scoped re-reviews of a plan loop are the
+  exception: Superpowers SDD scales their model to the diff with a
+  mid-tier floor, so they go to `task-reviewer` (sonnet/high) rather than
+  to `reviewer` with `model=sonnet`, which undercuts its pin. Final, whole-branch, high-risk and
+  pre-PR review stays on `reviewer`.
+- **Tests / verification -> haiku.** Running a command and summarizing
+  output is mechanical: `test-runner` stays at low effort, and the value
+  is keeping raw output out of the main context, not the model doing it.
+  `verifier` and `surveyor` pin `medium`, because the Haiku 5.5 docs say
+  at `low` it "is more likely to skip a search, stop early, or skip a
+  check" - the failure these two agents exist to prevent.
 - **Effort tracks task shape, not tier** (levels: the ladder above). A
   strong model at low effort beats a weak model at high effort for a
   fraction of the cost. On the Opus 5 generation this is amplified:
@@ -256,14 +249,16 @@ actually earns its cost:
   need. It does not replace the tier decision - dispatching that phase
   to sonnet is cheaper still. Sweep Workflow `effort` opts the same way.
 - **A refusal is a redirect, not a weak result.** Fable 5.1, Fable 5,
-  Opus 5.5, Opus 5 and Sonnet 5.5 ship safety classifiers that can
+  Opus 5.5, Opus 5, Sonnet 5.5 and Haiku 5.5 ship safety classifiers that can
   decline a request outright rather than answer it badly - Sonnet 5.5
   included, which makes it the most common dispatch this can happen to,
   while Haiku 4.5 and Sonnet 5 carry no documented categories. A declined dispatch is the one failure the
   escalation ladder below does not fix, and a step up no longer reliably
   clears it: Opus 5.5 runs cybersecurity and biology classifiers like
   Fable 5.1's, and both it and Sonnet 5.5 add a `reasoning_extraction`
-  category whose declines a fallback model does not retry at all. Which classifier
+  category whose declines a fallback model does not retry at all. Haiku
+  5.5 runs `cyber`, `bio`, `frontier_llm` and `general_harms` classifiers
+  with no server-side fallback. Which classifier
   fired is API-level and invisible from inside a dispatch, so do not
   re-dispatch a declined request on opus by reflex - hand it back to the
   main session to rephrase or drop.
@@ -279,7 +274,8 @@ Model names in agent pins are FAMILY aliases (opus, sonnet, haiku), not
 versions - on the Anthropic API the harness resolves them to the current
 model of each family, while the cloud platforms lag (`sonnet` is Sonnet
 4.6 on Claude Platform on AWS and Sonnet 4.5 on Bedrock, Google Cloud and
-Foundry, where the parity figures above do not hold at all) -
+Foundry, `haiku` is Haiku 4.5 on all four, and `opus` is Opus 4.6 on
+Foundry, where the 5.5 price figures above do not hold at all) -
 so a generation jump (Opus 5 -> Opus 5.5, then Sonnet 5 -> Sonnet 5.5 on
 2026-09-28) upgrades `reviewer`, every sonnet-pinned agent and every
 `model=opus` escalation automatically, with no plugin change. Prices,
@@ -320,8 +316,8 @@ with `/model-routing:stats`.
   input - is not breadth, and the cheap tier fails it in a way that looks
   confident: that is `scout` (sonnet). Both halves are measured in `evals/`,
   on one generated fixture at three runs each: on a twelve-stage tracing
-  question haiku answered correctly every run at a third of sonnet's price;
-  on a question whose code contains an obvious wrong answer, haiku took the
+  question Haiku 4.5 answered correctly every run at a third of sonnet's
+  price; on a question whose code contains an obvious wrong answer, it took the
   bait once in three runs while sonnet took it in none. Three runs on one
   fixture cannot pin a failure rate, and the reason to keep judgement on
   sonnet is not the rate but the asymmetry: a cheap right answer saves
@@ -423,7 +419,8 @@ with `/model-routing:stats`.
   dispatch whose session model cannot be read is left unjudged rather than
   guessed at. When
   the cheap tier genuinely fits the work, pick an agent pinned for it
-  (`test-runner`, `verifier`) instead of overriding a role agent downward; the
+  (`test-runner`, `verifier`, `task-reviewer` for a sonnet-tier review)
+  instead of overriding a role agent downward; the
   dispatch report lists below-pin dispatches in their own section.
 - Against the session model, a pin is a ceiling. A pin says "this task never
   needs more than X"; the session model says what the user is willing to pay.
@@ -454,7 +451,8 @@ with `/model-routing:stats`.
   rather than mid-task: a thinking block is bound to the model that
   wrote it, and the families no longer read each other's - Sonnet 5.5
   reads Sonnet 5, Opus 4.8 and Haiku 4.5 blocks but not Opus 5, Opus 5.5
-  or any Fable one, and no other model reads Sonnet 5.5's. The API drops what
+  or any Fable one, and no other model reads Sonnet 5.5's; Opus 5.5 and
+  Sonnet 5.5 both read Haiku 5.5's. The API drops what
   the new model cannot read, unbilled and without an error, so the turns
   after a switch run without the reasoning that led to them. A dispatch
   does not have this problem: a subagent starts empty either way.
@@ -472,8 +470,10 @@ what changes cost there.
   working the same task in conversation.
 - **Per-stage routing.** Every `agent()` call without `model`/`effort`
   opts inherits the session model at session effort, multiplied by the
-  fan-out. Mechanical finder stages get an explicit cheap model and
-  `effort: low`; a tier up only where the stage earns it. Precedence:
+  fan-out. Mechanical stages get an explicit cheap model and
+  `effort: low`; a haiku search stage that has to be complete gets
+  `medium`, for the same reason `surveyor` does; a tier up only where the
+  stage earns it. Precedence:
   the script opt wins, then a frontmatter pin, then the
   `CLAUDE_CODE_SUBAGENT_MODEL` env var, then the session model - unless
   `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set, which ignores the opt and

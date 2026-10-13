@@ -2,7 +2,7 @@
 name: verifier
 description: Cheap gate before accepting another agent's diff - does it match the task (scope, completeness, obvious breakage)? Returns PASS/FAIL with reasons. NOT a code review - it catches "did the wrong thing"; real reviews go to reviewer.
 model: haiku
-effort: low
+effort: medium
 disallowedTools: Edit, Write, NotebookEdit
 ---
 

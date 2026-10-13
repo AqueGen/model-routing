@@ -81,12 +81,13 @@ function sessionFilterFromArgs(argv) {
 // Keep in sync with agents/*.md; one sync test guards both columns.
 const AGENT_PINS = {
   "model-routing:scout": { model: "sonnet", effort: "low" },
-  "model-routing:surveyor": { model: "haiku", effort: "low" },
+  "model-routing:surveyor": { model: "haiku", effort: "medium" },
   "model-routing:test-runner": { model: "haiku", effort: "low" },
   "model-routing:e2e-runner": { model: "sonnet", effort: "medium" },
-  "model-routing:verifier": { model: "haiku", effort: "low" },
+  "model-routing:verifier": { model: "haiku", effort: "medium" },
   "model-routing:implementer": { model: "sonnet", effort: "medium" },
   "model-routing:reviewer": { model: "opus", effort: "high" },
+  "model-routing:task-reviewer": { model: "sonnet", effort: "high" },
 };
 // Model pins for OTHER plugins' agents, curated by hand from their frontmatter
 // the same way AGENT_PINS is - the difference is these files live outside this
@@ -190,21 +191,21 @@ const EFFORT_SUPPORT = [
   // mythos-5 rides with fable-5 here for the same reason it does in PRICES and
   // TIER_PATTERNS: same generation, same knobs. Leaving it out of this one table
   // was the only way the three could disagree, and it did.
-  [/fable-5|mythos-5|opus-5|sonnet-5|opus-4-8|opus-4-7/, ["low", "medium", "high", "xhigh", "max"]],
+  [/fable-5|mythos-5|opus-5|sonnet-5|haiku-5-5|opus-4-8|opus-4-7/, ["low", "medium", "high", "xhigh", "max"]],
   [/opus-4-6|sonnet-4-6/, ["low", "medium", "high", "max"]],
 ];
 const EFFORT_LADDER = ["low", "medium", "high", "xhigh", "max"];
 const effortLevelsFor = (m) => (m ? EFFORT_SUPPORT.find(([re]) => re.test(m))?.[1] ?? null : null);
 
 // Claude Code's own model default (Model configuration, "Adjust effort level"):
-// "Opus 5.5 and Sonnet 5.5 default to `medium`", Opus 4.7 to `xhigh`, `high` on
-// every other model that supports effort. This is Claude Code's default, not the
-// API's - the API runs both Opus 4.7 and Sonnet 5.5 at `high` - and a session's
-// effort is what Claude Code sends. No support, no default - an unlisted or
+// "`high` on every model that supports effort, except that Opus 5.5, Sonnet 5.5,
+// and Haiku 5.5 default to `medium`, Opus 4.7 defaults to `xhigh`". This is
+// Claude Code's default, not the API's - the API runs both Opus 4.7 and Sonnet
+// 5.5 at `high` - and a session's effort is what Claude Code sends. No support, no default - an unlisted or
 // unrecognized session model never receives a fabricated level.
 function defaultEffortFor(sessionModel) {
   if (!effortLevelsFor(sessionModel)) return null;
-  if (/opus-5-5|sonnet-5-5/.test(sessionModel)) return "medium";
+  if (/opus-5-5|sonnet-5-5|haiku-5-5/.test(sessionModel)) return "medium";
   if (/opus-4-7/.test(sessionModel)) return "xhigh";
   return "high";
 }
@@ -312,7 +313,13 @@ const shortModel = (m) => m ? m.replace(/^claude-/, "").replace(/-\d{8}$/, "") :
 // (Opus 4.1 bills at three times Opus 4.5) and a loose pattern would quietly
 // misprice a retired model. A model absent from this table is reported as
 // unpriced volume, never as zero.
-const PRICES_ASOF = "2026-09-29";
+const PRICES_ASOF = "2026-10-13";
+// A row's optional fourth element is the long-prompt card [inRate, outRate]:
+// "A request's prompt length counts all of its input tokens, including cache
+// reads and cache writes. Each request is priced on its own." Above
+// LONG_PROMPT tokens the request bills on that card; exactly LONG_PROMPT is
+// still the base card.
+const LONG_PROMPT = 100000;
 const PRICES = [
   // Retired families first: a looser pattern below must not claim them.
   [/opus-4-1-|opus-4-20/, () => [15, 75]],
@@ -325,19 +332,22 @@ const PRICES = [
   // Opus 5.5 cache reads at 0.05x ($0.20/MTok), ahead of the looser opus-5 row.
   [/opus-5-5/, () => [4, 20, 0.05]],
   [/opus-5|opus-4-8|opus-4-7|opus-4-6|opus-4-5/, () => [5, 25]],
+  // "Cache hits and refreshes on Claude Opus 5.5 and Claude Sonnet 5.5 are
+  // priced at 0.05x the base input price": $0.10/MTok, ahead of the sonnet-5 row.
+  [/sonnet-5-5/, () => [2, 10, 0.05]],
   // Permanent $2/$10: the scheduled increase to $3/$15 on 2026-09-01 was
-  // called off. Sonnet 5.5 rides this row - "the same prices as Claude Sonnet 5,
-  // including prompt caching and batch processing rates" - so its cache reads
-  // stay at the standard 0.1x, $0.20/MTok, the rate Opus 5.5 also charges.
+  // called off.
   [/sonnet-5/, () => [2, 10]],
   [/sonnet-4-6|sonnet-4-5|sonnet-4-20/, () => [3, 15]],
+  // $0.10/$0.50 up to LONG_PROMPT, $0.50/$2.50 above it.
+  [/haiku-5-5/, () => [0.1, 0.5, CACHE_READ, [0.5, 2.5]]],
   [/haiku-4-5/, () => [1, 5]],
 ];
 // Prompt-caching multipliers, quoted from the same page: a 5-minute cache write
-// costs 1.25x base input, a 1-hour write 2x. Cache reads are 0.1x base input
-// for every model except where the page states otherwise (Fable 5.1 and
-// Mythos 5.1 read at 0.025x, Opus 5.5 at 0.05x - the row's third element
-// overrides CACHE_READ).
+// costs 1.25x base input, a 1-hour write 2x, of whichever card the request bills
+// on. Cache reads are 0.1x base input for every model except where the page
+// states otherwise (Fable 5.1 and Mythos 5.1 read at 0.025x, Opus 5.5 and
+// Sonnet 5.5 at 0.05x - the row's third element overrides CACHE_READ).
 const CACHE_WRITE_5M = 1.25, CACHE_WRITE_1H = 2, CACHE_READ = 0.1;
 
 // Billable input volume: everything the model read, however it was cached.
@@ -346,17 +356,24 @@ const volOf = (v) => v.in + v.cr + v.cw5 + v.cw1h;
 
 // Dollars for one model's token counts, or null when the model is not on the
 // price table. `at` is kept as the hook for a future dated rate; no row on
-// the table uses it today.
+// the table uses it today. `v.long` holds the share of `v` that came from
+// requests above LONG_PROMPT; a row without a long card prices all of `v` on
+// its base card.
 function costOf(model, v, at) {
   const row = model ? PRICES.find(([re]) => re.test(model)) : null;
   if (!row) return null;
-  const [inRate, outRate, crMul = CACHE_READ] = row[1](at);
-  const perTok = inRate / 1e6;
-  return (v.in * perTok)
-    + (v.cw5 * perTok * CACHE_WRITE_5M)
-    + (v.cw1h * perTok * CACHE_WRITE_1H)
-    + (v.cr * perTok * crMul)
-    + (v.out * outRate / 1e6);
+  const [inRate, outRate, crMul = CACHE_READ, long] = row[1](at);
+  const card = (c, inR, outR) => {
+    const perTok = inR / 1e6;
+    return (c.in * perTok)
+      + (c.cw5 * perTok * CACHE_WRITE_5M)
+      + (c.cw1h * perTok * CACHE_WRITE_1H)
+      + (c.cr * perTok * crMul)
+      + (c.out * outR / 1e6);
+  };
+  if (!long || !v.long) return card(v, inRate, outRate);
+  const base = Object.fromEntries(Object.keys(v.long).map((k) => [k, v[k] - v.long[k]]));
+  return card(base, inRate, outRate) + card(v.long, ...long);
 }
 
 // Bounded fd reads, NOT readFileSync - these run inside the PostToolUse
@@ -629,7 +646,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
       `Effort: ${inherited.length} of ${withEffort.length} dispatches ran on an agent type carrying no EFFORT pin this plugin knows about, and so inherited the session level${byLevel ? ` (${byLevel})` : ""}. Only the bundled agents pin effort here - a foreign agent with a known model pin still counts as inheriting effort.`,
       `  The bundled agents pin theirs in frontmatter, so routing a mechanical errand through a role agent can buy a cheaper model tier and, where that model supports effort and the pinned level is lower than the one it would otherwise inherit, a lower effort too. An agent from anywhere else may pin its own effort, which is invisible here and counted as inherited.`,
       ...(inferred ? [`  ${inferred} of these levels are the documented model default rather than an observed setting.`] : []),
-      `  Source order is CLAUDE_CODE_EFFORT_LEVEL, then the level saved for the model in modelSettings or a settings effortLevel, then the model default (medium on Opus 5.5 and Sonnet 5.5, xhigh on Opus 4.7, high elsewhere). Four states can override that and none are visible here: a /effort or --effort choice inside a running session, ultracode, an organization effort cap, and a per-model maxEffortLevel cap.`,
+      `  Source order is CLAUDE_CODE_EFFORT_LEVEL, then the level saved for the model in modelSettings or a settings effortLevel, then the model default (medium on Opus 5.5, Sonnet 5.5 and Haiku 5.5, xhigh on Opus 4.7, high elsewhere). Four states can override that and none are visible here: a /effort or --effort choice inside a running session, ultracode, an organization effort cap, and a per-model maxEffortLevel cap.`,
     );
   }
   // Grouped sections instead of per-row v/- markers: the reader should not
@@ -747,7 +764,7 @@ if (process.argv[2] === "tokens") {
     // lines. Dedup happens BEFORE the window filter so a response whose lines
     // straddle a boundary counts in exactly one window, the one holding its
     // last line, rather than in both or neither.
-    const fileVols = new Map(); // model -> { in, out, cr, cw5, cw1h }
+    const fileVols = new Map(); // model -> { in, out, cr, cw5, cw1h, long: same shape }
     let text;
     try { text = readFileSync(p, "utf-8"); } catch { unreadablePaths.add(p); return fileVols; }
     const lastById = new Map(); // message.id -> [line's obj, its message]
@@ -768,9 +785,11 @@ if (process.argv[2] === "tokens") {
       if (Number.isFinite(lts)) {
         if (lts < win.start || lts >= win.end) continue;
       } else if (!mtimeInWindow) continue;
-      const v = fileVols.get(m.model) ?? { in: 0, out: 0, cr: 0, cw5: 0, cw1h: 0 };
-      v.in += u.input_tokens ?? 0; v.out += u.output_tokens ?? 0;
-      v.cr += u.cache_read_input_tokens ?? 0;
+      const zero = () => ({ in: 0, out: 0, cr: 0, cw5: 0, cw1h: 0 });
+      const v = fileVols.get(m.model) ?? { ...zero(), long: zero() };
+      const req = zero();
+      req.in = u.input_tokens ?? 0; req.out = u.output_tokens ?? 0;
+      req.cr = u.cache_read_input_tokens ?? 0;
       // Cache writes are split by TTL because they are priced differently
       // (1.25x base input at 5 minutes, 2x at an hour). Whatever the breakdown
       // does not account for - a line carrying only the flat total, or a TTL
@@ -781,8 +800,13 @@ if (process.argv[2] === "tokens") {
       const cc = u.cache_creation;
       const e5 = cc?.ephemeral_5m_input_tokens ?? 0;
       const e1h = cc?.ephemeral_1h_input_tokens ?? 0;
-      v.cw1h += e1h;
-      v.cw5 += e5 + Math.max(0, (u.cache_creation_input_tokens ?? 0) - e5 - e1h);
+      req.cw1h = e1h;
+      req.cw5 = e5 + Math.max(0, (u.cache_creation_input_tokens ?? 0) - e5 - e1h);
+      // One deduped line is one request, so this is where its rate card is
+      // decided. v keeps the totals; v.long repeats the long-prompt share.
+      for (const b of volOf(req) > LONG_PROMPT ? [v, v.long] : [v]) {
+        for (const k of Object.keys(req)) b[k] += req[k];
+      }
       fileVols.set(m.model, v);
     }
     return fileVols;
@@ -994,6 +1018,8 @@ if (process.argv[2] === "tokens") {
         // tracked separately: the two need different sentences, and reporting
         // both as "ran on an unpriced model" was false for the session-side case,
         // where the tokens ran on a perfectly priceable model.
+        // v.long was split with the tokenizer of the model that ran, so the
+        // inherited side's long-prompt share is an approximation.
         const ran = costOf(model, v, priceAt);
         const inherited = costOf(sessionModel, v, priceAt);
         if (ran == null) unpricedVol += vol;
