@@ -152,6 +152,7 @@ carries no effort param:
 | Small interactive edits, quick fixes | main session | strongest | low |
 | Per-task review and scoped re-review inside a plan loop (Superpowers SDD) | subagent | `task-reviewer` (sonnet) | high |
 | Final/whole-branch, high-risk or pre-PR review of implemented work | subagent | `reviewer` (opus) | high |
+| Deciding whether external review findings (bots, human reviewers) are real; the brief asks for a verdict per finding. `task-reviewer` findings inside a plan loop stay on the loop's own path | subagent | `reviewer` (opus); only confirmed findings go to `implementer` | high |
 | Final review of high-risk or large diffs | main session | strongest | high |
 | Run tests/builds/linters, report failures | subagent | `test-runner` (haiku) | low |
 | Sanity-check a subagent's diff against its task | subagent | `verifier` (haiku) | medium |
@@ -326,8 +327,12 @@ with `/model-routing:stats`.
   measured; it does not need to be, to be worth avoiding. Reach for the
   pinned agent rather than overriding `scout` downward - the floor rule
   below is not a formality.
-- Batch related plan tasks per subagent. Each subagent re-reads files from
-  scratch; one tiny task per agent costs more than it saves.
+- One plan task with its own verification step or acceptance criterion is one `implementer` dispatch; batch only small edits that touch the same files and share one check. Both are visible at dispatch time, unlike how long a run will take. Each subagent re-reads files from scratch, so ten one-line edits as ten agents cost more than one agent with ten edits. The other end costs more: every turn re-reads the agent's whole context, so a run's volume grows with turns times context. Over 30 days of one user's subagent transcripts (421 `implementer` runs: 232 on Opus 5.5, 180 on Sonnet 5.5, 9 on other models), the heaviest tenth processed 61% of implementer input volume and 60% of implementer cost at API list prices. Those runs took 118-777 turns, their context peaked at 285k-967k tokens, and 98% of their input was cache reads. A median Opus 5.5 run took 73 turns and peaked near 200k. Judged by task description, about half of the fifteen heaviest were multi-task batches or whole review-fix lists and the rest single plan tasks too big for one run. The saving from splitting is a prediction: each fresh agent pays the file re-read and a new cache write again.
+  - Review-fix lists: group findings by shared root cause or shared files, one group per agent. Never split one defect or invariant across agents.
+  - Run the agents of one change one at a time, or in parallel only when they touch disjoint files.
+  - Put the previous agent's "What was changed" list into the next agent's brief, so its decisions and naming carry over.
+  - A finished agent does not take the next task. SendMessage continues unfinished or stuck work only.
+  - A single plan task that needs hundreds of turns is a planning problem: split it in the plan before dispatching.
 - A text-only end of turn does not by itself mean the task is finished. On
   long multi-part work these models end a turn with a progress update
   rather than a tool call, and a caller that reads that as completion
@@ -384,8 +389,9 @@ with `/model-routing:stats`.
   for a main-session decision. A strong model advising a stuck subagent is
   cheaper than that subagent thrashing at the wrong approach. After
   deciding, continue the SAME agent (SendMessage, when the harness offers
-  it) with the direction - a fresh dispatch pays the full file re-read the
-  batching rule exists to avoid. When SendMessage is not available,
+  it) with the direction - a fresh dispatch would pay the file re-read again
+  and lose what the agent learned. This applies to unfinished work only: a
+  finished agent does not take the next task. When SendMessage is not available,
   re-dispatch with the packaged state (what was tried, why it failed, the
   chosen direction) so the new agent starts from the decision, not from
   zero.
