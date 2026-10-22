@@ -284,9 +284,10 @@ Works with any plan-driven process (superpowers or similar):
 1. Brainstorming and plan-writing stay in the main session on the
    strongest model - protecting this thinking is the point of the
    plugin.
-2. Plan execution goes to `implementer` with a batch of related tasks
-   per dispatch (one agent per batch, not per task - every fresh agent
-   re-reads files from scratch).
+2. Plan execution goes to `implementer`: small related tasks share one
+   dispatch (every fresh agent re-reads files from scratch), each
+   substantial task gets a fresh one (a long run re-reads its whole
+   growing context every turn).
 3. Verification: `test-runner` after each batch, `task-reviewer`
    (sonnet) for the loop's per-task reviews and scoped re-reviews,
    `reviewer` (opus) on the completed chunk or branch, and for high-risk
@@ -328,9 +329,11 @@ let Claude route via the skill:
 The routing rules live in the `model-routing` skill and activate when
 Claude decides where to send work. Two rules worth knowing:
 
-- **Batch tasks per subagent.** Each subagent re-reads files from scratch;
-  ten one-line tasks as ten agents costs more than one agent with ten
-  tasks.
+- **Batch small tasks, not big ones.** Each subagent re-reads files from
+  scratch, so ten one-line tasks as ten agents costs more than one agent
+  with ten tasks. A substantial task gets its own fresh agent: a long run
+  re-reads its whole growing context every turn, and the heaviest tenth of
+  implementer runs measured 61% of implementer volume.
 - **Repo policies win.** If your project says "never run integration
   tests", the runner respects it.
 

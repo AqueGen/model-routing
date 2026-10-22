@@ -152,6 +152,7 @@ carries no effort param:
 | Small interactive edits, quick fixes | main session | strongest | low |
 | Per-task review and scoped re-review inside a plan loop (Superpowers SDD) | subagent | `task-reviewer` (sonnet) | high |
 | Final/whole-branch, high-risk or pre-PR review of implemented work | subagent | `reviewer` (opus) | high |
+| Deciding whether review findings (bots, humans) are real | subagent | `reviewer` (opus); `implementer` fixes only the confirmed ones | high |
 | Final review of high-risk or large diffs | main session | strongest | high |
 | Run tests/builds/linters, report failures | subagent | `test-runner` (haiku) | low |
 | Sanity-check a subagent's diff against its task | subagent | `verifier` (haiku) | medium |
@@ -326,8 +327,18 @@ with `/model-routing:stats`.
   measured; it does not need to be, to be worth avoiding. Reach for the
   pinned agent rather than overriding `scout` downward - the floor rule
   below is not a formality.
-- Batch related plan tasks per subagent. Each subagent re-reads files from
-  scratch; one tiny task per agent costs more than it saves.
+- Batch only small related plan tasks per subagent. Each subagent re-reads
+  files from scratch, so one tiny task per agent costs more than it saves.
+  The other end costs more: every turn re-reads the agent's whole context,
+  so a run's volume grows with turns times context. Over 30 days of one
+  user's subagent transcripts (421 `implementer` runs), the heaviest tenth
+  processed 61% of all implementer volume - runs of 200-777 turns whose
+  context reached 500k-967k tokens. About half were multi-task batches or
+  whole review-fix lists, the rest single plan tasks too big for one run.
+  Give each substantial task its own fresh `implementer`, split a review-fix
+  list by area, and batch only tasks small enough that together they are
+  one task's worth of work. A single plan task that needs hundreds of turns
+  is a planning problem: split it in the plan before dispatching.
 - A text-only end of turn does not by itself mean the task is finished. On
   long multi-part work these models end a turn with a progress update
   rather than a tool call, and a caller that reads that as completion
