@@ -198,23 +198,26 @@ const EFFORT_LADDER = ["low", "medium", "high", "xhigh", "max"];
 const effortLevelsFor = (m) => (m ? EFFORT_SUPPORT.find(([re]) => re.test(m))?.[1] ?? null : null);
 
 // Claude Code's own model default (Model configuration, "Adjust effort level"):
-// "`high` on every model that supports effort, except that Opus 5.5, Sonnet 5.5,
-// and Haiku 5.5 default to `medium`, Opus 4.7 defaults to `xhigh`". This is
-// Claude Code's default, not the API's - the API runs both Opus 4.7 and Sonnet
-// 5.5 at `high` - and a session's effort is what Claude Code sends. No support, no default - an unlisted or
+// "Fable 5.2, Opus 5.5, Sonnet 5.5, and Haiku 5.5 default to `medium`, and Opus
+// 4.7 defaults to `xhigh`. Other models ... default to `high`". This is
+// Claude Code's default, not the API's - the API runs Opus 4.7, Sonnet 5.5 and
+// Fable 5.2 at `high` - and a session's effort is what Claude Code sends. No support, no default - an unlisted or
 // unrecognized session model never receives a fabricated level.
 function defaultEffortFor(sessionModel) {
   if (!effortLevelsFor(sessionModel)) return null;
-  if (/opus-5-5|sonnet-5-5|haiku-5-5/.test(sessionModel)) return "medium";
+  if (/fable-5-2(?!\d)|opus-5-5|sonnet-5-5|haiku-5-5/.test(sessionModel)) return "medium";
   if (/opus-4-7/.test(sessionModel)) return "xhigh";
   return "high";
 }
 
 // Models that ignore a top-level `effortLevel` in the USER settings file ("Opus
 // 5.5 and models released after it"); project, local and managed files still
-// apply it to every model. Sonnet 5.5 shipped after Opus 5.5, so that sentence
-// covers it too. Extend when a later model ships.
-const IGNORES_USER_EFFORT_LEVEL = /opus-5-5|sonnet-5-5/;
+// apply it to every model. Sonnet 5.5 and Fable 5.2 shipped after Opus 5.5, so
+// that sentence covers them too; the docs name Fable 5.1 among the models the
+// key still reaches. Mythos 5.2 stays out until its release order is
+// confirmed. `(?!\d)` keeps a dated Fable 5 id (fable-5-2026...) off the 5.2
+// rows here and in PRICES. Extend when a later model ships.
+const IGNORES_USER_EFFORT_LEVEL = /opus-5-5|sonnet-5-5|fable-5-2(?!\d)/;
 
 // `modelSettings` keys are canonical names ("claude-opus-5-5") that also match
 // the model's `[1m]` and date-suffixed ids.
@@ -313,7 +316,7 @@ const shortModel = (m) => m ? m.replace(/^claude-/, "").replace(/-\d{8}$/, "") :
 // (Opus 4.1 bills at three times Opus 4.5) and a loose pattern would quietly
 // misprice a retired model. A model absent from this table is reported as
 // unpriced volume, never as zero.
-const PRICES_ASOF = "2026-10-13";
+const PRICES_ASOF = "2026-11-12";
 // A row's optional fourth element is the long-prompt card [inRate, outRate]:
 // "A request's prompt length counts all of its input tokens, including cache
 // reads and cache writes. Each request is priced on its own." Above
@@ -326,7 +329,8 @@ const PRICES = [
   // Pre-4.x ids put the generation first (claude-3-5-haiku-...), so both orders
   // are matched; the row above needs the same trick for claude-opus-4-20250514.
   [/3-5-haiku|haiku-3-5/, () => [0.8, 4]],
-  // 5.1 cache reads at 0.025x base input, ahead of the looser 5.x row below.
+  // 5.2 and 5.1 cache reads at 0.025x base input, ahead of the looser 5.x row below.
+  [/(fable|mythos)-5-2(?!\d)/, () => [8, 40, 0.025]],
   [/fable-5-1|mythos-5-1/, () => [10, 50, 0.025]],
   [/fable-5|mythos-5/, () => [10, 50]],
   // Opus 5.5 cache reads at 0.05x ($0.20/MTok), ahead of the looser opus-5 row.
@@ -346,7 +350,7 @@ const PRICES = [
 // Prompt-caching multipliers, quoted from the same page: a 5-minute cache write
 // costs 1.25x base input, a 1-hour write 2x, of whichever card the request bills
 // on. Cache reads are 0.1x base input for every model except where the page
-// states otherwise (Fable 5.1 and Mythos 5.1 read at 0.025x, Opus 5.5 and
+// states otherwise (Fable and Mythos 5.2 and 5.1 read at 0.025x, Opus 5.5 and
 // Sonnet 5.5 at 0.05x - the row's third element overrides CACHE_READ).
 const CACHE_WRITE_5M = 1.25, CACHE_WRITE_1H = 2, CACHE_READ = 0.1;
 
@@ -646,7 +650,7 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
       `Effort: ${inherited.length} of ${withEffort.length} dispatches ran on an agent type carrying no EFFORT pin this plugin knows about, and so inherited the session level${byLevel ? ` (${byLevel})` : ""}. Only the bundled agents pin effort here - a foreign agent with a known model pin still counts as inheriting effort.`,
       `  The bundled agents pin theirs in frontmatter, so routing a mechanical errand through a role agent can buy a cheaper model tier and, where that model supports effort and the pinned level is lower than the one it would otherwise inherit, a lower effort too. An agent from anywhere else may pin its own effort, which is invisible here and counted as inherited.`,
       ...(inferred ? [`  ${inferred} of these levels are the documented model default rather than an observed setting.`] : []),
-      `  Source order is CLAUDE_CODE_EFFORT_LEVEL, then the level saved for the model in modelSettings or a settings effortLevel, then the model default (medium on Opus 5.5, Sonnet 5.5 and Haiku 5.5, xhigh on Opus 4.7, high elsewhere). Four states can override that and none are visible here: a /effort or --effort choice inside a running session, ultracode, an organization effort cap, and a per-model maxEffortLevel cap.`,
+      `  Source order is CLAUDE_CODE_EFFORT_LEVEL, then the level saved for the model in modelSettings or a settings effortLevel, then the model default (medium on Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5, xhigh on Opus 4.7, high elsewhere). Four states can override that and none are visible here: a /effort or --effort choice inside a running session, ultracode, an organization effort cap, and a per-model maxEffortLevel cap.`,
     );
   }
   // Grouped sections instead of per-row v/- markers: the reader should not
@@ -1287,11 +1291,11 @@ if (process.argv[2] === "tokens") {
         "This is a counterfactual, not a bill: on a subscription you pay none of it, and the difference is the same upper bound the volume chart is - it assumes every subagent would otherwise have inherited the session model, which pinned agents from other plugins would not.",
         "The difference is conservative for a documented reason. Models from Opus 4.7, Sonnet 5 and Fable 5 onward use a tokenizer producing about 30% more tokens for the same text than Sonnet 4.6 and earlier, so re-pricing a cheap model's token count at an expensive model's rate understates the inherited side, and with it the difference. It does not touch what actually ran.",
       ] : []),
-      "Two more modifiers understate every figure here. Cache writes whose transcript line names no TTL are charged at the cheapest write rate. And nothing in a usage line reveals whether fast mode (which doubles Opus 5.5, Opus 5 and Opus 4.8 rates) or US-only inference (1.1x on everything from 4.6) was in effect, so neither is applied.",
+      "Two more modifiers understate every figure here. Cache writes whose transcript line names no TTL are charged at the cheapest write rate. And nothing in a usage line reveals whether fast mode (which doubles Fable 5.2, Mythos 5.2, Opus 5.5, Opus 5 and Opus 4.8 rates) or US-only inference (1.1x on everything from 4.6) was in effect, so neither is applied.",
       "Rates are first-party Claude API list prices - Bedrock and Google Cloud bill separately and are not modelled. They are transcribed from the Anthropic pricing page on the date above and will drift; a window straddling a price change is priced wholly at the rates in effect at its end. Re-check PRICES in dispatch-counter.mjs before quoting a figure.",
     ] : []),
     "",
-    "Volume = tokens the subagent processed; cache reads are billed at the subagent's model rate, which is where routing usually saves. The tier share above does not know when it does not; the dollar rows do, and the By agent section names the model pairs where it did not.",
+    "Volume = tokens the subagent processed; cache reads are billed at the subagent's model rate, which is where routing saves when that rate is below the session's - not from Fable 5.2 to Opus 5.5 or Sonnet 5, which read cache at the same rate per token. The tier share above does not know when it does not; the dollar rows do, and the By agent section names the model pairs where it did not.",
     "Session model is the model of the assistant message that DISPATCHED the agent, matched through the toolUseId in the agent's sidecar - the same instant the dispatch report stamps, so a mid-session /model switch moves both reports together. Without a usable sidecar the model in effect at the agent's first timestamp is used, and failing that the head of the session transcript (or its tail, when the head names no model at all). A nested agent (spawned by another agent) is keyed to the model of that agent, which is the model it would inherit; the dispatch log keys it to the main session, so the two can differ for nested agents.",
   ];
   process.stdout.write(out.join("\n"));

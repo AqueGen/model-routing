@@ -1011,6 +1011,12 @@ test("an unset effortLevel records the documented model default", () => {
   const haiku55 = dispatchWithSettings({ sessionModel: "claude-haiku-5-5" });
   assert.equal(haiku55.effort, "medium");
   assert.equal(haiku55.effortFrom, "default");
+  // Fable 5.2 joins the medium group in Claude Code; Fable 5.1 stays at high.
+  const fable52 = dispatchWithSettings({ sessionModel: "claude-fable-5-2" });
+  assert.equal(fable52.effort, "medium");
+  assert.equal(fable52.effortFrom, "default");
+  const fable51 = dispatchWithSettings({ sessionModel: "claude-fable-5-1" });
+  assert.equal(fable51.effort, "high");
 });
 
 test("haiku-5.5 supports the full effort ladder, unlike haiku-4.5", () => {
@@ -1031,7 +1037,7 @@ test("the effort footer names the same per-model defaults the log records", () =
     const out = run(["report"], cfg);
     // The footer explains where a recorded level came from; a model missing
     // from it contradicts the level printed above it.
-    assert.match(out, /the model default \(medium on Opus 5\.5, Sonnet 5\.5 and Haiku 5\.5, xhigh on Opus 4\.7, high elsewhere\)/);
+    assert.match(out, /the model default \(medium on Fable 5\.2, Opus 5\.5, Sonnet 5\.5 and Haiku 5\.5, xhigh on Opus 4\.7, high elsewhere\)/);
     // The sentence above it promises what a pin buys; an unconditional claim
     // there is wrong for a haiku agent and for a session already at the pin.
     assert.match(out, /can buy a cheaper model tier and, where that model supports effort and the pinned level is lower than the one it would otherwise inherit, a lower effort too/);
@@ -1054,6 +1060,13 @@ test("a user-file top-level effortLevel reaches neither Opus 5.5 nor Sonnet 5.5,
   assert.equal(sonnet55.effortFrom, "default");
   const sonnet5 = dispatchWithSettings({ sessionModel: "claude-sonnet-5", settings: { user: { effortLevel: "low" } } });
   assert.equal(sonnet5.effort, "low");
+  // Fable 5.2 shipped after Opus 5.5; the docs name Fable 5.1 among the models
+  // the key still reaches.
+  const fable52 = dispatchWithSettings({ sessionModel: "claude-fable-5-2", settings: { user: { effortLevel: "high" } } });
+  assert.equal(fable52.effort, "medium");
+  assert.equal(fable52.effortFrom, "default");
+  const fable51 = dispatchWithSettings({ sessionModel: "claude-fable-5-1", settings: { user: { effortLevel: "low" } } });
+  assert.equal(fable51.effort, "low");
   // The exemption is the user file's top-level key only: a per-model entry in
   // the same file, and a project file, still decide Sonnet 5.5.
   const saved = dispatchWithSettings({
@@ -1169,7 +1182,7 @@ test("report separates inherited effort from pinned, and flags inferred levels",
     // must be the inherited subset - 1 here, not the 3 in the whole population.
     assert.match(out, /1 of these levels are the documented model default rather than an observed setting/);
     // The source order and the invisible-change limit are stated, not implied.
-    assert.match(out, /CLAUDE_CODE_EFFORT_LEVEL, then the level saved for the model in modelSettings or a settings effortLevel, then the model default \(medium on Opus 5\.5/);
+    assert.match(out, /CLAUDE_CODE_EFFORT_LEVEL, then the level saved for the model in modelSettings or a settings effortLevel, then the model default \(medium on Fable 5\.2, Opus 5\.5/);
     assert.match(out, /an agent from anywhere else may pin its own effort/i);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
@@ -1288,6 +1301,38 @@ test("opus-5.5 prices at $4/$20 with cache reads at 0.05x, not the opus-5 row", 
     const out = run(["tokens"], cfg);
     assert.match(out, /as it ran\s+\$37\.20/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("fable-5.2 prices at $8/$40 with cache reads at 0.025x, not the fable-5 row", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), usageLine("claude-opus-5-5", 1) + "\n");
+  // 1M input $8 + 1M cache read $0.20 + 1M 5m write $10 + 1M 1h write $16 + 1M output $40 = $74.20,
+  // plus Mythos 5.2's 1M cache read $0.20 = $74.40.
+  writeFileSync(join(dir, "agent-a.jsonl"),
+    costLine("claude-fable-5-2", { input: 1e6, cacheRead: 1e6, cw5: 1e6, cw1h: 1e6, out: 1e6 }) + "\n");
+  writeFileSync(join(dir, "agent-b.jsonl"), costLine("claude-mythos-5-2", { cacheRead: 1e6 }) + "\n");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /as it ran\s+\$74\.40/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("a dated fable-5 id is not mistaken for fable-5.2", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), usageLine("claude-opus-5-5", 1) + "\n");
+  // fable-5 row: 1M cache read x 0.1 x $10 = $1.00 each (the 5.2 row would give $0.20).
+  writeFileSync(join(dir, "agent-a.jsonl"), costLine("claude-fable-5-20260415", { cacheRead: 1e6 }) + "\n");
+  writeFileSync(join(dir, "agent-b.jsonl"), costLine("claude-mythos-5-20260415", { cacheRead: 1e6 }) + "\n");
+  try {
+    assert.match(run(["tokens"], cfg), /as it ran\s+\$2\.00/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+  const dated = dispatchWithSettings({ sessionModel: "claude-fable-5-20260415", settings: { user: { effortLevel: "low" } } });
+  assert.equal(dated.effort, "low");
+  assert.equal(dispatchWithSettings({ sessionModel: "claude-fable-5-20260415" }).effort, "high");
 });
 
 // Haiku 5.5 bills each request on the $0.10/$0.50 card up to 100K prompt tokens
@@ -1670,6 +1715,24 @@ test("a bare Explore capped at opus under Fable is bare inheritance, not a routi
   try {
     const out = run(["tokens"], cfg);
     assert.match(out, /Inherited the session model bare: 4k \(67% of the volume seen here\) - Explore 4k\./);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("from a fable-5.2 session, opus-5 cache reads are named and opus-5.5 ones are not", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-fable-5-2"}\n');
+  // 10M cache reads: opus-5 at 0.1x of $5 = $5.00 vs fable-5.2 at 0.025x of $8 = $2.00;
+  // opus-5.5 at 0.05x of $4 = $2.00 ties the session and is not named.
+  writeFileSync(join(dir, "agent-a.jsonl"), costLine("claude-opus-5", { cacheRead: 10e6 }) + "\n");
+  metaFor(dir, "a", "model-routing:implementer", "opus");
+  writeFileSync(join(dir, "agent-b.jsonl"), costLine("claude-opus-5-5", { cacheRead: 10e6 }) + "\n");
+  metaFor(dir, "b", "model-routing:reviewer");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /model-routing:implementer on opus-5 from fable-5-2 \$5\.00 vs \$2\.00/);
+    assert.doesNotMatch(out, /on opus-5-5 from fable-5-2/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
