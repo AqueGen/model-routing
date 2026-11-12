@@ -235,7 +235,7 @@ actually earns its cost:
   ($8/$40 vs $4/$20; 2.5x for Fable 5.1 at $10/$50). Cache reads cost the
   same on Fable 5.2 and Opus 5.5 ($0.20/MTok), so a cache-heavy subagent
   saves little by stepping from fable to opus - the saving is in fresh
-  input and output; Fable 5.1 reads at $0.25. `/model-routing:stats` names any agent
+  input, cache writes and output; Fable 5.1 reads at $0.25. `/model-routing:stats` names any agent
   and model pair that ran below the session tier yet priced above it -
   the evidence to revisit this on if a later model moves the rates.
   Where the inflation does bite is any comparison against a Sonnet

@@ -1308,7 +1308,8 @@ test("fable-5.2 prices at $8/$40 with cache reads at 0.025x, not the fable-5 row
   const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), usageLine("claude-opus-5-5", 1) + "\n");
-  // 1M input $8 + 1M cache read $0.20 + 1M 5m write $10 + 1M 1h write $16 + 1M output $40 = $74.20
+  // 1M input $8 + 1M cache read $0.20 + 1M 5m write $10 + 1M 1h write $16 + 1M output $40 = $74.20,
+  // plus Mythos 5.2's 1M cache read $0.20 = $74.40.
   writeFileSync(join(dir, "agent-a.jsonl"),
     costLine("claude-fable-5-2", { input: 1e6, cacheRead: 1e6, cw5: 1e6, cw1h: 1e6, out: 1e6 }) + "\n");
   writeFileSync(join(dir, "agent-b.jsonl"), costLine("claude-mythos-5-2", { cacheRead: 1e6 }) + "\n");
@@ -1323,10 +1324,11 @@ test("a dated fable-5 id is not mistaken for fable-5.2", () => {
   const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), usageLine("claude-opus-5-5", 1) + "\n");
-  // fable-5 row: 1M cache read x 0.1 x $10 = $1.00 (the 5.2 row would give $0.20).
+  // fable-5 row: 1M cache read x 0.1 x $10 = $1.00 each (the 5.2 row would give $0.20).
   writeFileSync(join(dir, "agent-a.jsonl"), costLine("claude-fable-5-20260415", { cacheRead: 1e6 }) + "\n");
+  writeFileSync(join(dir, "agent-b.jsonl"), costLine("claude-mythos-5-20260415", { cacheRead: 1e6 }) + "\n");
   try {
-    assert.match(run(["tokens"], cfg), /as it ran\s+\$1\.00/);
+    assert.match(run(["tokens"], cfg), /as it ran\s+\$2\.00/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
   const dated = dispatchWithSettings({ sessionModel: "claude-fable-5-20260415", settings: { user: { effortLevel: "low" } } });
   assert.equal(dated.effort, "low");
@@ -1713,6 +1715,24 @@ test("a bare Explore capped at opus under Fable is bare inheritance, not a routi
   try {
     const out = run(["tokens"], cfg);
     assert.match(out, /Inherited the session model bare: 4k \(67% of the volume seen here\) - Explore 4k\./);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("from a fable-5.2 session, opus-5 cache reads are named and opus-5.5 ones are not", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), '{"model":"claude-fable-5-2"}\n');
+  // 10M cache reads: opus-5 at 0.1x of $5 = $5.00 vs fable-5.2 at 0.025x of $8 = $2.00;
+  // opus-5.5 at 0.05x of $4 = $2.00 ties the session and is not named.
+  writeFileSync(join(dir, "agent-a.jsonl"), costLine("claude-opus-5", { cacheRead: 10e6 }) + "\n");
+  metaFor(dir, "a", "model-routing:implementer", "opus");
+  writeFileSync(join(dir, "agent-b.jsonl"), costLine("claude-opus-5-5", { cacheRead: 10e6 }) + "\n");
+  metaFor(dir, "b", "model-routing:reviewer");
+  try {
+    const out = run(["tokens"], cfg);
+    assert.match(out, /model-routing:implementer on opus-5 from fable-5-2 \$5\.00 vs \$2\.00/);
+    assert.doesNotMatch(out, /on opus-5-5 from fable-5-2/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
