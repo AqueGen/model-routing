@@ -257,7 +257,7 @@ For local development: clone the repo and
    plan offers). The plugin never changes it - the main session is where
    planning and decisions happen, so give it the strongest tier you are
    willing to pay for. Session effort: left unset, you get Claude Code's
-   per-model default - medium on Opus 5.5, Sonnet 5.5 and Haiku 5.5, xhigh on Opus 4.7, high on every
+   per-model default - medium on Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5, xhigh on Opus 4.7, high on every
    other model that has the knob, and some models have no effort knob at all
    (see [the effort ladder](#model-tiers-and-effort-ladder));
    dropping the session to medium is the cost-conscious pick when the main
@@ -393,7 +393,7 @@ exact numbers live on
 
 | Family | Cost vs opus | Role in this plugin |
 | ------ | ------------ | ------------------- |
-| fable | 2.5x | Frontier reasoning. A main-session choice for all-hard-reasoning days (architecture, subtle debugging hunts) - not a dispatch target. |
+| fable | 2x (Fable 5.2, $8/$40; cache reads $0.20/MTok, the same as Opus 5.5) | Frontier reasoning. A main-session choice for all-hard-reasoning days (architecture, subtle debugging hunts) - not a dispatch target. |
 | opus | 1x | The escalation tier: code review, multi-file/cross-layer implementation, security/money/concurrency-sensitive changes. Opus 5 made this tier a step stronger at the same price; Opus 5.5 stronger again at a lower one ($4/$20). |
 | sonnet | 0.5x (permanent $2/$10) | The workhorse: ordinary implementation from an approved plan, exploration, E2E driving. Sonnet 5.5 is the best speed-intelligence combination on offer, at half of Opus 5.5 on every token type, cache reads included ($0.10 against $0.20/MTok). |
 | haiku | 0.025x (Haiku 5.5, prompts up to 100K tokens; 0.125x above), 0.25x (Haiku 4.5) | Mechanical grind: test/build runs, diff sanity checks, trivial sweeps. |
@@ -416,14 +416,14 @@ work - a session-model choice, not a dispatch target.
 
 The effort ladder - the second knob. Unset effort means Claude Code's
 per-model default: `high` on every model that supports effort, except
-`medium` on Opus 5.5, Sonnet 5.5 and Haiku 5.5 and `xhigh` on Opus 4.7 - a recommendation is
+`medium` on Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5 and `xhigh` on Opus 4.7 - a recommendation is
 a value you pass, and on Opus 4.7 that recommendation IS what runs when
 you pass nothing; Opus 4.8 still defaults to `high`. Levels are saved
 per model under `modelSettings`, and a top-level `effortLevel` in the
 user settings file no longer reaches Opus 5.5 or anything released after
-it, Sonnet 5.5 included. Support
+it, Sonnet 5.5 and Fable 5.2 included. Support
 itself is an explicit list rather than a
-version cutoff: Fable 5, Mythos 5, Opus 5 and Sonnet 5 with their 5.5 successors, Haiku 5.5, Opus 4.8 and Opus 4.7
+version cutoff: Fable 5 through 5.2, Mythos 5 through 5.2, Opus 5 and Sonnet 5 with their 5.5 successors, Haiku 5.5, Opus 4.8 and Opus 4.7
 take the whole ladder, Opus 4.6 and Sonnet 4.6 take everything but `xhigh`, and a
 model absent from that list - Haiku 4.5 among them, still what `haiku`
 resolves to on the cloud platforms - has no effort knob at all. Setting a level a model does not support runs the highest supported
@@ -443,8 +443,8 @@ step up on evidence.
 | Effort | What it buys | Where the plugin uses it |
 | ------ | ------------ | ------------------------ |
 | low | Most efficient: significant token savings with some capability reduction. On the Opus 5 generation low/medium punch well above their weight. | Pins: `scout`, `test-runner` (on the cloud platforms `haiku` is Haiku 4.5, which has no effort knob, so there the haiku pins only document intent). |
-| medium | Balanced: real logic whose approach is already decided, at moderate savings. On Opus 5.5, Sonnet 5.5 and Haiku 5.5 this is the model's own default, so a pin at medium steps down only from a session running high or above. | Pins: `implementer`, `e2e-runner`, `surveyor`, `verifier`. Recommended session setting. |
-| high | Full capability - Claude Code's per-model default except on Opus 5.5, Sonnet 5.5 and Haiku 5.5 (medium) and Opus 4.7 (xhigh). Complex reasoning, subtle debugging, high-risk review. | Pins: `reviewer`, `task-reviewer`. Main-session planning and final review. |
+| medium | Balanced: real logic whose approach is already decided, at moderate savings. On Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5 this is the model's own default, so a pin at medium steps down only from a session running high or above. | Pins: `implementer`, `e2e-runner`, `surveyor`, `verifier`. Recommended session setting. |
+| high | Full capability - Claude Code's per-model default except on Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5 (medium) and Opus 4.7 (xhigh). Complex reasoning, subtle debugging, high-risk review. | Pins: `reviewer`, `task-reviewer`. Main-session planning and final review. |
 | xhigh | Extended capability for long-horizon agentic/coding runs (multi-hour, token budgets in the millions). | Session-level or Workflow `effort` opt only - never an agent pin. |
 | max | Unconstrained token spend for frontier-grade problems; Anthropic notes diminishing returns and overthinking risk on routine work. | Not used by any pin - reach for it deliberately or not at all. |
 
