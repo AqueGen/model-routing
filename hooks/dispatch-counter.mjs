@@ -200,12 +200,12 @@ const effortLevelsFor = (m) => (m ? EFFORT_SUPPORT.find(([re]) => re.test(m))?.[
 // Claude Code's own model default (Model configuration, "Adjust effort level"):
 // "Fable 5.2, Opus 5.5, Sonnet 5.5, and Haiku 5.5 default to `medium`, and Opus
 // 4.7 defaults to `xhigh`. Other models ... default to `high`". This is
-// Claude Code's default, not the API's - the API runs both Opus 4.7 and Sonnet
-// 5.5 at `high` - and a session's effort is what Claude Code sends. No support, no default - an unlisted or
+// Claude Code's default, not the API's - the API runs Opus 4.7, Sonnet 5.5 and
+// Fable 5.2 at `high` - and a session's effort is what Claude Code sends. No support, no default - an unlisted or
 // unrecognized session model never receives a fabricated level.
 function defaultEffortFor(sessionModel) {
   if (!effortLevelsFor(sessionModel)) return null;
-  if (/fable-5-2|opus-5-5|sonnet-5-5|haiku-5-5/.test(sessionModel)) return "medium";
+  if (/fable-5-2(?!\d)|opus-5-5|sonnet-5-5|haiku-5-5/.test(sessionModel)) return "medium";
   if (/opus-4-7/.test(sessionModel)) return "xhigh";
   return "high";
 }
@@ -214,8 +214,10 @@ function defaultEffortFor(sessionModel) {
 // 5.5 and models released after it"); project, local and managed files still
 // apply it to every model. Sonnet 5.5 and Fable 5.2 shipped after Opus 5.5, so
 // that sentence covers them too; the docs name Fable 5.1 among the models the
-// key still reaches. Extend when a later model ships.
-const IGNORES_USER_EFFORT_LEVEL = /opus-5-5|sonnet-5-5|fable-5-2/;
+// key still reaches. Mythos 5.2 stays out until its release order is
+// confirmed. `(?!\d)` keeps a dated Fable 5 id (fable-5-2026...) off the 5.2
+// rows here and in PRICES. Extend when a later model ships.
+const IGNORES_USER_EFFORT_LEVEL = /opus-5-5|sonnet-5-5|fable-5-2(?!\d)/;
 
 // `modelSettings` keys are canonical names ("claude-opus-5-5") that also match
 // the model's `[1m]` and date-suffixed ids.
@@ -328,7 +330,7 @@ const PRICES = [
   // are matched; the row above needs the same trick for claude-opus-4-20250514.
   [/3-5-haiku|haiku-3-5/, () => [0.8, 4]],
   // 5.2 and 5.1 cache reads at 0.025x base input, ahead of the looser 5.x row below.
-  [/fable-5-2|mythos-5-2/, () => [8, 40, 0.025]],
+  [/(fable|mythos)-5-2(?!\d)/, () => [8, 40, 0.025]],
   [/fable-5-1|mythos-5-1/, () => [10, 50, 0.025]],
   [/fable-5|mythos-5/, () => [10, 50]],
   // Opus 5.5 cache reads at 0.05x ($0.20/MTok), ahead of the looser opus-5 row.

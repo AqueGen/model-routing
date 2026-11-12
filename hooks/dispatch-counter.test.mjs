@@ -1318,6 +1318,21 @@ test("fable-5.2 prices at $8/$40 with cache reads at 0.025x, not the fable-5 row
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
+test("a dated fable-5 id is not mistaken for fable-5.2", () => {
+  const cfg = freshConfigDir();
+  const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(cfg, "projects", "proj", "sess-1.jsonl"), usageLine("claude-opus-5-5", 1) + "\n");
+  // fable-5 row: 1M cache read x 0.1 x $10 = $1.00 (the 5.2 row would give $0.20).
+  writeFileSync(join(dir, "agent-a.jsonl"), costLine("claude-fable-5-20260415", { cacheRead: 1e6 }) + "\n");
+  try {
+    assert.match(run(["tokens"], cfg), /as it ran\s+\$1\.00/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+  const dated = dispatchWithSettings({ sessionModel: "claude-fable-5-20260415", settings: { user: { effortLevel: "low" } } });
+  assert.equal(dated.effort, "low");
+  assert.equal(dispatchWithSettings({ sessionModel: "claude-fable-5-20260415" }).effort, "high");
+});
+
 // Haiku 5.5 bills each request on the $0.10/$0.50 card up to 100K prompt tokens
 // and on $0.50/$2.50 above. 100 identical lines with no message.id are 100
 // requests, which lifts per-request cents to a figure the report prints exactly.
