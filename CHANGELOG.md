@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.8](https://github.com/AqueGen/model-routing/compare/v0.16.7...v0.16.8) (2026-11-12)
+
+
+### Bug Fixes
+
+* one plan task per implementer, batches only for small same-file edits, and reviewer triage for external findings ([#60](https://github.com/AqueGen/model-routing/issues/60)) ([66c640c](https://github.com/AqueGen/model-routing/commit/66c640c5c2fdb4cf1245c1019298d1b1487f2a4b))
+* price Fable 5.2 and give it Claude Code's medium effort default ([#62](https://github.com/AqueGen/model-routing/issues/62)) ([f2f49e4](https://github.com/AqueGen/model-routing/commit/f2f49e402bb740e38d3510a1b05b58adce24264c))
+
 ## [0.16.7](https://github.com/AqueGen/model-routing/compare/v0.16.6...v0.16.7) (2026-10-13)
 
 
