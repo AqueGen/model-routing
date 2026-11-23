@@ -1,0 +1,137 @@
+{
+  "model": "sonnet",
+  "runs": 3,
+  "arms": [
+    "with"
+  ],
+  "pluginRoot": "G:\\claude\\worktrees\\model-routing\\pr63-baseline",
+  "cases": [
+    {
+      "name": "reviewer-seeded-bugs",
+      "arms": {
+        "with": [
+          {
+            "exitCode": 0,
+            "costUsd": 0.1529536,
+            "durationMs": 16685,
+            "turns": 5,
+            "modelUsage": {
+              "claude-haiku-5-5": {
+                "costUSD": 0.0001338,
+                "inputTokens": 1248,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "outputTokens": 18
+              },
+              "claude-opus-5-5": {
+                "costUSD": 0.1528198,
+                "inputTokens": 8,
+                "cacheReadInputTokens": 148839,
+                "cacheCreationInputTokens": 11240,
+                "outputTokens": 1655
+              }
+            },
+            "scores": [
+              {
+                "grader": "missing-await-on-mkdir",
+                "pass": true
+              },
+              {
+                "grader": "off-by-one-skips-last-invoice",
+                "pass": true
+              },
+              {
+                "grader": "percent-discount-rounds-up",
+                "pass": true
+              },
+              {
+                "grader": "tax-computed-after-discount",
+                "pass": true
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 0.1558795,
+            "durationMs": 18090,
+            "turns": 5,
+            "modelUsage": {
+              "claude-haiku-5-5": {
+                "costUSD": 0.0001333,
+                "inputTokens": 1248,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "outputTokens": 17
+              },
+              "claude-opus-5-5": {
+                "costUSD": 0.1557462,
+                "inputTokens": 8,
+                "cacheReadInputTokens": 148791,
+                "cacheCreationInputTokens": 11352,
+                "outputTokens": 1757
+              }
+            },
+            "scores": [
+              {
+                "grader": "missing-await-on-mkdir",
+                "pass": true
+              },
+              {
+                "grader": "off-by-one-skips-last-invoice",
+                "pass": true
+              },
+              {
+                "grader": "percent-discount-rounds-up",
+                "pass": true
+              },
+              {
+                "grader": "tax-computed-after-discount",
+                "pass": true
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 0.1406704,
+            "durationMs": 16143,
+            "turns": 3,
+            "modelUsage": {
+              "claude-haiku-5-5": {
+                "costUSD": 0.0001338,
+                "inputTokens": 1248,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "outputTokens": 18
+              },
+              "claude-opus-5-5": {
+                "costUSD": 0.14053659999999998,
+                "inputTokens": 6,
+                "cacheReadInputTokens": 107463,
+                "cacheCreationInputTokens": 11010,
+                "outputTokens": 1547
+              }
+            },
+            "scores": [
+              {
+                "grader": "missing-await-on-mkdir",
+                "pass": true
+              },
+              {
+                "grader": "off-by-one-skips-last-invoice",
+                "pass": true
+              },
+              {
+                "grader": "percent-discount-rounds-up",
+                "pass": true
+              },
+              {
+                "grader": "tax-computed-after-discount",
+                "pass": true
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

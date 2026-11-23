@@ -142,6 +142,7 @@ async function runOnce(kase, arm, timeoutMs) {
         kase.frontmatter.append_system_prompt,
         toList(kase.frontmatter.tools),
         kase.frontmatter.agent,
+        toList(kase.frontmatter.allowed_tools),
       ),
     );
   }
@@ -227,7 +228,7 @@ function mergeModelUsage(all) {
   return merged;
 }
 
-async function runTurn(prompt, arm, workspace, timeoutMs, isFollowup, appendSystemPrompt, tools, agent) {
+async function runTurn(prompt, arm, workspace, timeoutMs, isFollowup, appendSystemPrompt, tools, agent, allowedTools) {
   const argv = [
     "-p",
     prompt,
@@ -260,6 +261,7 @@ async function runTurn(prompt, arm, workspace, timeoutMs, isFollowup, appendSyst
     "",
     "--permission-mode",
     "dontAsk",
+    ...(allowedTools ? ["--allowedTools", ...allowedTools] : []),
     // `--model` outranks an agent's frontmatter pin, so a case that runs AS an
     // agent must not be handed the default or it silently measures the wrong
     // tier. Pass one only when the caller asked for it by name.

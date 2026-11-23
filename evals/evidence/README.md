@@ -20,6 +20,12 @@ trust.
 | `small-case-opus55-baseline.json` | the same case and CLI, no-plugin arm: 2/2 stayed in the main session, 2/2 correct, $0.099 per run |
 | `wide-case-opus55-no-nudge-anchor.json` | `traces-a-flow-end-to-end` on Opus 5.5, Claude Code 2.1.330, with the 2021-byte 0.17 anchor, plugin arm: 2/2 stayed in the main session, 2/2 correct, $2.119 per run |
 | `wide-case-opus55-baseline.json` | the same case and CLI; its no-plugin arm is the $2.094 baseline (2/2 inline, 2/2 correct). Its plugin arm ran while the 0.17 anchor was still being edited - use the file above for that arm |
+| `implementer-multi-sonnet.json` | `implementer-multi-file`, 0.17 implementer (sonnet/medium, context cap), Claude Code 2.1.330: 3/3 hidden tests, $0.239 / $0.190 / $0.198 |
+| `implementer-multi-opus.json` | the same case with `--model opus`, PR #63 checkout: 3/3 hidden tests, $0.457 / $0.458 / $0.421 |
+| `implementer-single-sonnet-capped.json` | `implementer-single-file`, 0.17 implementer: 3/3 hidden tests, $0.110 mean |
+| `implementer-single-sonnet-uncapped.json` | the same case, PR #63 checkout (no context cap): 3/3 hidden tests, $0.106 mean |
+| `reviewer-opus55-medium.json` | `reviewer-seeded-bugs`, 0.17 reviewer (opus/medium): 12/12 bugs, $0.376 (cold cache) / $0.157 / $0.162 |
+| `reviewer-opus55-high.json` | the same case, PR #63 checkout (opus/high): 12/12 bugs, $0.153 / $0.156 / $0.141 |
 | `plugin-details.txt` | the always-on token cost, with the Claude Code version that produced it |
 
 Each aggregate carries per-run cost, per-model usage, and every grader verdict,

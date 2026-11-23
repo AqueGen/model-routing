@@ -3,6 +3,7 @@ name: implementer-multi-file
 tags: [implementer, quality, cost]
 fixture: ledger
 agent: model-routing:implementer
+allowed_tools: [Read, Edit, Write, Glob, Grep, "Bash(node:*)", "Bash(npm:*)"]
 runs: 3
 max_turns: 50
 timeout_seconds: 900

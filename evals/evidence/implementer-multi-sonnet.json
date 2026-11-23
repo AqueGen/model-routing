@@ -1,0 +1,113 @@
+{
+  "model": "sonnet",
+  "runs": 3,
+  "arms": [
+    "with"
+  ],
+  "pluginRoot": "E:\\ClaudeCodePlugins\\model-routing",
+  "cases": [
+    {
+      "name": "implementer-multi-file",
+      "arms": {
+        "with": [
+          {
+            "exitCode": 0,
+            "costUsd": 0.2392397,
+            "durationMs": 54719,
+            "turns": 30,
+            "modelUsage": {
+              "claude-haiku-5-5": {
+                "costUSD": 0.0001722,
+                "inputTokens": 1622,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "outputTokens": 20
+              },
+              "claude-sonnet-5-5": {
+                "costUSD": 0.23906750000000002,
+                "inputTokens": 14,
+                "cacheReadInputTokens": 309215,
+                "cacheCreationInputTokens": 26087,
+                "outputTokens": 10377
+              }
+            },
+            "scores": [
+              {
+                "grader": "hidden-tests-pass",
+                "pass": true
+              },
+              {
+                "grader": "visible-tests-pass",
+                "pass": true
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 0.1896315,
+            "durationMs": 42366,
+            "turns": 31,
+            "modelUsage": {
+              "claude-haiku-5-5": {
+                "costUSD": 0.0001722,
+                "inputTokens": 1622,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "outputTokens": 20
+              },
+              "claude-sonnet-5-5": {
+                "costUSD": 0.1894593,
+                "inputTokens": 14,
+                "cacheReadInputTokens": 291873,
+                "cacheCreationInputTokens": 20611,
+                "outputTokens": 7780
+              }
+            },
+            "scores": [
+              {
+                "grader": "hidden-tests-pass",
+                "pass": true
+              },
+              {
+                "grader": "visible-tests-pass",
+                "pass": true
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 0.19815000000000005,
+            "durationMs": 46666,
+            "turns": 19,
+            "modelUsage": {
+              "claude-haiku-5-5": {
+                "costUSD": 0.00017270000000000002,
+                "inputTokens": 1622,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "outputTokens": 21
+              },
+              "claude-sonnet-5-5": {
+                "costUSD": 0.19797730000000002,
+                "inputTokens": 12,
+                "cacheReadInputTokens": 264873,
+                "cacheCreationInputTokens": 21419,
+                "outputTokens": 8579
+              }
+            },
+            "scores": [
+              {
+                "grader": "hidden-tests-pass",
+                "pass": true
+              },
+              {
+                "grader": "visible-tests-pass",
+                "pass": true
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

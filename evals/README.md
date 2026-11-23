@@ -294,7 +294,20 @@ node evals/run-local.mjs --case implementer --arm with --plugin-root /path/to/ot
 
 The directory used is recorded as `pluginRoot` in `aggregate.json`.
 
-`type: command` graders run a shell command in the run's workspace after the last turn, before the workspace is deleted (120 s limit). Without `pattern` the grader passes on exit code 0; with `pattern` it passes when the regex matches the command's stdout and stderr. `hidden: <path>` copies that file or directory from the case directory into the workspace at the same relative path just before the command runs, so the model never sees the tests. A run that did not exit 0 is `notRun`, as for every grader.
+`type: command` graders run a shell command in the run's workspace after the last turn, before the workspace is deleted (120 s limit). Without `pattern` the grader passes on exit code 0; with `pattern` it passes when the regex matches the command's stdout and stderr. `hidden: <path>` copies that file or directory from the case directory into the workspace at the same relative path just before the command runs, so the model never sees the tests. A run that did not exit 0 is `notRun`, as for every grader. The runner keeps `--permission-mode dontAsk`, so a case that must edit files and run tests lists them in `allowed_tools` (passed as `--allowedTools`).
+
+Results, Claude Code 2.1.330, 3 runs per arm, 2026-11-23 (aggregates in [`evidence/`](evidence/README.md)):
+
+| Case | Arm | Mean cost per run | Quality |
+| --- | --- | ---: | --- |
+| `implementer-multi-file` | sonnet, 0.17 pins | $0.209 ($0.190-0.239) | hidden tests 3/3 |
+| `implementer-multi-file` | opus (`--model opus`, the 0.16 multi-file trigger) | $0.445 ($0.421-0.458) | hidden tests 3/3 |
+| `implementer-single-file` | sonnet with `autoCompactWindow`/`maxTurns` | $0.110 | hidden tests 3/3 |
+| `implementer-single-file` | sonnet without them (PR #63 checkout) | $0.106 | hidden tests 3/3 |
+| `reviewer-seeded-bugs` | opus/medium | $0.231; $0.157 and $0.162 warm | 12/12 bugs |
+| `reviewer-seeded-bugs` | opus/high (PR #63 checkout) | $0.150 | 12/12 bugs |
+
+Sending the multi-file task to sonnet cost 53% less with every hidden test passing; every sonnet run was cheaper than every opus run. The context cap never triggers on tasks this size, so the single-file pair measures only that it costs nothing; whether it saves on long runs needs live data. Medium and high review found every seeded bug at the same warm cost (the first medium run paid a cold cache), so on a small diff effort is not where review spends - cache reads are.
 
 ## Next
 
