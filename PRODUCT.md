@@ -41,7 +41,7 @@ Name: model-routing (lowercase, hyphenated). License: see LICENSE in the repo. N
 ## Evidence on Hand
 
 - `evals/evidence/*.json`: aggregates for every published number (implementer multi-file: sonnet $0.209 vs opus $0.445, 3/3 hidden tests each; inline cases; reviewer seeded bugs 12/12).
-- README tables and mermaid charts of a 7-day snapshot of the author's own usage.
+- Benchmarks page tables and mermaid charts (site/benchmarks/index.md) of a 7-day snapshot of the author's own usage.
 - No testimonials, user counts, press or customer logos exist; do not fabricate any.
 
 ## Product Principles
