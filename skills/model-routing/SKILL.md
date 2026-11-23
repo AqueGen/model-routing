@@ -1,6 +1,6 @@
 ---
 name: model-routing
-description: Route work to the cheapest model tier that holds quality. Use when deciding which model or agent should handle a task, when the user asks about token economy / cost optimization, or when dispatching implementation, review, or test-run work to subagents.
+description: Pick the agent, model tier and effort for a subagent dispatch that is already decided. Use when dispatching implementation, review, exploration or test-run work to a subagent, or when the user asks about token economy / cost optimization. It never decides whether to dispatch.
 ---
 
 # Model Routing
@@ -20,7 +20,9 @@ delegating with the tier routed down $1.68, both measured; delegating at
 the session tier comes to $2.01, which is those same measured subagent
 tokens repriced at the higher tier rather than a run of its own. Route
 every dispatch - roughly a sixth off work already leaving the session -
-and do not manufacture dispatches to collect it.
+and do not manufacture dispatches to collect it. Whether work leaves the
+session is decided by the user, repo policies and other skills; nothing
+below is a reason to dispatch, only a rule for what a dispatch runs on.
 
 ## Tiers
 
@@ -141,26 +143,23 @@ set it. For unpinned rows it is the target level, reached via the
 session effort or a Workflow `effort` opt - a plain Agent dispatch
 carries no effort param:
 
-| Task | Where | Agent / model | Effort |
-|------|-------|---------------|--------|
-| Planning, brainstorming, specs, docs, architecture | main session | strongest (user's /model choice) | high |
-| Codebase exploration ("where is X", "how does Y work") | subagent | `scout` (sonnet) | low |
-| Breadth sweeps: enumerate, list, trace a chain end to end | subagent | `surveyor` (haiku) | medium |
-| Implementing an approved plan/spec (ordinary: single-file, clear shape) | subagent | `implementer` (sonnet) | medium |
-| Complex implementation: multi-file refactor, subtle concurrency/security | subagent | `implementer` with `model=opus` | medium (pinned) |
-| Trivial mechanical tasks: renames, boilerplate, mirrored constants | subagent | sonnet | low |
-| Small interactive edits, quick fixes | main session | strongest | low |
-| Per-task review and scoped re-review inside a plan loop (Superpowers SDD) | subagent | `task-reviewer` (sonnet) | high |
-| Final/whole-branch, high-risk or pre-PR review of implemented work | subagent | `reviewer` (opus) | high |
-| Deciding whether external review findings (bots, human reviewers) are real; the brief asks for a verdict per finding. `task-reviewer` findings inside a plan loop stay on the loop's own path | subagent | `reviewer` (opus); only confirmed findings go to `implementer` | high |
-| Final review of high-risk or large diffs | main session | strongest | high |
-| Run tests/builds/linters, report failures | subagent | `test-runner` (haiku) | low |
-| Sanity-check a subagent's diff against its task | subagent | `verifier` (haiku) | medium |
-| Playwright/E2E scenarios, failure interpretation | subagent | `e2e-runner` (sonnet) | medium |
-| Fresh external context, knowledge-cutoff gap (new APIs, recent releases) | subagent | mid-tier agent with web access | medium |
+Rows say what a dispatch of that kind runs on, not that the kind should be
+dispatched:
 
-Main-session rows: the effort there is the user's session setting - Claude
-cannot change it mid-session, only suggest.
+| Dispatched task | Agent / model | Effort |
+|-----------------|---------------|--------|
+| Codebase exploration ("where is X", "how does Y work") | `scout` (sonnet) | low |
+| Breadth sweeps: enumerate, list, trace a chain end to end | `surveyor` (haiku) | medium |
+| Implementing an approved plan/spec (ordinary: single-file, clear shape) | `implementer` (sonnet) | medium |
+| Complex implementation: multi-file refactor, subtle concurrency/security | `implementer` with `model=opus` | medium (pinned) |
+| Trivial mechanical tasks: renames, boilerplate, mirrored constants | sonnet | low |
+| Per-task review and scoped re-review inside a plan loop (Superpowers SDD) | `task-reviewer` (sonnet) | high |
+| Final/whole-branch, high-risk or pre-PR review of implemented work | `reviewer` (opus) | high |
+| Deciding whether external review findings (bots, human reviewers) are real; the brief asks for a verdict per finding. `task-reviewer` findings inside a plan loop stay on the loop's own path | `reviewer` (opus); only confirmed findings go to `implementer` | high |
+| Run tests/builds/linters, report failures | `test-runner` (haiku) | low |
+| Sanity-check another agent's diff against its task | `verifier` (haiku) | medium |
+| Playwright/E2E scenarios, failure interpretation | `e2e-runner` (sonnet) | medium |
+| Fresh external context, knowledge-cutoff gap (new APIs, recent releases) | mid-tier agent with web access | medium |
 
 ## Why these tiers and efforts
 
@@ -291,17 +290,14 @@ with `/model-routing:stats`.
 
 ## Rules
 
-- Trivial first: when the question is answerable from the conversation,
-  general knowledge, or one obvious file already in context, answer inline.
-  A subagent dispatch has a fixed overhead (system prompt, file re-reads,
-  report) that dwarfs a one-liner - dispatching `scout` for "what does this
-  flag mean" burns more than it saves. Dispatch only when the task needs
-  real exploration, execution, or produces output worth keeping out of the
-  main context.
-- Never burn main-session tokens on raw test or build output. Dispatch to
-  `test-runner` and consume its compact report.
-- Route codebase exploration to `scout` - conclusions and file:line refs
-  come back, file dumps stay in the subagent.
+- Inline is the default. A subagent dispatch has a fixed overhead (system
+  prompt, file re-reads as cache writes, report) that the main session does
+  not pay for context it already holds. This skill does not add dispatches:
+  when nothing else asked for one, the work stays in the main session.
+- When a test or build run is dispatched, `test-runner` takes it and only
+  its compact report comes back.
+- When exploration is dispatched, conclusions and file:line refs come back,
+  file dumps stay in the subagent.
 - Three exploration routes, told apart by what has to come back rather
   than by how the question is phrased. Unverified candidates to look at
   next ("which files mention X"): the harness's built-in Explore agent,
@@ -362,8 +358,8 @@ with `/model-routing:stats`.
 - Review is one cheap pass; missed bugs are expensive. When a diff is
   high-risk, escalate the final review to the main session instead of
   delegating it.
-- Gate batched implementer output with `verifier` before accepting it.
-  It answers one question for pennies: is this diff the task that was
+- When batched implementer output needs a gate before it is accepted, that
+  gate is `verifier`. It answers one question for pennies: is this diff the task that was
   asked? Scope creep, missing pieces, and obvious breakage get caught
   before the main session builds on a wrong diff or a `reviewer` pass
   burns opus tokens on work that missed the point. Skip it when the main

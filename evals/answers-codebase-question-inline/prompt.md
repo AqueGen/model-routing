@@ -1,6 +1,6 @@
 ---
-name: delegates-codebase-question
-tags: [routing, scout]
+name: answers-codebase-question-inline
+tags: [routing, inline]
 plugins: ["../.."]
 runs: 3
 max_turns: 10

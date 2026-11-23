@@ -6,10 +6,12 @@
 Tiered model routing for Claude Code token economy: **the strongest model
 thinks, cheaper models grind.**
 
-Planning and architecture stay in your main session on the best model you
-have. Implementation, review, and test runs get delegated to subagents on
-cheaper tiers - and the raw output (test logs, file reads) never enters
-your main session context, which is where most tokens actually die.
+The plugin does not decide whether work leaves your main session - you,
+your repo policies and your other skills (Superpowers, workflows) do. It
+decides what a subagent runs on once it is dispatched: implementation,
+review and test runs go to cheaper tiers at a pinned effort instead of
+inheriting the session model, and the raw output (test logs, file reads)
+stays out of your main session context.
 
 Routing tunes two knobs, not one: **which model** handles a task and **how
 hard it thinks** (reasoning effort). A strong model at low effort often
@@ -39,7 +41,7 @@ What the plugin changes is the price per token, not that penalty. So:
 | Your situation | What this plugin does |
 | --- | --- |
 | You already dispatch subagents - Superpowers, workflows, any delegation-heavy practice | **Saves**, by roughly a sixth. $1.68 with the tier routed down, against $2.01 for the same subagent work at your session's tier |
-| You work mostly in one session and rarely delegate | **Costs**, by roughly a fifth. $1.36 doing it inline against $1.68 routed |
+| You work mostly in one session and rarely delegate | **Neutral** since 0.17: the anchor no longer recommends dispatching, so it costs only the ~1.8k-token surcharge below. Up to 0.16 it pushed dispatches that would not otherwise have happened, and on this workload that cost roughly a fifth: $1.36 doing it inline against $1.68 routed |
 
 One workload, three runs an arm, on a four-turn session that never had to
 compact - so read the direction as solid and the exact percentage as not.
@@ -68,13 +70,10 @@ that otherwise would not have: on the same question the plugin arm delegated in
 2026-10-02 an Opus 5.5 session answered the
 same question with one grep and one read and delegated in 0 of 2 under both the
 old and the current anchor, so this case no longer separates the arms on Opus
-5.5 ([`evals/evidence/small-case-opus55-*-anchor.json`](evals/evidence/)). Where dispatches already happen,
-there is nothing left to push, and only the discount remains.
-
-If you rarely delegate, install it for the context headroom or not at all. The
-expensive tier does read measurably less either way - opus input volume down
-about 25% on the same test, and opus spend with it by 14% - but headroom is a
-different thing from a smaller bill, and this README used to blur the two.
+5.5 ([`evals/evidence/small-case-opus55-*-anchor.json`](evals/evidence/)). Since 0.17 the anchor and the
+skill no longer recommend dispatching at all - they only route a dispatch
+that something else asked for - so the plugin should no longer move that
+split in either direction, and only the discount remains.
 
 (The A/B that would replace the repricing with a run is still blocked, for the
 reason written down in `evals/forced-dispatch-tier/NOTES.md`.)
@@ -98,22 +97,22 @@ reason written down in `evals/forced-dispatch-tier/NOTES.md`.)
 | `agents/reviewer.md` | opus | high | Review a diff for correctness bugs, ranked by severity. Final/whole-branch, high-risk and pre-PR review. |
 | `agents/task-reviewer.md` | sonnet | high | Per-task reviews and scoped re-reviews inside a plan loop (Superpowers SDD), following the caller's review template. Flags diffs that need `reviewer` instead. |
 | `agents/verifier.md` | haiku | medium | Cheap gate on a subagent's diff: does it match the task (scope, completeness, obvious breakage)? Not a code review. |
-| `skills/model-routing/` | - | - | The routing table and delegation rules Claude follows when deciding where work goes. |
+| `skills/model-routing/` | - | - | The routing table Claude follows when choosing the agent, model and effort of a dispatch. |
 | `hooks/routing-anchor.md` | - | - | Short routing anchor auto-injected at session start - zero config. |
 | `hooks/dispatch-counter.mjs` | - | - | Logs every Agent dispatch; `stats`/`report`/`tokens` modes measure what stayed off the session model. |
 | `commands/stats.md` | - | - | `/model-routing:stats` - dispatch + token-volume report in the chat. |
 
 ## Example
 
-A typical feature session on a strong main model (Opus/Fable):
+A typical feature session on a strong main model (Opus/Fable), where the
+work is delegated because you or a plan-execution skill asked for it:
 
-> Implement tasks 1-2 from the plan, then run the unit tests.
+> Dispatch an implementer for tasks 1-2 from the plan, then have the unit tests run.
 
-Without the plugin everything happens in the main session: it reads a
-dozen files, writes code, and dumps the full test log into your context.
-Thousands of expensive tokens spent on mechanics.
+Without the plugin both subagents inherit the session model, so the file
+reads, the code and the test run all bill at the top tier.
 
-With the plugin:
+With the plugin the same two dispatches run on cheaper tiers:
 
 ```text
 Main session (strong model, plans and coordinates):
@@ -171,7 +170,7 @@ Attribution over the same week, across all 266 dispatches, 199 of which ran belo
 
 The honest reading: the automatic half is fully attributable, the behavioural half depends on the session actually following the anchor, and these numbers have no control group of their own - this is the author's own workload measured with the author's own tool, with no before-install baseline. `CLAUDE_CODE_SUBAGENT_MODEL` was not set in this window, which the report would otherwise have annotated per row.
 
-For the behavioural half there is now a control group, just a much smaller one: [`evals/`](evals/README.md) runs the same question with and without the plugin loaded. The behavioural claim holds - on a codebase question the plugin arm delegated to `scout` in 3 of 3 runs and the plugin-free arm in 0 of 3, grepping inline despite having `Explore` available.
+For the behavioural half there is now a control group, just a much smaller one: [`evals/`](evals/README.md) runs the same question with and without the plugin loaded. Up to 0.16 the plugin arm delegated a codebase question to `scout` in 3 of 3 runs and the plugin-free arm in 0 of 3, grepping inline despite having `Explore` available. That push was the cost described above, so since 0.17 the case grades the opposite: the plugin arm should answer inline like the baseline.
 
 The money is a more interesting answer than "it saves". On a wide-reading question across a four-turn session, the expensive tier drops either way - opus spend down 14%, its input volume down about 25% - but the shipped configuration ends up **23% more expensive in total than not having the plugin at all**, because a fresh subagent pays cache *write* for everything it reads while a main session pays cache *read*, 12.5x cheaper (25x on Opus 5.5 and Sonnet 5.5, 50x on Fable and Mythos 5.2 and 5.1), for what it already has. So what this plugin reliably buys is room in the expensive model's context, not a smaller bill; where the bill also falls is a narrower claim, and it depends on the tier.
 

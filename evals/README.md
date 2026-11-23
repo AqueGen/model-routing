@@ -12,11 +12,12 @@ Every case runs twice: once with the plugin loaded, once without. A number from
 the with-arm alone means nothing, because a capable model routes sensibly on its
 own a fair share of the time. The delta between the arms is the claim.
 
-`delegates-codebase-question` is scored on two graders both arms can genuinely
-pass or fail - did the session hand the question to a subagent, and did the
-answer come back right. A third grader checks that the with-arm picked `scout`
-specifically; the baseline has no `scout` to pick, so read that one as an
-indicator and never as a score.
+`answers-codebase-question-inline` (named `delegates-codebase-question` up to
+0.16) is scored on two graders both arms can genuinely pass or fail - did the
+session keep the question in the main session, and did the answer come back
+right. Up to 0.16 the first grader was inverted: it rewarded handing the
+question to a subagent, and a third grader checked the with-arm picked
+`scout`. The results below were measured under that version.
 
 ## Running them
 
