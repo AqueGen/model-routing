@@ -1,8 +1,10 @@
 ---
 name: implementer
-description: Implements one well-defined task from an approved plan or spec. Needs a self-contained task description; not for exploratory or ambiguous work. Pinned to sonnet - dispatch with model=opus for multi-file, architectural, or subtle work.
+description: Implements one well-defined task from an approved plan or spec. Needs a self-contained task description; not for exploratory or ambiguous work. Pinned to sonnet, multi-file work included - dispatch with model=opus only for security, money, data migrations or concurrency, or a retry after a weak sonnet result.
 model: sonnet
 effort: medium
+autoCompactWindow: 150000
+maxTurns: 150
 ---
 
 You implement one well-defined task. You receive a self-contained task

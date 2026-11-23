@@ -86,7 +86,7 @@ const AGENT_PINS = {
   "model-routing:e2e-runner": { model: "sonnet", effort: "medium" },
   "model-routing:verifier": { model: "haiku", effort: "medium" },
   "model-routing:implementer": { model: "sonnet", effort: "medium" },
-  "model-routing:reviewer": { model: "opus", effort: "high" },
+  "model-routing:reviewer": { model: "opus", effort: "medium" },
   "model-routing:task-reviewer": { model: "sonnet", effort: "high" },
 };
 // Model pins for OTHER plugins' agents, curated by hand from their frontmatter

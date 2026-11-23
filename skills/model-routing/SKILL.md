@@ -79,9 +79,8 @@ example use case for `low` is subagents.
 - **medium** - normal implementation: real logic, but the approach is
   already clear. It is also where Sonnet 5.5 is told to start agentic
   coding and multistep tool use on well-specified tasks, moving to
-  `high` for harder or longer ones. This plugin draws its own line one
-  step earlier and on the tier instead: harder work goes to opus, still
-  at the pinned medium, because a dispatch has no effort param to raise.
+  `high` for harder or longer ones. A dispatch can raise it: the Agent
+  call takes an `effort` param for a non-fork subagent.
   Sonnet 5.5's levels are recalibrated against Sonnet 5 - the same name
   buys a different amount of thinking than it did, and Anthropic does not
   say in which direction, so re-sweep rather than carry a level over.
@@ -124,9 +123,9 @@ Match effort to task difficulty, not to tier - most work is a
 `low`/`medium` task in disguise. Where effort is set: the bundled agents
 pin theirs in frontmatter (`effort:` field - overrides the session level
 for that agent); Workflow scripts take an `effort` option per `agent()`
-call; any other Agent dispatch inherits the session effort. The Agent
-tool has NO effort param, so dispatching a pinned agent with `model=opus`
-changes the model, not the effort - the frontmatter pin still applies.
+call; an Agent dispatch takes an `effort` param for a non-fork subagent,
+and without one a pinned agent runs its pin and an unpinned one inherits
+the session effort. `model=opus` alone changes the model, not the effort.
 Vary effort across workloads, not inside one conversation: changing the
 top-level effort value between requests invalidates the cached prompt
 prefix, so per-agent pins and per-`agent()` opts - each with its own
@@ -140,9 +139,8 @@ Opus 5, Opus 5.5 and Sonnet 5.5; nothing documents Claude Code's
 Each row carries a default effort - the second knob, tuned to the task,
 not the tier. For the bundled agents the effort is pinned in their
 frontmatter; the column documents it rather than asking the caller to
-set it. For unpinned rows it is the target level, reached via the
-session effort or a Workflow `effort` opt - a plain Agent dispatch
-carries no effort param:
+set it. For unpinned rows it is the target level, passed as the Agent
+`effort` param or a Workflow `effort` opt.
 
 Rows say what a dispatch of that kind runs on, not that the kind should be
 dispatched:
@@ -151,12 +149,12 @@ dispatched:
 |-----------------|---------------|--------|
 | Codebase exploration ("where is X", "how does Y work") | `scout` (sonnet) | low |
 | Breadth sweeps: enumerate, list, trace a chain end to end | `surveyor` (haiku) | medium |
-| Implementing an approved plan/spec (ordinary: single-file, clear shape) | `implementer` (sonnet) | medium |
-| Complex implementation: multi-file refactor, subtle concurrency/security | `implementer` with `model=opus` | medium (pinned) |
+| Implementing a plan task or spec, multi-file and cross-layer included | `implementer` (sonnet) | medium |
+| Implementation touching security, money, data migrations or concurrency, or a retry after a weak sonnet result | `implementer` with `model=opus` | medium (pinned) |
 | Trivial mechanical tasks: renames, boilerplate, mirrored constants | sonnet | low |
 | Per-task review and scoped re-review inside a plan loop (Superpowers SDD) | `task-reviewer` (sonnet) | high |
-| Final/whole-branch, high-risk or pre-PR review of implemented work | `reviewer` (opus) | high |
-| Deciding whether external review findings (bots, human reviewers) are real; the brief asks for a verdict per finding. `task-reviewer` findings inside a plan loop stay on the loop's own path | `reviewer` (opus); only confirmed findings go to `implementer` | high |
+| Final/whole-branch or pre-PR review of implemented work | `reviewer` (opus) | medium (pinned); `effort=high` for security, money, migrations, concurrency, public contracts or a large diff |
+| Deciding whether external review findings (bots, human reviewers) are real; the brief asks for a verdict per finding. `task-reviewer` findings inside a plan loop stay on the loop's own path | `reviewer` (opus); only confirmed findings go to `implementer` | medium (pinned) |
 | Run tests/builds/linters, report failures | `test-runner` (haiku) | low |
 | Sanity-check another agent's diff against its task | `verifier` (haiku) | medium |
 | Playwright/E2E scenarios, failure interpretation | `e2e-runner` (sonnet) | medium |
@@ -180,13 +178,14 @@ actually earns its cost:
   stays the value default. Medium effort because the agent executes, it
   does not design - and medium is where Sonnet 5.5's own guidance starts
   well-specified agentic coding.
-- **Complex implementation -> opus, still at the agent's pinned medium**
-  (the dispatch changes the model only - see the effort section).
-  Escalate from sonnet when
-  any of these hold: the change is multi-file or cross-layer; it touches
-  security, money, data migrations, concurrency, protocols, or public
-  contracts; a sonnet attempt came back weak; or an E2E/visual result
-  needs hard interpretation. Ambiguity is NOT an escalation trigger but a
+- **Opus implementation only on narrow triggers, still at the agent's
+  pinned medium.** Escalate from sonnet when the change touches security,
+  money, data migrations or concurrency, or when a sonnet attempt came
+  back weak. Multi-file or cross-layer work alone stays on sonnet, as
+  Superpowers' own model selection has it ("standard model"): over 30
+  days of one user's transcripts the earlier multi-file trigger sent 232
+  of 316 explicit implementer dispatches to opus, $6,072 of opus
+  implementer spend against $529 on sonnet. Ambiguity is NOT an escalation trigger but a
   stop sign: implementer rejects ambiguous tasks by contract, so an
   unclear task or root cause gets clarified first; a dispatch, if one was
   asked for, carries the well-defined task.
@@ -199,15 +198,14 @@ actually earns its cost:
   of their own input, so every token type halves: the scout eval profile
   (74k written, 451k re-read, 6k out) costs $0.2901 on sonnet against
   $0.5802 on opus, whatever the mix.
-- **Review -> opus/high.** Review is one cheap pass guarding against
-  expensive misses - an asymmetric bet where the strongest reasoning at
-  high effort is worth it, because a bug that ships costs far more than
-  the review. The case for `medium` grew with Opus 5.5: Anthropic reports
-  it catches more bugs with fewer false alarms, its `medium` matches or exceeds
-  Opus 5 at `high` on coding, and at `high` it thinks more per turn than Opus 5
-  did, so the same pin now costs more. That is vendor evidence on
-  model-level evals, not this plugin's review eval - the pin stays at
-  high until a medium-vs-high review run on Opus 5.5 is measured. The
+- **Review -> opus/medium, high on risky diffs.** Review is one cheap
+  pass guarding against expensive misses, so it stays on the strongest
+  tier. Anthropic reports Opus 5.5 at `medium` matching or exceeding Opus
+  5 at `high` on coding, and at `high` it thinks more per turn than Opus 5
+  did, so the pin is `medium` and a dispatch passes `effort=high` for
+  security, money, migrations, concurrency, public contracts or a large
+  diff. `evals/reviewer-seeded-bugs` compares the two levels on a diff
+  with four planted defects. The
   per-task reviews and scoped re-reviews of a plan loop are the
   exception: Superpowers SDD scales their model to the diff with a
   mid-tier floor, so they go to `task-reviewer` (sonnet/high) rather than
@@ -334,6 +332,7 @@ with `/model-routing:stats`.
   - Put the previous agent's "What was changed" list into the next agent's brief, so its decisions and naming carry over.
   - A finished agent does not take the next task. SendMessage continues unfinished or stuck work only.
   - A single plan task that needs hundreds of turns is a planning problem: split it in the plan before dispatching.
+  - `implementer` caps its own context in frontmatter: `autoCompactWindow: 150000` compacts it before every turn re-reads a context that has grown to 300k-900k, and `maxTurns: 150` returns a run marked as partial. A partial return is a continuation, not a weak result: continue it at the same tier.
 - A text-only end of turn does not by itself mean the task is finished. On
   long multi-part work these models end a turn with a progress update
   rather than a tool call, and a caller that reads that as completion

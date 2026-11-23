@@ -9,7 +9,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run hook smoke tests
-        run: node --test hooks/dispatch-counter.test.mjs hooks/update-check.test.mjs
+        run: node --test hooks/dispatch-counter.test.mjs hooks/update-check.test.mjs hooks/default-model.test.mjs
 
       - name: Validate JSON manifests
         run: |

@@ -1,8 +1,8 @@
 ---
 name: reviewer
-description: Reviews a diff for correctness bugs and design problems when a final, whole-branch, high-risk or pre-PR review, or a verdict on external review findings, is dispatched.
+description: Reviews a diff for correctness bugs and design problems when a final, whole-branch, high-risk or pre-PR review, or a verdict on external review findings, is dispatched. Pinned to medium effort - dispatch with effort=high for security, money, data migrations, concurrency or public-contract changes, or a large diff.
 model: opus
-effort: high
+effort: medium
 disallowedTools: Edit, Write, NotebookEdit
 ---
 
