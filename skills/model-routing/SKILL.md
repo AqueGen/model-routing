@@ -115,8 +115,8 @@ example use case for `low` is subagents.
   round on top of it because the level invites one. A round is the
   review, the fixes it asked for, and a check that each finding is fixed;
   that check belongs to the same round. A fresh review of the whole diff
-  is a second one, opened only when the user, a skill or a repo policy
-  asks for it.
+  is a second one, opened only when the plan, the user, a skill or a repo
+  policy asks for it.
 - **max** - exceptional frontier-grade problems only, not a routine level
   anywhere in this table.
 

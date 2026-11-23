@@ -59,14 +59,15 @@ discount whose only cost is the always-on surcharge below.
 Note what the surcharge is and is not. The plugin costs about 1.9k tokens a
 session to carry - measured on 2.1.330 as the cache-write difference between
 the small-case arms (10309/10287 against 8413/8412), of which the anchor is
-about 700 and the rest the skill and agent listings - which is a couple of
-cents against sessions billing $1.40 to $2.00. The anchor figure is its 2021 bytes at the ratio this
-cut measured: on the same eval case and CLI, the 3225-byte anchor wrote
-about 630 fewer cache tokens per run than the 5114-byte one it replaced
-([`evals/evidence/small-case-opus55-*-anchor.json`](evals/evidence/)). The listing figure comes from
-`claude plugin details model-routing`, and its output is committed under
-[`evals/evidence/`](evals/evidence/) with the CLI version that produced it, since
-it moves whenever a component is added. That is not where the 23% comes from. It comes from dispatches happening
+about 700 and the remaining ~1.2k the skill and agent listings - which is a
+couple of cents against sessions billing $1.40 to $2.00. The anchor figure
+is its 2006 bytes at the ratio an earlier cut measured: on the same eval
+case and CLI, the 3225-byte anchor wrote about 630 fewer cache tokens per
+run than the 5114-byte one it replaced
+([`evals/evidence/small-case-opus55-*-anchor.json`](evals/evidence/)). The
+committed `claude plugin details` output in [`evals/evidence/`](evals/evidence/)
+(~700 tokens) is older - 0.14.0, seven agents - and lower than the
+subtraction above. That is not where the 23% comes from. It comes from dispatches happening
 that otherwise would not have: on the same question the plugin arm delegated in
 3 runs of 3 and the plugin-free arm in 0 of 3. That was measured on 2026-08-17; on
 2026-10-02 an Opus 5.5 session answered the
@@ -341,7 +342,7 @@ earns its cost (the knobs themselves:
 | Tests / builds (`test-runner`) | haiku | low | Running a command and summarizing output is mechanical; the value is keeping raw logs out of the main context, not the model doing it. | Low: no reasoning, just report. |
 | Diff sanity gate (`verifier`) | haiku | medium | Checking a diff matches its task (scope, completeness, obvious breakage) is a cheap spot-check, not a quality judgment. | Medium: completeness is the job, and at `low` Haiku 5.5 "is more likely to skip a search, stop early, or skip a check". |
 | E2E / failure interpretation (`e2e-runner`) | sonnet | medium | Driving a browser and telling a product bug from a flake needs some judgment, but not top-tier reasoning. | Medium: real interpretation, clear method. |
-| Planning, architecture, high-risk final review | main session (strongest) | high | These set the direction everything else follows - the one place raw capability changes the outcome most. | High: a wrong call here is the most expensive kind to unwind. |
+| Planning, architecture (and a high-risk review, if you ask the main session for it) | main session (strongest) | high | These set the direction everything else follows - the one place raw capability changes the outcome most. | High: a wrong call here is the most expensive kind to unwind. |
 
 The 0.10.0 report caps follow the same accounting. [Anthropic's own
 context-engineering
@@ -439,7 +440,7 @@ step up on evidence.
 | ------ | ------------ | ------------------------ |
 | low | Most efficient: significant token savings with some capability reduction. On the Opus 5 generation low/medium punch well above their weight. | Pins: `scout`, `test-runner` (on the cloud platforms `haiku` is Haiku 4.5, which has no effort knob, so there the haiku pins only document intent). |
 | medium | Balanced: real logic whose approach is already decided, at moderate savings. On Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5 this is the model's own default, so a pin at medium steps down only from a session running high or above. | Pins: `implementer`, `e2e-runner`, `surveyor`, `verifier`. Recommended session setting. |
-| high | Full capability - Claude Code's per-model default except on Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5 (medium) and Opus 4.7 (xhigh). Complex reasoning, subtle debugging, high-risk review. | Pins: `reviewer`, `task-reviewer`. Main-session planning and final review. |
+| high | Full capability - Claude Code's per-model default except on Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5 (medium) and Opus 4.7 (xhigh). Complex reasoning, subtle debugging, high-risk review. | Pins: `reviewer`, `task-reviewer`. Main-session planning. |
 | xhigh | Extended capability for long-horizon agentic/coding runs (multi-hour, token budgets in the millions). | Session-level or Workflow `effort` opt only - never an agent pin. |
 | max | Unconstrained token spend for frontier-grade problems; Anthropic notes diminishing returns and overthinking risk on routine work. | Not used by any pin - reach for it deliberately or not at all. |
 
