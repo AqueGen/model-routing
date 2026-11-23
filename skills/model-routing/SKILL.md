@@ -153,8 +153,8 @@ dispatched:
 | Implementation touching security, money, data migrations or concurrency, or a retry after a weak sonnet result | `implementer` with `model=opus` | medium (pinned) |
 | Trivial mechanical tasks: renames, boilerplate, mirrored constants | sonnet | low |
 | Per-task review and scoped re-review inside a plan loop (Superpowers SDD) | `task-reviewer` (sonnet) | high |
-| Final/whole-branch or pre-PR review of implemented work | `reviewer` (opus) | medium (pinned); `effort=high` for security, money, migrations, concurrency, public contracts or a large diff |
-| Deciding whether external review findings (bots, human reviewers) are real; the brief asks for a verdict per finding. `task-reviewer` findings inside a plan loop stay on the loop's own path | `reviewer` (opus); only confirmed findings go to `implementer` | medium (pinned) |
+| Final/whole-branch, high-risk or pre-PR review of implemented work | `reviewer` (opus) | high |
+| Deciding whether external review findings (bots, human reviewers) are real; the brief asks for a verdict per finding. `task-reviewer` findings inside a plan loop stay on the loop's own path | `reviewer` (opus); only confirmed findings go to `implementer` | high |
 | Run tests/builds/linters, report failures | `test-runner` (haiku) | low |
 | Sanity-check another agent's diff against its task | `verifier` (haiku) | medium |
 | Playwright/E2E scenarios, failure interpretation | `e2e-runner` (sonnet) | medium |
@@ -198,14 +198,13 @@ actually earns its cost:
   of their own input, so every token type halves: the scout eval profile
   (74k written, 451k re-read, 6k out) costs $0.2901 on sonnet against
   $0.5802 on opus, whatever the mix.
-- **Review -> opus/medium, high on risky diffs.** Review is one cheap
-  pass guarding against expensive misses, so it stays on the strongest
-  tier. Anthropic reports Opus 5.5 at `medium` matching or exceeding Opus
-  5 at `high` on coding, and at `high` it thinks more per turn than Opus 5
-  did, so the pin is `medium` and a dispatch passes `effort=high` for
-  security, money, migrations, concurrency, public contracts or a large
-  diff. `evals/reviewer-seeded-bugs` compares the two levels on a diff
-  with four planted defects. The
+- **Review -> opus/high.** Review is one cheap pass guarding against
+  expensive misses, so it stays on the strongest tier at high effort.
+  Anthropic reports Opus 5.5 at `medium` matching or exceeding Opus 5 at
+  `high` on coding, but on `evals/reviewer-seeded-bugs` medium and high
+  both found 12/12 planted defects and medium was not cheaper (warm runs
+  $0.159 against $0.150 mean): four planted bugs cannot tell the levels
+  apart, so the pin stays high until a harder case does. The
   per-task reviews and scoped re-reviews of a plan loop are the
   exception: Superpowers SDD scales their model to the diff with a
   mid-tier floor, so they go to `task-reviewer` (sonnet/high) rather than
@@ -223,7 +222,7 @@ actually earns its cost:
   low/medium punch well above their weight - when a dispatch feels too
   expensive, step the EFFORT down before the tier - on a Workflow stage,
   or by choosing an agent pinned lower; when a result is too
-  shallow, step effort up before tier up - on a Workflow stage, where the `effort` opt exists; a plain dispatch has only the tier.
+  shallow, step effort up before tier up - the Agent `effort` param or a Workflow `effort` opt.
 - **The fable-to-opus price gap is exactly the sticker.** The documented
   ~30% token inflation is measured against models from BEFORE Opus 4.7,
   which is the generation whose tokenizer Fable 5 uses - it is not a gap
@@ -331,9 +330,7 @@ with `/model-routing:stats`.
   - Run the agents of one change one at a time, or in parallel only when they touch disjoint files.
   - Put the previous agent's "What was changed" list into the next agent's brief, so its decisions and naming carry over.
   - A finished agent does not take the next task. SendMessage continues unfinished or stuck work only.
-  - A single plan task that needs hundreds of turns is a planning problem: split it in the plan before dispatching.
-  - `implementer` caps its own context in frontmatter: `autoCompactWindow: 150000` compacts it before every turn re-reads a context that has grown to 300k-900k, and `maxTurns: 150` returns a run marked as partial. A partial return is a continuation, not a weak result: continue it at the same tier.
-- A text-only end of turn does not by itself mean the task is finished. On
+  - A single plan task that needs hundreds of turns is a planning problem: split it in the plan before dispatching.- A text-only end of turn does not by itself mean the task is finished. On
   long multi-part work these models end a turn with a progress update
   rather than a tool call, and a caller that reads that as completion
   stops there. Keep the parts in a list the agent reports against - the
@@ -393,13 +390,13 @@ with `/model-routing:stats`.
   chosen direction) so the new agent starts from the decision, not from
   zero.
 - When the user re-asks a question a subagent answered or calls its
-  answer shallow and the work is dispatched again, it goes one step up - a higher tier, or higher effort where a Workflow opt can set it - never at the
+  answer shallow and the work is dispatched again, it goes one step up - a higher tier, or higher effort via the Agent `effort` param or a Workflow opt - never at the
   same level that just failed.
 - The escalation ladder generalizes: any failed or visibly weak subagent
   RESULT (wrong answer, broken diff, report that dodges the question),
   when the caller re-dispatches it, goes exactly one step up - next tier via the Agent `model` param, or
   the same tier at higher effort when the miss looks like shallow thinking
-  rather than missing capability and a Workflow opt is there to raise it. One step, not a leap to the top: most
+  rather than missing capability (the Agent `effort` param or a Workflow opt raises it). One step, not a leap to the top: most
   failures clear one tier up, and jumping straight to the strongest model
   forfeits the middle tier's price. A second failure at the higher step
   means the task was mis-scoped, not under-powered - stop climbing and

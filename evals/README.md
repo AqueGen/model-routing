@@ -300,14 +300,14 @@ Results, Claude Code 2.1.330, 3 runs per arm, 2026-11-23 (aggregates in [`eviden
 
 | Case | Arm | Mean cost per run | Quality |
 | --- | --- | ---: | --- |
-| `implementer-multi-file` | sonnet, 0.17 pins | $0.209 ($0.190-0.239) | hidden tests 3/3 |
+| `implementer-multi-file` | sonnet (run with the unshipped context cap, which this task never reaches) | $0.209 ($0.190-0.239) | hidden tests 3/3 |
 | `implementer-multi-file` | opus (`--model opus`, the 0.16 multi-file trigger) | $0.445 ($0.421-0.458) | hidden tests 3/3 |
-| `implementer-single-file` | sonnet with `autoCompactWindow`/`maxTurns` | $0.110 | hidden tests 3/3 |
+| `implementer-single-file` | sonnet with `autoCompactWindow`/`maxTurns` (not shipped) | $0.110 | hidden tests 3/3 |
 | `implementer-single-file` | sonnet without them (PR #63 checkout) | $0.106 | hidden tests 3/3 |
 | `reviewer-seeded-bugs` | opus/medium | $0.231; $0.157 and $0.162 warm | 12/12 bugs |
 | `reviewer-seeded-bugs` | opus/high (PR #63 checkout) | $0.150 | 12/12 bugs |
 
-Sending the multi-file task to sonnet cost 53% less with every hidden test passing; every sonnet run was cheaper than every opus run. The context cap never triggers on tasks this size, so the single-file pair measures only that it costs nothing; whether it saves on long runs needs live data. Medium and high review found every seeded bug at the same warm cost (the first medium run paid a cold cache), so on a small diff effort is not where review spends - cache reads are.
+Sending the multi-file task to sonnet cost 53% less with every hidden test passing; every sonnet run was cheaper than every opus run. The context cap never triggers on tasks this size, so the single-file pair measures only that it costs nothing; whether it saves on long runs needs live data. Medium and high review both found every seeded bug; warm medium runs averaged $0.159 against $0.150 for high (the first medium run paid a cold cache), so medium was not cheaper and four planted bugs cannot tell the levels apart. On a small diff review cost is cache reads, not reasoning. The `reviewer` pin stays high and the context cap is not shipped until live data shows they pay.
 
 ## Next
 
