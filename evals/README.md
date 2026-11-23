@@ -178,7 +178,7 @@ ones: a judge model scoring prose is one more thing that can be wrong.
 
 A case names its fixture directory under `evals/fixtures` with a `fixture:` key,
 defaulting to `mini-app`. A fixture too large to commit ships as
-`<name>.gen.mjs` beside it and is generated on first use - `order-service` is 85
+`<name>.gen.mjs` beside it and is regenerated before every run - `order-service` is 85
 modules and 122k of source, which nobody installing this plugin should have to
 download. Keep fixtures boring: one that is interesting to read is one the model
 answers from memory of something similar.

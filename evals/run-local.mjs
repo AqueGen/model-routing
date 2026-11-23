@@ -101,7 +101,7 @@ console.log(`\nTraces and aggregate.json: ${resultsDir}`);
 // The real harness gets its workspace from case.yaml `context.scaffold_script`,
 // which needs a run to verify. Until then a case names its fixture directory
 // under evals/fixtures; a fixture too large to commit ships as `<name>.gen.mjs`
-// next to it and is generated on first use.
+// next to it and is regenerated before every run.
 function fixtureFor(kase) {
   const name = args.fixture ?? kase.frontmatter.fixture ?? "mini-app";
   const dir = join(FIXTURES_DIR, name);
