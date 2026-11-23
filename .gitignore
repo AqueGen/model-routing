@@ -3,3 +3,8 @@ docs/superpowers/
 evals/results/
 evals/fixtures/order-service/
 nul
+
+# docs site
+site/node_modules/
+site/.vitepress/dist/
+site/.vitepress/cache/

@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-23T21:40:00Z",
+  "title": "Design System: model-routing docs",
+  "extensions": {
+    "colorMeta": {
+      "report-green": { "role": "primary", "displayName": "Report Green", "canonical": "#0d5a42" },
+      "paper": { "role": "neutral", "displayName": "Report Paper", "canonical": "#f9fbfa" },
+      "ink": { "role": "neutral", "displayName": "Blue-black Ink", "canonical": "#16202a" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Verdict headline", "purpose": "The home page verdict only." },
+      "table-label": { "displayName": "Table label", "purpose": "Table headers, tier names, method box title." },
+      "result-figure": { "displayName": "Result figure", "purpose": "Linked measured figures in the verdict table." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "button-state", "value": "background-color 0.2s ease-out, color 0.2s ease-out", "purpose": "Verdict buttons hover." }
+    ],
+    "breakpoints": [
+      { "name": "mobile-narrow", "value": "480px" },
+      { "name": "mobile", "value": "640px" },
+      { "name": "tablet", "value": "860px" },
+      { "name": "desktop", "value": "960px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Tier mark",
+      "kind": "custom",
+      "refersTo": "tier-mark",
+      "description": "Model tier as 1-3 filled discs plus the tier name, readable without colour.",
+      "html": "<span class=\"tier-mark\"><span class=\"tier-segments\"><span class=\"tier-seg on\"></span><span class=\"tier-seg on\"></span><span class=\"tier-seg\"></span></span><span class=\"tier-name\">sonnet</span></span>",
+      "css": ".tier-mark{display:inline-flex;align-items:center;gap:8px;color:#16202a}.tier-segments{display:inline-flex;gap:3px}.tier-seg{width:10px;height:10px;border-radius:50%;border:1.5px solid currentColor}.tier-seg.on{background:currentColor}.tier-name{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-weight:600;font-size:15px;letter-spacing:.04em;text-transform:uppercase}"
+    },
+    {
+      "name": "Verdict primary button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Install action on the verdict field.",
+      "html": "<div style=\"background:#0d5a42;padding:24px\"><a class=\"vb\" href=\"#\">Install</a></div>",
+      "css": ".vb{display:inline-block;padding:11px 22px;border-radius:6px;font-weight:600;font-size:15px;border:1.5px solid #f3faf6;background:#f3faf6;color:#0a4734;text-decoration:none}.vb:hover{background:#fff}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The independent test report",
+    "overview": "The site reports on the plugin the way a comparative testing magazine reports on a product: a verdict with measured numbers first, the method beside it, rating marks that read without colour, and every figure traceable to its evidence file. Colour lives in the frame; the docs reading column stays calm.",
+    "keyCharacteristics": ["Full-width report-green verdict field", "Condensed report voice for headings and labels", "Hairline tables with tabular numerals", "Tier as filled discs"],
+    "rules": [
+      { "name": "Colour in the frame, not the column", "body": "Green owns the verdict field and the masthead rule; body text and docs tables stay ink on paper.", "section": "colors" },
+      { "name": "State is a mark, not a hue", "body": "Tier is the count of filled discs; the unchosen arm is dimmed but legible.", "section": "colors" },
+      { "name": "Numbers are tabular", "body": "Every table uses tabular numerals.", "section": "typography" }
+    ],
+    "dos": ["Do link every measured number in a results table to its evidence file.", "Do show the losing arm of a comparison, dimmed."],
+    "donts": ["Don't add feature-card grids, hero metrics, gradient text or shadows.", "Don't put a kicker above a heading.", "Don't state a saving the evals do not show."]
+  }
+}
