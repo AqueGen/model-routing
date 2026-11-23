@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: Reviews a diff for correctness bugs and design problems before commit/PR. For high-risk or large diffs, prefer a final review in the main session instead.
+description: Reviews a diff for correctness bugs and design problems when a final, whole-branch or pre-PR review is dispatched. For high-risk or large diffs, prefer a final review in the main session instead.
 model: opus
 effort: high
 disallowedTools: Edit, Write, NotebookEdit

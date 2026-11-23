@@ -16,6 +16,7 @@ trust.
 | `surveyor-case-haiku.json` | `surveyor-traces-the-chain` on the shipped haiku pin: 3/3 at $0.156 |
 | `small-case-opus55-old-anchor.json` | `delegates-codebase-question` on Opus 5.5, Claude Code 2.1.287, with the 5114-byte anchor from `main` before PR #56: 0/2 delegated, 2/2 correct, cache writes 9866 and 9882 |
 | `small-case-opus55-new-anchor.json` | the same case and CLI with the 3225-byte anchor from PR #56: 0/2 delegated, 2/2 correct, cache writes 9254 and 9228 - the ~630-token anchor saving the README quotes |
+| `small-case-opus55-no-nudge-anchor.json` | `answers-codebase-question-inline` on Opus 5.5, Claude Code 2.1.330, with the 3342-byte 0.17 anchor, plugin arm only: 2/2 stayed in the main session, 2/2 correct, $0.241 per run |
 | `plugin-details.txt` | the always-on token cost, with the Claude Code version that produced it |
 
 Each aggregate carries per-run cost, per-model usage, and every grader verdict,

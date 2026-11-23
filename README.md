@@ -41,7 +41,7 @@ What the plugin changes is the price per token, not that penalty. So:
 | Your situation | What this plugin does |
 | --- | --- |
 | You already dispatch subagents - Superpowers, workflows, any delegation-heavy practice | **Saves**, by roughly a sixth. $1.68 with the tier routed down, against $2.01 for the same subagent work at your session's tier |
-| You work mostly in one session and rarely delegate | **Neutral** since 0.17: the anchor no longer recommends dispatching, so it costs only the ~1.8k-token surcharge below. Up to 0.16 it pushed dispatches that would not otherwise have happened, and on this workload that cost roughly a fifth: $1.36 doing it inline against $1.68 routed |
+| You work mostly in one session and rarely delegate | **Neutral** since 0.17: the anchor no longer recommends dispatching, so it costs only the ~1.8k-token surcharge below. On Opus 5.5 the plugin arm answered the small case inline in 2 of 2 runs, as the baseline did ([`evals/evidence/small-case-opus55-no-nudge-anchor.json`](evals/evidence/)); the wide case has not been re-run. Up to 0.16 it pushed dispatches that would not otherwise have happened, and on this workload that cost roughly a fifth: $1.36 doing it inline against $1.68 routed |
 
 One workload, three runs an arm, on a four-turn session that never had to
 compact - so read the direction as solid and the exact percentage as not.
@@ -58,7 +58,7 @@ straight discount with nothing on the other side of the ledger.
 Note what the surcharge is and is not. The plugin costs about 1.8k tokens a
 session to carry - ~700 for the skill and agent listings, plus a ~1.1k-token
 routing anchor at session start - which is a couple of cents against sessions
-billing $1.40 to $2.00. The anchor figure is its 3225 bytes at the ratio this
+billing $1.40 to $2.00. The anchor figure is its 3342 bytes at the ratio this
 cut measured: on the same eval case and CLI, the 3225-byte anchor wrote
 about 630 fewer cache tokens per run than the 5114-byte one it replaced
 ([`evals/evidence/small-case-opus55-*-anchor.json`](evals/evidence/)). The listing figure comes from
@@ -172,7 +172,7 @@ The honest reading: the automatic half is fully attributable, the behavioural ha
 
 For the behavioural half there is now a control group, just a much smaller one: [`evals/`](evals/README.md) runs the same question with and without the plugin loaded. Up to 0.16 the plugin arm delegated a codebase question to `scout` in 3 of 3 runs and the plugin-free arm in 0 of 3, grepping inline despite having `Explore` available. That push was the cost described above, so since 0.17 the case grades the opposite: the plugin arm should answer inline like the baseline.
 
-The money is a more interesting answer than "it saves". On a wide-reading question across a four-turn session, the expensive tier drops either way - opus spend down 14%, its input volume down about 25% - but the shipped configuration ends up **23% more expensive in total than not having the plugin at all**, because a fresh subagent pays cache *write* for everything it reads while a main session pays cache *read*, 12.5x cheaper (25x on Opus 5.5 and Sonnet 5.5, 50x on Fable and Mythos 5.2 and 5.1), for what it already has. So what this plugin reliably buys is room in the expensive model's context, not a smaller bill; where the bill also falls is a narrower claim, and it depends on the tier.
+The money is a more interesting answer than "it saves". On a wide-reading question across a four-turn session, the expensive tier drops either way - opus spend down 14%, its input volume down about 25% - but up to 0.16 the shipped configuration ended up **23% more expensive in total than not having the plugin at all**, because it caused the dispatch and a fresh subagent pays cache *write* for everything it reads while a main session pays cache *read*, 12.5x cheaper (25x on Opus 5.5 and Sonnet 5.5, 50x on Fable and Mythos 5.2 and 5.1), for what it already has. That is why 0.17 stopped causing dispatches and only prices the ones that happen.
 
 Running that same question with `scout` pinned to haiku (Haiku 4.5) lands about a tenth *below* the no-plugin baseline - which looked like the fix until the tier was asked something subtler. On a question whose code contains a confident-looking wrong answer, Haiku 4.5 took the bait once in three runs and sonnet in none. Three runs cannot pin a failure rate, and the pin did not stay on sonnet because of the rate: it stayed because the failure is asymmetric, since a wrong answer sends the main session back to read the files itself and costs more than the cheaper tier saves. What the two results together support is a split rather than a pin change - breadth to `surveyor` (haiku), judgement to `scout` (sonnet). [`evals/README.md`](evals/README.md) carries the numbers, the arithmetic, and the three isolation attempts that produced numbers worth throwing away.
 
@@ -190,17 +190,16 @@ The opus slice is not a leak - on a Fable session even opus is a cheaper tier, a
 
 The fable slice is worth reading against the previous snapshot (2026-07-20, v0.8.1), where it was 21.4M of 166.8M - mostly Workflow `agent()` calls dispatched with no explicit `model` opt. 0.7.2 added the Workflow routing rule in response to that exact measurement, and the accidental part of this slice is now a rounding error. Most of what remains is the opposite of a leak: a `model=fable` reviewer dispatched ON PURPOSE at the top tier, above the session, to review this release. The counter reports it as above-tier work rather than hiding it, which is the behaviour 0.8.0 added. Tier leaks sit at 1 of 11 unpinned dispatches (9%) - the report states that count, not a verdict on it. The plugin's job is making every slice a decision instead of an accident, and a visible, attributable top-tier slice is what a decision looks like.
 
-Which task lands on which tier:
+Which tier a dispatch lands on, once something has asked for it:
 
 ```mermaid
 flowchart LR
-    A["'Run the unit tests'"] --> TR["test-runner<br/>haiku / low"]
-    B["'Where is the webhook retry logic?'"] --> SC["scout<br/>sonnet / low"]
-    C["'Implement tasks 1-3 from the plan'"] --> IM["implementer<br/>sonnet / medium"]
-    D["'Refactor the payment pipeline'"] --> IMO["implementer<br/>model=opus / medium"]
-    E["'Review the diff'"] --> RV["reviewer<br/>opus / high"]
-    G["'Review Task 2' (plan loop)"] --> TRV["task-reviewer<br/>sonnet / high"]
-    F["'Design the architecture'"] --> MS["main session<br/>your strongest model"]
+    A["dispatched test run"] --> TR["test-runner<br/>haiku / low"]
+    B["dispatched exploration"] --> SC["scout<br/>sonnet / low"]
+    C["dispatched plan task"] --> IM["implementer<br/>sonnet / medium"]
+    D["dispatched multi-file refactor"] --> IMO["implementer<br/>model=opus / medium"]
+    E["dispatched diff review"] --> RV["reviewer<br/>opus / high"]
+    G["plan-loop task review"] --> TRV["task-reviewer<br/>sonnet / high"]
 ```
 
 ## Install
@@ -259,22 +258,21 @@ For local development: clone the repo and
    per-model default - medium on Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5, xhigh on Opus 4.7, high on every
    other model that has the knob, and some models have no effort knob at all
    (see [the effort ladder](#model-tiers-and-effort-ladder));
-   dropping the session to medium is the cost-conscious pick when the main
-   session mostly coordinates - the bundled agents pin their own either way.
-2. Work normally. Mechanical work routes down automatically:
+   The plugin adds no dispatches, so most work stays on this model: pick
+   it for the hardest work the session itself does. The bundled agents
+   pin their own effort either way.
+2. Work normally. When work is dispatched - you ask for it, or a skill
+   such as Superpowers does - it runs here:
 
-   | You ask | Who runs it | Model / effort |
-   | ------- | ----------- | -------------- |
-   | "Where is X handled?" | `scout` | sonnet / low |
-   | "List every stage this order goes through" | `surveyor` | haiku / medium |
-   | "Run the tests" | `test-runner` | haiku / low |
-   | "Implement tasks from the plan" | `implementer` | sonnet / medium (`model=opus` for complex work) |
-   | "Review the diff" | `reviewer` | opus / high |
+   | Dispatched work | Who runs it | Model / effort |
+   | --------------- | ----------- | -------------- |
+   | Exploration ("where is X handled?") | `scout` | sonnet / low |
+   | Breadth sweep ("list every stage this order goes through") | `surveyor` | haiku / medium |
+   | Test or build run | `test-runner` | haiku / low |
+   | Plan task | `implementer` | sonnet / medium (`model=opus` for complex work) |
+   | Diff review | `reviewer` | opus / high |
    | Per-task review in a plan loop | `task-reviewer` | sonnet / high |
-   | "Walk through the flow in the browser" | `e2e-runner` | sonnet / medium |
-
-   The main session spends tokens only on planning, decisions, final
-   review of high-risk diffs, and reading the agents' short reports.
+   | Browser flow | `e2e-runner` | sonnet / medium |
 
 ### Superpowers flow (brainstorm - plan - execute)
 
@@ -284,10 +282,11 @@ Works with any plan-driven process (superpowers or similar):
    strongest model - protecting this thinking is the point of the
    plugin.
 2. Plan execution goes to `implementer`: one plan task with its own verification step per dispatch, one at a time. Small edits to the same files under one check share a dispatch (every fresh agent re-reads files from scratch); anything bigger gets a fresh agent (a long run re-reads its whole growing context every turn).
-3. Verification: `test-runner` after each batch, `task-reviewer`
-   (sonnet) for the loop's per-task reviews and scoped re-reviews,
-   `reviewer` (opus) on the completed chunk or branch, and for high-risk
-   diffs a final review in the main session.
+3. Verification the process asks for: test runs it dispatches go to
+   `test-runner`, the loop's per-task reviews and scoped re-reviews to
+   `task-reviewer` (sonnet), a completed chunk or branch review to
+   `reviewer` (opus); high-risk diffs get a final review in the main
+   session.
 
 ### "I don't want the expensive model"
 
@@ -304,26 +303,27 @@ High-risk review still belongs in the main session.
 
 ## Usage
 
-The agents show up as regular subagent types. Ask for them explicitly or
-let Claude route via the skill:
+The agents show up as regular subagent types. The plugin does not make
+Claude delegate; ask for a subagent, or let a skill dispatch one, and the
+skill routes it:
 
-- "Where is the webhook retry logic?" - Claude dispatches `scout`
-  (sonnet); you get the answer with file:line refs, not a pile of file
-  contents in your context.
-- "Run the unit tests" - Claude dispatches `test-runner` (haiku); you get
-  a compact pass/fail report instead of a wall of logs.
-- "Implement tasks 1-3 from the plan" - Claude dispatches `implementer`
+- "Have a subagent find the webhook retry logic" - Claude dispatches
+  `scout` (sonnet); you get the answer with file:line refs, not a pile of
+  file contents in your context.
+- "Run the unit tests in a subagent" - Claude dispatches `test-runner`
+  (haiku); you get a compact pass/fail report instead of a wall of logs.
+- "Dispatch tasks 1-3 from the plan" - Claude dispatches `implementer`
   (sonnet) with self-contained task descriptions; multi-file or subtle
   work goes out with `model=opus`.
-- "Review the diff" - Claude dispatches `reviewer` (opus). For high-risk
-  diffs, ask for review in the main session instead - one expensive pass
-  is cheaper than a missed bug. Per-task reviews inside a plan loop go to
-  `task-reviewer` (sonnet).
-- "Walk through the checkout flow in the browser" - Claude dispatches
-  `e2e-runner` (sonnet).
+- "Get the diff reviewed by an agent" - Claude dispatches `reviewer`
+  (opus). For high-risk diffs, ask for review in the main session instead
+  - one expensive pass is cheaper than a missed bug. Per-task reviews
+  inside a plan loop go to `task-reviewer` (sonnet).
+- "Have an agent walk through the checkout flow in the browser" - Claude
+  dispatches `e2e-runner` (sonnet).
 
 The routing rules live in the `model-routing` skill and activate when
-Claude decides where to send work. Two rules worth knowing:
+Claude dispatches work. Two rules worth knowing:
 
 - **Batch small edits, not plan tasks.** Each subagent re-reads files from scratch, so ten one-line edits as ten agents cost more than one agent with ten edits. A plan task with its own verification step gets its own fresh agent: a long run re-reads its whole growing context every turn. Over 30 days of one user's transcripts, the heaviest tenth of implementer runs took 60% of implementer cost.
 - **Repo policies win.** If your project says "never run integration
@@ -449,15 +449,14 @@ step up on evidence.
 
 ## Recommended settings
 
-**Session model + effort (the weighted price/quality pick).** The session
-model is not where the grind happens - the plugin routes exploration,
-implementation, and tests down to cheaper tiers - so the session model
-only needs to be strong enough for the high-value seat: planning,
-coordination, and final review. That makes the balanced default:
+**Session model + effort (the weighted price/quality pick).** The plugin
+adds no dispatches, so everything you do not delegate runs on the session
+model - pick it for the work you keep there, and let the agents price the
+work you do delegate. That makes the balanced default:
 
 - **Session model: Opus.** Near-frontier reasoning for the decisions that
   cascade through everything downstream, without paying the very top tier
-  on every turn. The plugin already keeps the cheap work off it. Reserve
+  on every turn. Reserve
   the strongest tier (Fable/Mythos-class) for sessions that are *entirely*
   hard reasoning - a thorny architecture day or a subtle debugging hunt -
   where the whole session sits in the seat that tier is worth. Drop to a
@@ -470,9 +469,9 @@ coordination, and final review. That makes the balanced default:
   it when the thinking you keep in the main seat is genuinely hard, not
   across the board.
 
-Rule of thumb: pick the session tier for the *hardest thing you keep in
-the main session*, not for the average task - the average task gets routed
-down anyway.
+Rule of thumb: pick the session tier for the *hardest thing the main
+session does*. The plugin adds no dispatches, so only work you or a skill
+send to a subagent leaves that tier.
 
 Generation jumps are free: agent pins name model FAMILIES (opus, sonnet,
 haiku), so when a new family member ships (Opus 5 -> Opus 5.5, then

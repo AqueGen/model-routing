@@ -1,6 +1,6 @@
 ---
 name: e2e-runner
-description: Drives browser/E2E scenarios and interprets test failures (product bug vs test bug vs flake). Costlier than test-runner - use test-runner for plain run-and-report.
+description: Drives browser/E2E scenarios and interprets test failures (product bug vs test bug vs flake). Costlier than test-runner, which takes plain run-and-report dispatches.
 model: sonnet
 effort: medium
 ---

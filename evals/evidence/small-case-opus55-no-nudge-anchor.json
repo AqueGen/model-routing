@@ -1,0 +1,80 @@
+{
+  "model": "opus",
+  "runs": 2,
+  "arms": [
+    "with"
+  ],
+  "cases": [
+    {
+      "name": "answers-codebase-question-inline",
+      "arms": {
+        "with": [
+          {
+            "exitCode": 0,
+            "costUsd": 0.12277829999999999,
+            "durationMs": 7135,
+            "turns": 3,
+            "modelUsage": {
+              "claude-haiku-5-5": {
+                "costUSD": 0.0001277,
+                "inputTokens": 1187,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "outputTokens": 18
+              },
+              "claude-opus-5-5": {
+                "costUSD": 0.1226506,
+                "inputTokens": 6,
+                "cacheReadInputTokens": 110753,
+                "cacheCreationInputTokens": 10947,
+                "outputTokens": 645
+              }
+            },
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "stayed-in-main-session",
+                "pass": true
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 0.358774,
+            "durationMs": 7032,
+            "turns": 3,
+            "modelUsage": {
+              "claude-haiku-5-5": {
+                "costUSD": 0.0001842,
+                "inputTokens": 1187,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "outputTokens": 131
+              },
+              "claude-opus-5-5": {
+                "costUSD": 0.35858979999999996,
+                "inputTokens": 6,
+                "cacheReadInputTokens": 81589,
+                "cacheCreationInputTokens": 41256,
+                "outputTokens": 610
+              }
+            },
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "stayed-in-main-session",
+                "pass": true
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 ---
 name: surveyor
-description: Read-only breadth sweeps over a codebase - enumerate, list, trace a chain end to end ("list every stage in order", "which files import X", "where does this pipeline end"). Returns the list or the ordering, never file dumps. Use scout instead when the answer needs judgement about what code does. Never modifies anything.
+description: Read-only breadth sweeps over a codebase for breadth work that is being dispatched anyway - enumerate, list, trace a chain end to end ("list every stage in order", "which files import X", "where does this pipeline end"). Returns the list or the ordering, never file dumps. Use scout instead when the answer needs judgement about what code does. Never modifies anything.
 model: haiku
 effort: medium
 disallowedTools: Agent, SendMessage, Edit, Write, NotebookEdit

@@ -145,7 +145,7 @@ particular ("what happens to an order when payment throws a non-retryable
 error") is exactly the kind of question the quality case below shows the cheap
 tier failing. The plugin dispatched exactly once per run and answered the
 follow-ups from `scout`'s summary rather than dispatching again, which is what
-the guidance asks for.
+the guidance asked for up to 0.16.
 
 So the shipped configuration costs 23% more than not having the plugin on this
 workload, and pinning `scout` to haiku costs 9% less. The expensive tier drops
@@ -277,7 +277,8 @@ delegated, and no way for it to contaminate the result by reading.
 
 ## Next
 
-The mirror of the small case: a genuinely trivial question, where dispatching at
-all is the failure being measured. And `forced-dispatch-tier` still needs the fix
+Since 0.17 the small and wide cases grade staying inline (`stayed-in-main-session`,
+`match: not_contains`); the numbers above were measured when they graded the
+dispatch. `forced-dispatch-tier` still needs the fix
 described in its NOTES.md before it can price delegation at the session tier -
 the Superpowers-by-default question is still open.

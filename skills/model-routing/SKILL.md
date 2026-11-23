@@ -109,8 +109,8 @@ example use case for `low` is subagents.
   cost by about a third at `max` with no quality change (less frequent,
   not gone). Two rules follow. Routine work belongs at `high` or below,
   where this is rare. And on a session running `xhigh` or `max`, review
-  what the plan, the user or these rules asked for - `reviewer` on a
-  finished diff, `verifier` on batched output - and do not open a second
+  what the plan or the user asked for - on `reviewer` when a finished diff
+  is reviewed, on `verifier` when batched output is gated - and do not open a second
   round on top of it because the level invites one. A round is the
   review, the fixes it asked for, and a check that each finding is fixed;
   that check belongs to the same round. A fresh review of the whole diff
@@ -154,7 +154,7 @@ dispatched:
 | Complex implementation: multi-file refactor, subtle concurrency/security | `implementer` with `model=opus` | medium (pinned) |
 | Trivial mechanical tasks: renames, boilerplate, mirrored constants | sonnet | low |
 | Per-task review and scoped re-review inside a plan loop (Superpowers SDD) | `task-reviewer` (sonnet) | high |
-| Final/whole-branch, high-risk or pre-PR review of implemented work | `reviewer` (opus) | high |
+| Final/whole-branch or pre-PR review of implemented work (high-risk or large diffs: final review stays in the main session) | `reviewer` (opus) | high |
 | Deciding whether external review findings (bots, human reviewers) are real; the brief asks for a verdict per finding. `task-reviewer` findings inside a plan loop stay on the loop's own path | `reviewer` (opus); only confirmed findings go to `implementer` | high |
 | Run tests/builds/linters, report failures | `test-runner` (haiku) | low |
 | Sanity-check another agent's diff against its task | `verifier` (haiku) | medium |
@@ -187,8 +187,8 @@ actually earns its cost:
   contracts; a sonnet attempt came back weak; or an E2E/visual result
   needs hard interpretation. Ambiguity is NOT an escalation trigger but a
   stop sign: implementer rejects ambiguous tasks by contract, so an
-  unclear task or root cause gets clarified in the main session (or
-  investigated via scout) first - then the well-defined task dispatches.
+  unclear task or root cause gets clarified first; a dispatch, if one was
+  asked for, carries the well-defined task.
   Opus 5 was a step-change over Opus 4.8 at unchanged
   price, and Opus 5.5 is stronger again at 20% less ($4/$20, cache reads
   60% less), so the opus tier buys strictly more per dollar than when
@@ -250,8 +250,8 @@ actually earns its cost:
   lower levels Fable 5.2 is more likely to stop a long task early. So effort is
   a real control on a fable session and not a rounding error: a routine
   phase left at the default pays top-tier rates for depth it did not
-  need. It does not replace the tier decision - dispatching that phase
-  to sonnet is cheaper still. Sweep Workflow `effort` opts the same way.
+  need. It does not replace the tier decision for work that is dispatched
+  anyway. Sweep Workflow `effort` opts the same way.
 - **A refusal is a redirect, not a weak result.** Fable 5.2, Fable 5.1, Fable 5,
   Opus 5.5, Opus 5, Sonnet 5.5 and Haiku 5.5 ship safety classifiers that can
   decline a request outright rather than answer it badly - Sonnet 5.5
@@ -290,10 +290,10 @@ with `/model-routing:stats`.
 
 ## Rules
 
-- Inline is the default. A subagent dispatch has a fixed overhead (system
+- This skill adds no dispatches; whether to dispatch is decided outside it.
+  Weigh that knowing a subagent dispatch has a fixed overhead (system
   prompt, file re-reads as cache writes, report) that the main session does
-  not pay for context it already holds. This skill does not add dispatches:
-  when nothing else asked for one, the work stays in the main session.
+  not pay for context it already holds.
 - When a test or build run is dispatched, `test-runner` takes it and only
   its compact report comes back.
 - When exploration is dispatched, conclusions and file:line refs come back,
@@ -382,7 +382,7 @@ with `/model-routing:stats`.
   price of using Fable 5 for the whole task. One short turn beats finding
   the wrong approach in a finished diff. With a plan already approved -
   written in the main session or by a planning skill - that check has
-  happened, so dispatch straight to implementation. The harness also ships this pattern as a built-in tool - see `advisorModel` under Complementary settings.
+  happened, so the dispatch goes straight to implementation. The harness also ships this pattern as a built-in tool - see `advisorModel` under Complementary settings.
 - Escalate, don't guess. When a subagent is stuck on the *approach* (not
   just missing a fact), it should package its state - what it tried, why
   each attempt failed, the candidate directions it sees - and hand it back
@@ -395,8 +395,8 @@ with `/model-routing:stats`.
   re-dispatch with the packaged state (what was tried, why it failed, the
   chosen direction) so the new agent starts from the decision, not from
   zero.
-- When the user re-asks the same question or calls the answer shallow,
-  redo it one step up - a higher tier, or higher effort where a Workflow opt can set it - never at the
+- When the user re-asks the same question or calls a subagent's answer
+  shallow, redo it one step up - a higher tier, or higher effort where a Workflow opt can set it - never at the
   same level that just failed.
 - The escalation ladder generalizes: any failed or visibly weak subagent
   RESULT (wrong answer, broken diff, report that dodges the question)
@@ -471,8 +471,9 @@ what changes cost there.
 
 - **Boundary.** Workflows are for breadth - auditing many files for one
   issue, a migration across hundreds of files, cross-checking research,
-  looping until a check passes. An ordinary multi-step task stays a
-  dispatch chain: a workflow run can cost substantially more than
+  looping until a check passes. An ordinary multi-step task stays out of
+  a workflow (in the main session, or a dispatch chain where delegation
+  was asked for): a workflow run can cost substantially more than
   working the same task in conversation.
 - **Per-stage routing.** Every `agent()` call without `model`/`effort`
   opts inherits the session model at session effort, multiplied by the
@@ -523,9 +524,10 @@ what changes cost there.
   put one, so there only the sentence is available. The budget is
   advisory - keep your own timeout if you need a hard stop. And under
   time pressure the model searches and verifies a little less, so the
-  checks stay where they were: `verifier` on batched implementer diffs,
-  `reviewer` on the code, the main session on a high-risk diff. A budget
-  buys pace, it does not waive any of them. The measurement behind all of
+  checks that were planned stay where they were - `verifier` on batched
+  implementer diffs, `reviewer` on the code, the main session on a
+  high-risk diff, whichever of them the run already had. A budget buys
+  pace, it does not waive any of them. The measurement behind all of
   this is on Opus 5.5; whether the same signals move a sonnet or haiku
   stage is untested here.
 - **Permissions.** Workflow subagents always run in `acceptEdits` and
