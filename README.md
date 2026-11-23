@@ -58,10 +58,10 @@ discount whose only cost is the always-on surcharge below.
 
 Note what the surcharge is and is not. The plugin costs about 1.9k tokens a
 session to carry - measured on 2.1.330 as the cache-write difference between
-the small-case arms (10309/10287 against 8413/8412), of which the anchor is
+the small-case arms (10309/10287 against 8413/8412), of which the 2021-byte anchor measured then was
 about 700 and the remaining ~1.2k the skill and agent listings - which is a
-couple of cents against sessions billing $1.40 to $2.00. The anchor figure
-is its 1860 bytes at the ratio an earlier cut measured: on the same eval
+couple of cents against sessions billing $1.40 to $2.00. The anchor
+is now 1861 bytes, about 620 tokens at the ratio an earlier cut measured: on the same eval
 case and CLI, the 3225-byte anchor wrote about 630 fewer cache tokens per
 run than the 5114-byte one it replaced
 ([`evals/evidence/small-case-opus55-*-anchor.json`](evals/evidence/)). The

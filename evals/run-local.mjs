@@ -89,7 +89,7 @@ for (const kase of cases) {
   }
 
   if (Object.keys(armResults).length === 0) continue;
-  report.cases.push({ name: kase.name, arms: armResults });
+  report.cases.push({ name: kase.name, model: sessionModelFor(kase.frontmatter.agent) ?? `${kase.frontmatter.agent} pin`, arms: armResults });
   printCase(kase, armResults);
 }
 
@@ -112,18 +112,10 @@ function fixtureFor(kase) {
     throw new Error(`No fixture "${name}" and no ${name}.gen.mjs to build one`);
   }
 
-  // Regenerate whenever the generator or one of its `<name>.*` inputs is newer
-  // than what it produced. A stale fixture kept because the directory happened
-  // to exist is how a fixed generator quietly fails to reach the runs that
-  // report on it.
-  const newestInput = Math.max(
-    ...readdirSync(FIXTURES_DIR)
-      .filter((f) => f.startsWith(`${name}.`))
-      .map((f) => statSync(join(FIXTURES_DIR, f)).mtimeMs),
-  );
-  if (!isDir(dir) || newestInput > statSync(dir).mtimeMs) {
-    execFileSync(process.execPath, [generator], { stdio: "inherit" });
-  }
+  // Always regenerate: a generator may read inputs (a diff, another fixture
+  // tree) whose edits no mtime check sees, and a stale copy silently grades
+  // runs against the old content.
+  execFileSync(process.execPath, [generator], { stdio: "inherit" });
   if (!isDir(dir)) throw new Error(`${name}.gen.mjs ran but produced no ${dir}`);
   return dir;
 }
