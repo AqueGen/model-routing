@@ -79,9 +79,8 @@ example use case for `low` is subagents.
 - **medium** - normal implementation: real logic, but the approach is
   already clear. It is also where Sonnet 5.5 is told to start agentic
   coding and multistep tool use on well-specified tasks, moving to
-  `high` for harder or longer ones. This plugin draws its own line one
-  step earlier and on the tier instead: harder work goes to opus, still
-  at the pinned medium, because a dispatch has no effort param to raise.
+  `high` for harder or longer ones. A dispatch can raise it: the Agent
+  call takes an `effort` param for a non-fork subagent.
   Sonnet 5.5's levels are recalibrated against Sonnet 5 - the same name
   buys a different amount of thinking than it did, and Anthropic does not
   say in which direction, so re-sweep rather than carry a level over.
@@ -124,9 +123,9 @@ Match effort to task difficulty, not to tier - most work is a
 `low`/`medium` task in disguise. Where effort is set: the bundled agents
 pin theirs in frontmatter (`effort:` field - overrides the session level
 for that agent); Workflow scripts take an `effort` option per `agent()`
-call; any other Agent dispatch inherits the session effort. The Agent
-tool has NO effort param, so dispatching a pinned agent with `model=opus`
-changes the model, not the effort - the frontmatter pin still applies.
+call; an Agent dispatch takes an `effort` param for a non-fork subagent,
+and without one a pinned agent runs its pin and an unpinned one inherits
+the session effort. `model=opus` alone changes the model, not the effort.
 Vary effort across workloads, not inside one conversation: changing the
 top-level effort value between requests invalidates the cached prompt
 prefix, so per-agent pins and per-`agent()` opts - each with its own
@@ -140,9 +139,8 @@ Opus 5, Opus 5.5 and Sonnet 5.5; nothing documents Claude Code's
 Each row carries a default effort - the second knob, tuned to the task,
 not the tier. For the bundled agents the effort is pinned in their
 frontmatter; the column documents it rather than asking the caller to
-set it. For unpinned rows it is the target level, reached via the
-session effort or a Workflow `effort` opt - a plain Agent dispatch
-carries no effort param:
+set it. For unpinned rows it is the target level, passed as the Agent
+`effort` param or a Workflow `effort` opt.
 
 Rows say what a dispatch of that kind runs on, not that the kind should be
 dispatched:
@@ -151,8 +149,8 @@ dispatched:
 |-----------------|---------------|--------|
 | Codebase exploration ("where is X", "how does Y work") | `scout` (sonnet) | low |
 | Breadth sweeps: enumerate, list, trace a chain end to end | `surveyor` (haiku) | medium |
-| Implementing an approved plan/spec (ordinary: single-file, clear shape) | `implementer` (sonnet) | medium |
-| Complex implementation: multi-file refactor, subtle concurrency/security | `implementer` with `model=opus` | medium (pinned) |
+| Implementing a plan task or spec, multi-file and cross-layer included | `implementer` (sonnet) | medium |
+| Implementation touching security, money, data migrations or concurrency, or a retry after a weak sonnet result | `implementer` with `model=opus` | medium (pinned) |
 | Trivial mechanical tasks: renames, boilerplate, mirrored constants | sonnet | low |
 | Per-task review and scoped re-review inside a plan loop (Superpowers SDD) | `task-reviewer` (sonnet) | high |
 | Final/whole-branch, high-risk or pre-PR review of implemented work | `reviewer` (opus) | high |
@@ -180,13 +178,14 @@ actually earns its cost:
   stays the value default. Medium effort because the agent executes, it
   does not design - and medium is where Sonnet 5.5's own guidance starts
   well-specified agentic coding.
-- **Complex implementation -> opus, still at the agent's pinned medium**
-  (the dispatch changes the model only - see the effort section).
-  Escalate from sonnet when
-  any of these hold: the change is multi-file or cross-layer; it touches
-  security, money, data migrations, concurrency, protocols, or public
-  contracts; a sonnet attempt came back weak; or an E2E/visual result
-  needs hard interpretation. Ambiguity is NOT an escalation trigger but a
+- **Opus implementation only on narrow triggers, still at the agent's
+  pinned medium.** Escalate from sonnet when the change touches security,
+  money, data migrations or concurrency, or when a sonnet attempt came
+  back weak. Multi-file or cross-layer work alone stays on sonnet, as
+  Superpowers' own model selection has it ("standard model"): over 30
+  days of one user's transcripts the earlier opus triggers, led by multi-file, sent 232
+  of 316 explicit implementer dispatches to opus, $6,072 of opus
+  implementer spend against $529 on sonnet. Ambiguity is NOT an escalation trigger but a
   stop sign: implementer rejects ambiguous tasks by contract, so an
   unclear task or root cause gets clarified first; a dispatch, if one was
   asked for, carries the well-defined task.
@@ -200,14 +199,12 @@ actually earns its cost:
   (74k written, 451k re-read, 6k out) costs $0.2901 on sonnet against
   $0.5802 on opus, whatever the mix.
 - **Review -> opus/high.** Review is one cheap pass guarding against
-  expensive misses - an asymmetric bet where the strongest reasoning at
-  high effort is worth it, because a bug that ships costs far more than
-  the review. The case for `medium` grew with Opus 5.5: Anthropic reports
-  it catches more bugs with fewer false alarms, its `medium` matches or exceeds
-  Opus 5 at `high` on coding, and at `high` it thinks more per turn than Opus 5
-  did, so the same pin now costs more. That is vendor evidence on
-  model-level evals, not this plugin's review eval - the pin stays at
-  high until a medium-vs-high review run on Opus 5.5 is measured. The
+  expensive misses, so it stays on the strongest tier at high effort.
+  Anthropic reports Opus 5.5 at `medium` matching or exceeding Opus 5 at
+  `high` on coding, but on `evals/reviewer-seeded-bugs` medium and high
+  both found 12/12 planted defects and medium was not cheaper (warm runs
+  $0.159 against $0.150 mean): four planted bugs cannot tell the levels
+  apart, so the pin stays high until a harder case does. The
   per-task reviews and scoped re-reviews of a plan loop are the
   exception: Superpowers SDD scales their model to the diff with a
   mid-tier floor, so they go to `task-reviewer` (sonnet/high) rather than
@@ -225,7 +222,7 @@ actually earns its cost:
   low/medium punch well above their weight - when a dispatch feels too
   expensive, step the EFFORT down before the tier - on a Workflow stage,
   or by choosing an agent pinned lower; when a result is too
-  shallow, step effort up before tier up - on a Workflow stage, where the `effort` opt exists; a plain dispatch has only the tier.
+  shallow, step effort up before tier up - the Agent `effort` param or a Workflow `effort` opt.
 - **The fable-to-opus price gap is exactly the sticker.** The documented
   ~30% token inflation is measured against models from BEFORE Opus 4.7,
   which is the generation whose tokenizer Fable 5 uses - it is not a gap
@@ -394,13 +391,13 @@ with `/model-routing:stats`.
   chosen direction) so the new agent starts from the decision, not from
   zero.
 - When the user re-asks a question a subagent answered or calls its
-  answer shallow and the work is dispatched again, it goes one step up - a higher tier, or higher effort where a Workflow opt can set it - never at the
+  answer shallow and the work is dispatched again, it goes one step up - a higher tier, or higher effort via the Agent `effort` param or a Workflow opt - never at the
   same level that just failed.
 - The escalation ladder generalizes: any failed or visibly weak subagent
   RESULT (wrong answer, broken diff, report that dodges the question),
   when the caller re-dispatches it, goes exactly one step up - next tier via the Agent `model` param, or
   the same tier at higher effort when the miss looks like shallow thinking
-  rather than missing capability and a Workflow opt is there to raise it. One step, not a leap to the top: most
+  rather than missing capability (the Agent `effort` param or a Workflow opt raises it). One step, not a leap to the top: most
   failures clear one tier up, and jumping straight to the strongest model
   forfeits the middle tier's price. A second failure at the higher step
   means the task was mis-scoped, not under-powered - stop climbing and

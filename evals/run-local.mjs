@@ -6,11 +6,13 @@
 // and run `claude plugin eval model-routing --ablation with-without` instead.
 //
 // Only the subset of the format this suite actually uses is supported: regex
-// graders over `trace` and `last_message`. Anything else is reported as skipped
-// rather than silently scored.
+// graders over `trace` and `last_message`, and `command` graders that run a shell
+// command in the finished workspace (optionally after copying in a `hidden` path
+// from the case directory). Anything else is reported as skipped rather than
+// silently scored.
 
-import { execFileSync, spawn } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { execFileSync, execSync, spawn } from "node:child_process";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -40,7 +42,8 @@ const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 const resultsDir = join(EVALS_DIR, "results", stamp);
 mkdirSync(resultsDir, { recursive: true });
 
-const report = { model: args.model, runs: args.runs, arms, cases: [] };
+const pluginRoot = args.pluginRoot ? resolve(args.pluginRoot) : PLUGIN_ROOT;
+const report = { model: args.modelGiven ? args.model : null, runs: args.runs, arms, pluginRoot, cases: [] };
 
 for (const kase of cases) {
   const runs = args.runs ?? kase.frontmatter.runs ?? 3;
@@ -86,7 +89,7 @@ for (const kase of cases) {
   }
 
   if (Object.keys(armResults).length === 0) continue;
-  report.cases.push({ name: kase.name, arms: armResults });
+  report.cases.push({ name: kase.name, model: sessionModelFor(kase.frontmatter.agent) ?? `${kase.frontmatter.agent} pin`, arms: armResults });
   printCase(kase, armResults);
 }
 
@@ -98,7 +101,7 @@ console.log(`\nTraces and aggregate.json: ${resultsDir}`);
 // The real harness gets its workspace from case.yaml `context.scaffold_script`,
 // which needs a run to verify. Until then a case names its fixture directory
 // under evals/fixtures; a fixture too large to commit ships as `<name>.gen.mjs`
-// next to it and is generated on first use.
+// next to it and is regenerated before every run.
 function fixtureFor(kase) {
   const name = args.fixture ?? kase.frontmatter.fixture ?? "mini-app";
   const dir = join(FIXTURES_DIR, name);
@@ -109,12 +112,10 @@ function fixtureFor(kase) {
     throw new Error(`No fixture "${name}" and no ${name}.gen.mjs to build one`);
   }
 
-  // Regenerate whenever the generator is newer than what it produced. A stale
-  // fixture kept because the directory happened to exist is how a fixed
-  // generator quietly fails to reach the runs that report on it.
-  if (!isDir(dir) || statSync(generator).mtimeMs > statSync(dir).mtimeMs) {
-    execFileSync(process.execPath, [generator], { stdio: "inherit" });
-  }
+  // Always regenerate: a generator may read inputs (a diff, another fixture
+  // tree) whose edits no mtime check sees, and a stale copy silently grades
+  // runs against the old content.
+  execFileSync(process.execPath, [generator], { stdio: "inherit" });
   if (!isDir(dir)) throw new Error(`${name}.gen.mjs ran but produced no ${dir}`);
   return dir;
 }
@@ -139,9 +140,12 @@ async function runOnce(kase, arm, timeoutMs) {
         kase.frontmatter.append_system_prompt,
         toList(kase.frontmatter.tools),
         kase.frontmatter.agent,
+        toList(kase.frontmatter.allowed_tools),
       ),
     );
   }
+
+  const commandResults = turns.every((t) => t.exitCode === 0) ? runCommandGraders(kase, workspace) : {};
 
   try {
     rmSync(workspace, { recursive: true, force: true });
@@ -161,11 +165,36 @@ async function runOnce(kase, arm, timeoutMs) {
     // concatenation can assemble a passing match out of pieces of several
     // answers, which is a pass the run did not earn.
     turnMessages: turns.map((t) => t.lastMessage),
+    commandResults,
     costUsd: sum(turns.map((t) => t.costUsd)),
     durationMs: sum(turns.map((t) => t.durationMs)),
     turns: sum(turns.map((t) => t.turns)),
     modelUsage: mergeModelUsage(turns.map((t) => t.modelUsage)),
   };
+}
+
+// Command graders run after the last turn, inside the workspace the model left
+// behind. A `hidden` path is copied in only now, so the model never sees tests
+// it could read or special-case during the run.
+function runCommandGraders(kase, workspace) {
+  const results = {};
+  for (const grader of kase.graders.filter((g) => g.type === "command")) {
+    if (grader.hidden) {
+      const from = join(kase.dir, grader.hidden);
+      if (!existsSync(from)) throw new Error(`${kase.name}/${grader.name}: hidden path not found: ${from}`);
+      cpSync(from, join(workspace, grader.hidden), { recursive: true });
+    }
+    let output = "";
+    let status = 0;
+    try {
+      output = execSync(grader.command, { cwd: workspace, timeout: 120_000, encoding: "utf-8", stdio: "pipe" });
+    } catch (e) {
+      status = e.status ?? 1;
+      output = `${e.stdout ?? ""}${e.stderr ?? ""}`;
+    }
+    results[grader.name] = { pass: grader.pattern ? new RegExp(grader.pattern, grader.flags ?? "").test(output) : status === 0 };
+  }
+  return results;
 }
 
 function sessionModelFor(agent) {
@@ -197,7 +226,7 @@ function mergeModelUsage(all) {
   return merged;
 }
 
-async function runTurn(prompt, arm, workspace, timeoutMs, isFollowup, appendSystemPrompt, tools, agent) {
+async function runTurn(prompt, arm, workspace, timeoutMs, isFollowup, appendSystemPrompt, tools, agent, allowedTools) {
   const argv = [
     "-p",
     prompt,
@@ -230,12 +259,13 @@ async function runTurn(prompt, arm, workspace, timeoutMs, isFollowup, appendSyst
     "",
     "--permission-mode",
     "dontAsk",
+    ...(allowedTools ? ["--allowedTools", ...allowedTools] : []),
     // `--model` outranks an agent's frontmatter pin, so a case that runs AS an
     // agent must not be handed the default or it silently measures the wrong
     // tier. Pass one only when the caller asked for it by name.
     ...(sessionModelFor(agent) ? ["--model", sessionModelFor(agent)] : []),
   ];
-  if (arm === "with") argv.push("--plugin-dir", PLUGIN_ROOT);
+  if (arm === "with") argv.push("--plugin-dir", pluginRoot);
 
   // CLAUDE_CODE_SUBAGENT_MODEL overrides the tier of every subagent, which is
   // the thing several of these cases exist to measure. Whatever the operator has
@@ -284,6 +314,7 @@ function extractResult(stdout) {
 // --- grading -------------------------------------------------------------
 
 function grade(grader, run) {
+  if (grader.type === "command") return run.commandResults[grader.name] ?? { pass: false };
   if (grader.type !== "regex") return { pass: false, skipped: `unsupported grader type: ${grader.type}` };
   const pattern = new RegExp(grader.pattern, grader.flags ?? "");
   const wanted = grader.match ?? "contains";
@@ -395,6 +426,7 @@ function loadCase(dir) {
 
   return {
     name: frontmatter.name ?? dir.split(/[\\/]/).pop(),
+    dir,
     frontmatter,
     prompt: body.trim(),
     followups,
@@ -431,7 +463,7 @@ function parseScalar(raw) {
 }
 
 function parseArgs(argv) {
-  const out = { runs: null, model: "sonnet", modelGiven: false, arm: "both", case: null, fixture: null };
+  const out = { runs: null, model: "sonnet", modelGiven: false, arm: "both", case: null, fixture: null, pluginRoot: null };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--runs") out.runs = Number(argv[++i]);
     else if (argv[i] === "--model") {
@@ -441,6 +473,7 @@ function parseArgs(argv) {
     else if (argv[i] === "--arm") out.arm = argv[++i];
     else if (argv[i] === "--case") out.case = argv[++i];
     else if (argv[i] === "--fixture") out.fixture = argv[++i];
+    else if (argv[i] === "--plugin-root") out.pluginRoot = argv[++i];
     else throw new Error(`Unknown option: ${argv[i]}`);
   }
   return out;

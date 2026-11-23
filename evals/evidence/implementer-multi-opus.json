@@ -1,0 +1,113 @@
+{
+  "model": "opus",
+  "runs": 3,
+  "arms": [
+    "with"
+  ],
+  "pluginRoot": "G:\\claude\\worktrees\\model-routing\\pr63-baseline",
+  "cases": [
+    {
+      "name": "implementer-multi-file",
+      "arms": {
+        "with": [
+          {
+            "exitCode": 0,
+            "costUsd": 0.45706765499999996,
+            "durationMs": 74391,
+            "turns": 33,
+            "modelUsage": {
+              "claude-haiku-5-5": {
+                "costUSD": 0.004957655,
+                "inputTokens": 1626,
+                "cacheReadInputTokens": 30593,
+                "cacheCreationInputTokens": 33545,
+                "outputTokens": 592
+              },
+              "claude-opus-5-5": {
+                "costUSD": 0.45210999999999996,
+                "inputTokens": 18,
+                "cacheReadInputTokens": 396610,
+                "cacheCreationInputTokens": 22837,
+                "outputTokens": 9501
+              }
+            },
+            "scores": [
+              {
+                "grader": "hidden-tests-pass",
+                "pass": true
+              },
+              {
+                "grader": "visible-tests-pass",
+                "pass": true
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 0.4581528400000001,
+            "durationMs": 74881,
+            "turns": 33,
+            "modelUsage": {
+              "claude-haiku-5-5": {
+                "costUSD": 0.00247364,
+                "inputTokens": 1628,
+                "cacheReadInputTokens": 90234,
+                "cacheCreationInputTokens": 8320,
+                "outputTokens": 737
+              },
+              "claude-opus-5-5": {
+                "costUSD": 0.45567920000000006,
+                "inputTokens": 18,
+                "cacheReadInputTokens": 400656,
+                "cacheCreationInputTokens": 23512,
+                "outputTokens": 9369
+              }
+            },
+            "scores": [
+              {
+                "grader": "hidden-tests-pass",
+                "pass": true
+              },
+              {
+                "grader": "visible-tests-pass",
+                "pass": true
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 0.420599945,
+            "durationMs": 67661,
+            "turns": 32,
+            "modelUsage": {
+              "claude-haiku-5-5": {
+                "costUSD": 0.001926545,
+                "inputTokens": 1626,
+                "cacheReadInputTokens": 56682,
+                "cacheCreationInputTokens": 7805,
+                "outputTokens": 443
+              },
+              "claude-opus-5-5": {
+                "costUSD": 0.4186734,
+                "inputTokens": 16,
+                "cacheReadInputTokens": 342167,
+                "cacheCreationInputTokens": 21772,
+                "outputTokens": 8800
+              }
+            },
+            "scores": [
+              {
+                "grader": "hidden-tests-pass",
+                "pass": true
+              },
+              {
+                "grader": "visible-tests-pass",
+                "pass": true
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

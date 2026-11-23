@@ -1,0 +1,77 @@
+diff --git a/src/csv.js b/src/csv.js
+index 63a2b95..a269f66 100644
+--- a/src/csv.js
++++ b/src/csv.js
+@@ -1,6 +1,6 @@
+ function encodeField(value) {
+-  const text = String(value);
+-  return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
++  const str = String(value);
++  return /[",\n]/.test(str) ? `"${str.replaceAll('"', '""')}"` : str;
+ }
+ 
+ export function toCsvRow(fields) {
+diff --git a/src/discount.js b/src/discount.js
+index f4f91e4..8137379 100644
+--- a/src/discount.js
++++ b/src/discount.js
+@@ -3,7 +3,7 @@ import { roundMoney } from "./money.js";
+ export function discountAmount(subtotal, discount) {
+   if (!discount) return 0;
+   if (discount.type === "percent") {
+-    return roundMoney((subtotal * discount.value) / 100);
++    return Math.ceil(subtotal * discount.value) / 100;
+   }
+   if (discount.type === "fixed") {
+     return Math.min(roundMoney(discount.value), subtotal);
+diff --git a/src/export.js b/src/export.js
+index 62027f1..71e4dbb 100644
+--- a/src/export.js
++++ b/src/export.js
+@@ -8,7 +8,7 @@ export const CSV_HEADER = ["id", "customer", "subtotal", "discount", "tax", "tot
+ export function exportLedgerCsv(ledger) {
+   const rows = [toCsvRow(CSV_HEADER)];
+   const invoices = ledger.list();
+-  for (let i = 0; i < invoices.length; i++) {
++  for (let i = 0; i < invoices.length - 1; i++) {
+     const invoice = invoices[i];
+     const t = computeTotals(invoice);
+     rows.push(
+diff --git a/src/ids.js b/src/ids.js
+index 736e7d5..507f213 100644
+--- a/src/ids.js
++++ b/src/ids.js
+@@ -1,5 +1,7 @@
++const ID_WIDTH = 4;
++
+ export function nextInvoiceId(existingIds) {
+   const numbers = existingIds.map((id) => Number(id.replace("INV-", ""))).filter(Number.isFinite);
+   const next = numbers.length === 0 ? 1 : Math.max(...numbers) + 1;
+-  return `INV-${String(next).padStart(4, "0")}`;
++  return `INV-${String(next).padStart(ID_WIDTH, "0")}`;
+ }
+diff --git a/src/store.js b/src/store.js
+index 666ece4..cc2f56f 100644
+--- a/src/store.js
++++ b/src/store.js
+@@ -3,7 +3,7 @@ import { dirname } from "node:path";
+ import { Ledger } from "./ledger.js";
+ 
+ export async function saveSnapshot(ledger, path) {
+-  await mkdir(dirname(path), { recursive: true });
++  mkdir(dirname(path), { recursive: true });
+   await writeFile(path, JSON.stringify(ledger.list(), null, 2), "utf-8");
+ }
+ 
+diff --git a/src/totals.js b/src/totals.js
+index 62aac6e..5f48195 100644
+--- a/src/totals.js
++++ b/src/totals.js
+@@ -14,6 +14,6 @@ export function computeTotals(invoice) {
+   }
+   subtotal = roundMoney(subtotal);
+   const discount = discountAmount(subtotal, invoice.discount);
+-  const tax = taxFor(taxableSubtotal, invoice.taxRate);
++  const tax = taxFor(taxableSubtotal - discount, invoice.taxRate);
+   return { subtotal, discount, tax, total: sumMoney([subtotal, -discount, tax]) };
+ }
