@@ -23,7 +23,7 @@ One workload, three runs an arm: the direction is solid, the exact percentage is
 ## Install
 
 ```text
-claude marketplace add AqueGen/model-routing
+/plugin marketplace add AqueGen/model-routing
 ```
 
 Then enable the plugin:

@@ -34,7 +34,7 @@ Filled discs show the tier: one for haiku, two for sonnet, three for opus. [How 
 ## Install
 
 ```text
-claude marketplace add AqueGen/model-routing
+/plugin marketplace add AqueGen/model-routing
 ```
 
 Then enable the plugin:

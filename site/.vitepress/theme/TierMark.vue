@@ -7,7 +7,7 @@ const level = computed(() => order.indexOf(props.tier) + 1)
 </script>
 
 <template>
-  <span class="tier-mark" :aria-label="`${tier}, tier ${level} of 3`">
+  <span class="tier-mark" role="img" :aria-label="`${tier}, tier ${level} of 3`">
     <span class="tier-segments" aria-hidden="true">
       <span v-for="n in 3" :key="n" class="tier-seg" :class="{ on: n <= level }" />
     </span>

@@ -20,7 +20,7 @@ model-routing is a Claude Code plugin that picks the agent, model tier (haiku, s
 
 ## Positioning
 
-Evidence-first and honest about its own limits. It publishes measured A/B evals with the runner, fixtures and raw aggregates in the repo, including results that went against it (up to 0.16 it caused dispatches that cost 23-51% more; 0.17 removed that). Neighboring routers mostly claim savings from runs on delegation-heavy prompts without a baseline.
+Evidence-first and honest about its own limits. It publishes measured A/B evals with the runner, fixtures and raw aggregates in the repo, including results that went against it (up to 0.16 it caused dispatches that made a measured session 23% more expensive; 0.17 removed that). Neighboring routers mostly claim savings from runs on delegation-heavy prompts without a baseline.
 
 ## Operating Context
 
@@ -41,7 +41,7 @@ Name: model-routing (lowercase, hyphenated). License: see LICENSE in the repo. N
 ## Evidence on Hand
 
 - `evals/evidence/*.json`: aggregates for every published number (implementer multi-file: sonnet $0.209 vs opus $0.445, 3/3 hidden tests each; inline cases; reviewer seeded bugs 12/12).
-- README tables and mermaid charts of the author's own 30-day usage.
+- README tables and mermaid charts of a 7-day snapshot of the author's own usage.
 - No testimonials, user counts, press or customer logos exist; do not fabricate any.
 
 ## Product Principles

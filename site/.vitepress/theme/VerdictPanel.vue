@@ -48,8 +48,8 @@ const evidence = 'https://github.com/AqueGen/model-routing/blob/main/evals/evide
           <div><dt>Case</dt><dd><a :href="withBase('/benchmarks/evals')"><code>implementer-multi-file</code></a></dd></div>
           <div><dt>Task</dt><dd>Multi-currency support across six modules of a small invoice ledger</dd></div>
           <div><dt>Graded by</dt><dd>Hidden tests the model never sees, plus the visible suite</dd></div>
-          <div><dt>Runs</dt><dd>3 per arm, Claude Code 2.1.330, 2026-11-23</dd></div>
-          <div><dt>Prices</dt><dd>Claude API list prices, as a proxy for subscription usage</dd></div>
+          <div><dt>Runs</dt><dd>3 per arm, Claude Code 2.1.330, 2026-11-23; the sonnet arm ran with an unshipped context cap this task never reaches</dd></div>
+          <div><dt>Prices</dt><dd>Claude API list prices</dd></div>
         </dl>
         <p class="method-note">
           One workload, three runs an arm: the direction is solid, the exact percentage is not.

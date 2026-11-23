@@ -32,7 +32,7 @@ invented dollar savings:
 
 ```text
 node "<plugin>/hooks/dispatch-counter.mjs" stats
-# routed-down: 14 today | 92 7d  (one-liner for status lines)
+# routed-down: 14 today · 92 7d  (one-liner for status lines)
 
 node "<plugin>/hooks/dispatch-counter.mjs" tokens
 # token volume per model from subagent transcripts (7d), with the share

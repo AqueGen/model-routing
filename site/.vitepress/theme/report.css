@@ -422,7 +422,12 @@ html {
 
 @media (max-width: 480px) {
   .verdict-table .tier-name {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
 
   .verdict-table th,
@@ -534,5 +539,16 @@ html {
 @media (max-width: 480px) {
   .verdict-table thead th.num {
     padding-left: 14px;
+  }
+}
+@media (max-width: 640px) {
+  .agents-table td:nth-child(3)::before {
+    content: 'Effort ';
+    font-family: var(--mr-display);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--vp-c-text-2);
   }
 }

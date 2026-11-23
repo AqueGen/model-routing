@@ -1,6 +1,6 @@
 # Getting started
 
-### Plain use
+## Plain use
 
 1. Pick your session model with `/model` (opus, fable, whatever your
    plan offers). The plugin never changes it - the main session is where
@@ -25,7 +25,7 @@
    | Per-task review in a plan loop | `task-reviewer` | sonnet / high |
    | Browser flow | `e2e-runner` | sonnet / medium |
 
-### Superpowers flow (brainstorm - plan - execute)
+## Superpowers flow (brainstorm - plan - execute)
 
 Works with any plan-driven process (superpowers or similar):
 
@@ -39,7 +39,7 @@ Works with any plan-driven process (superpowers or similar):
    `reviewer` (opus). For high-risk diffs you can also ask the main
    session to review them itself.
 
-### "I don't want the expensive model"
+## "I don't want the expensive model"
 
 Switch the session down: `/model opus` or `/model opusplan`. Tiers are
 relative - "strongest" simply means your session model. Agent pins are

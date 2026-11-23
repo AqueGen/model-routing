@@ -1,7 +1,7 @@
 # Install
 
 ```text
-claude marketplace add AqueGen/model-routing
+/plugin marketplace add AqueGen/model-routing
 ```
 
 Then enable the plugin:
@@ -15,7 +15,7 @@ Then enable the plugin:
 `~/.claude/settings.json`).
 
 For local development: clone the repo and
-`claude marketplace add /path/to/model-routing`.
+`/plugin marketplace add /path/to/model-routing` (or `claude plugin marketplace add /path/to/model-routing` from a shell).
 
 ## Requirements
 
