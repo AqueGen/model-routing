@@ -1,6 +1,6 @@
 ---
 name: scout
-description: Read-only codebase explorer. Use for "where is X", "how does Y work", "which files touch Z" - returns conclusions with file:line refs, never file dumps. Never modifies anything.
+description: Read-only codebase explorer for exploration that is being dispatched anyway ("where is X", "how does Y work", "which files touch Z") - returns conclusions with file:line refs, never file dumps. Never modifies anything.
 model: sonnet
 effort: low
 disallowedTools: Agent, SendMessage, Edit, Write, NotebookEdit

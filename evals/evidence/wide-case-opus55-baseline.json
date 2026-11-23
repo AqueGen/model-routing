@@ -1,0 +1,147 @@
+{
+  "model": "opus",
+  "runs": 2,
+  "arms": [
+    "with",
+    "without"
+  ],
+  "cases": [
+    {
+      "name": "traces-a-flow-end-to-end",
+      "arms": {
+        "with": [
+          {
+            "exitCode": 0,
+            "costUsd": 2.1243326000000002,
+            "durationMs": 79482,
+            "turns": 27,
+            "modelUsage": {
+              "claude-haiku-5-5": {
+                "costUSD": 0.0005308,
+                "inputTokens": 4828,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "outputTokens": 96
+              },
+              "claude-opus-5-5": {
+                "costUSD": 2.1238018000000003,
+                "inputTokens": 112,
+                "cacheReadInputTokens": 2611569,
+                "cacheCreationInputTokens": 144855,
+                "outputTokens": 22110
+              }
+            },
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "stayed-in-main-session",
+                "pass": true
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 2.2808192,
+            "durationMs": 100920,
+            "turns": 30,
+            "modelUsage": {
+              "claude-haiku-5-5": {
+                "costUSD": 0.0005268,
+                "inputTokens": 4828,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "outputTokens": 88
+              },
+              "claude-opus-5-5": {
+                "costUSD": 2.2802924,
+                "inputTokens": 116,
+                "cacheReadInputTokens": 2728002,
+                "cacheCreationInputTokens": 149946,
+                "outputTokens": 26733
+              }
+            },
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "stayed-in-main-session",
+                "pass": true
+              }
+            ]
+          }
+        ],
+        "without": [
+          {
+            "exitCode": 0,
+            "costUsd": 1.9553564,
+            "durationMs": 99111,
+            "turns": 30,
+            "modelUsage": {
+              "claude-haiku-5-5": {
+                "costUSD": 0.0005268,
+                "inputTokens": 4828,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "outputTokens": 88
+              },
+              "claude-opus-5-5": {
+                "costUSD": 1.9548295999999998,
+                "inputTokens": 108,
+                "cacheReadInputTokens": 2366348,
+                "cacheCreationInputTokens": 125266,
+                "outputTokens": 23950
+              }
+            },
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "stayed-in-main-session",
+                "pass": true
+              }
+            ]
+          },
+          {
+            "exitCode": 0,
+            "costUsd": 2.233638,
+            "durationMs": 99118,
+            "turns": 30,
+            "modelUsage": {
+              "claude-haiku-5-5": {
+                "costUSD": 0.0005308,
+                "inputTokens": 4828,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "outputTokens": 96
+              },
+              "claude-opus-5-5": {
+                "costUSD": 2.2331072,
+                "inputTokens": 118,
+                "cacheReadInputTokens": 2718976,
+                "cacheCreationInputTokens": 145640,
+                "outputTokens": 26186
+              }
+            },
+            "scores": [
+              {
+                "grader": "answer-is-correct",
+                "pass": true
+              },
+              {
+                "grader": "stayed-in-main-session",
+                "pass": true
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 ---
 name: traces-a-flow-end-to-end
-tags: [routing, scout, wide-reading]
+tags: [routing, inline, wide-reading]
 plugins: ["../.."]
 fixture: order-service
 runs: 3
