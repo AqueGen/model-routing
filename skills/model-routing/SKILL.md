@@ -115,8 +115,8 @@ example use case for `low` is subagents.
   round on top of it because the level invites one. A round is the
   review, the fixes it asked for, and a check that each finding is fixed;
   that check belongs to the same round. A fresh review of the whole diff
-  is a second one: open it when the fixes changed more than the findings
-  called for, or when the user asks.
+  is a second one, opened only when the user, a skill or a repo policy
+  asks for it.
 - **max** - exceptional frontier-grade problems only, not a routine level
   anywhere in this table.
 
@@ -357,19 +357,17 @@ with `/model-routing:stats`.
 - Repo-specific policies override this table (e.g. "unit tests only,
   never integration tests").
 - Review is one cheap pass; missed bugs are expensive. A dispatched
-  review of a high-risk diff goes to `reviewer` at its opus/high pin, never
-  below it.
+  review of a high-risk diff goes to `reviewer`, never below the lower of
+  its pin and the session model.
 - When batched implementer output needs a gate before it is accepted, that
   gate is `verifier`. It answers one question for pennies: is this diff the task that was
   asked? Scope creep, missing pieces, and obvious breakage get caught
   before the main session builds on a wrong diff or a `reviewer` pass
   burns opus tokens on work that missed the point. It duplicates the main
   session reading the full diff itself - the read IS the verification. The verifier gates ANOTHER agent's
-  cheap-tier diff, never the main session's own work: a current-generation
-  model self-verifies, so a subagent that re-checks what the main session
-  just wrote burns tokens for no quality gain (this is what Opus 5's
-  prompting guide means by "do not use subagents to verify or double-check
-  your own work").
+  cheap-tier diff and is not the agent for the main session's own work; a
+  review of that work, when the user, a skill or a repo policy asks for
+  one, goes to `reviewer`.
 - Advise before the work, not only after it fails. The escalation rules
   below are reactive - they fire on a stuck agent or a weak result. When
   implementation work is dispatched with no approved plan behind it, the

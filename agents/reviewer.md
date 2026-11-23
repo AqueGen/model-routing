@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: Reviews a diff for correctness bugs and design problems when a final, whole-branch or pre-PR review is dispatched.
+description: Reviews a diff for correctness bugs and design problems when a final, whole-branch, high-risk or pre-PR review, or a verdict on external review findings, is dispatched.
 model: opus
 effort: high
 disallowedTools: Edit, Write, NotebookEdit

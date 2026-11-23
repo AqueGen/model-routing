@@ -42,7 +42,7 @@ What the plugin changes is the price per token, not that penalty. So:
 | Your situation | What this plugin does |
 | --- | --- |
 | You already dispatch subagents - Superpowers, workflows, any delegation-heavy practice | **Saves** - roughly a sixth on the one measured workload: $1.68 with the tier routed down, against $2.01 for the same subagent work repriced at your session's tier |
-| You work mostly in one session and rarely delegate | **Close to neutral** since 0.17: the anchor no longer recommends dispatching, so what remains is the ~1.4k-token surcharge below. On Opus 5.5 (Claude Code 2.1.330, two runs an arm) neither arm dispatched on either case; the small case cost $0.116 with the plugin against $0.099 without, the wide case $2.119 against $2.094 ([`evals/evidence/`](evals/evidence/README.md), `*-opus55-no-nudge-anchor.json` and `*-opus55-baseline.json`). Up to 0.16 it pushed dispatches that would not otherwise have happened, and on this workload that cost roughly a fifth: $1.36 doing it inline against $1.68 routed |
+| You work mostly in one session and rarely delegate | **No extra dispatches** since 0.17: the anchor no longer recommends dispatching, so what remains is the always-on surcharge below - about 1.9k cache-write tokens per session in the small-case runs. On Opus 5.5 (Claude Code 2.1.330, two runs an arm) neither arm dispatched on either case; the small case cost $0.116 with the plugin against $0.099 without (+17%, all surcharge on a 7-second session), the wide case $2.119 against $2.094 (+1%) ([`evals/evidence/`](evals/evidence/README.md), `*-opus55-no-nudge-anchor.json` and `*-opus55-baseline.json`). Up to 0.16 it pushed dispatches that would not otherwise have happened, and on this workload that cost roughly a fifth: $1.36 doing it inline against $1.68 routed |
 
 One workload, three runs an arm, on a four-turn session that never had to
 compact - so read the direction as solid and the exact percentage as not.
@@ -56,10 +56,11 @@ Superpowers dispatches opus subagents by default. That is the case this plugin
 is for: the dispatch was going to happen anyway, and routing it down is a
 discount whose only cost is the always-on surcharge below.
 
-Note what the surcharge is and is not. The plugin costs about 1.4k tokens a
-session to carry - ~700 for the skill and agent listings, plus a ~700-token
-routing anchor at session start - which is a couple of cents against sessions
-billing $1.40 to $2.00. The anchor figure is its 2021 bytes at the ratio this
+Note what the surcharge is and is not. The plugin costs about 1.9k tokens a
+session to carry - measured on 2.1.330 as the cache-write difference between
+the small-case arms (10309/10287 against 8413/8412), of which the anchor is
+about 700 and the rest the skill and agent listings - which is a couple of
+cents against sessions billing $1.40 to $2.00. The anchor figure is its 2021 bytes at the ratio this
 cut measured: on the same eval case and CLI, the 3225-byte anchor wrote
 about 630 fewer cache tokens per run than the 5114-byte one it replaced
 ([`evals/evidence/small-case-opus55-*-anchor.json`](evals/evidence/)). The listing figure comes from
@@ -281,8 +282,8 @@ Works with any plan-driven process (superpowers or similar):
 3. Verification the process asks for: test runs it dispatches go to
    `test-runner`, the loop's per-task reviews and scoped re-reviews to
    `task-reviewer` (sonnet), a completed chunk or branch review to
-   `reviewer` (opus); high-risk diffs get a final review in the main
-   session.
+   `reviewer` (opus). For high-risk diffs you can also ask the main
+   session to review them itself.
 
 ### "I don't want the expensive model"
 
@@ -295,7 +296,6 @@ routing rules instruct Claude to cap the dispatch at the session model
 harness guarantee - a bare dispatch runs the frontmatter pin as-is. The
 dispatch report has a dedicated "Ran ABOVE the session tier" section, so
 a missed cap shows up as a number instead of hiding.
-High-risk review still belongs in the main session.
 
 ## Usage
 
@@ -312,9 +312,9 @@ skill routes it:
   (sonnet) with self-contained task descriptions; multi-file or subtle
   work goes out with `model=opus`.
 - "Get the diff reviewed by an agent" - Claude dispatches `reviewer`
-  (opus). For high-risk diffs, ask for review in the main session instead
-  - one expensive pass is cheaper than a missed bug. Per-task reviews
-  inside a plan loop go to `task-reviewer` (sonnet).
+  (opus). For high-risk diffs you can ask for review in the main session
+  instead, since one expensive pass is cheaper than a missed bug. Per-task
+  reviews inside a plan loop go to `task-reviewer` (sonnet).
 - "Have an agent walk through the checkout flow in the browser" - Claude
   dispatches `e2e-runner` (sonnet).
 

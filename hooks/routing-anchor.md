@@ -1,4 +1,4 @@
-MODEL ROUTING ACTIVE - it picks the agent, model and effort of a dispatch and adds no dispatches; whether to dispatch, and how many, is decided outside it (details: the model-routing skill). When a dispatch happens:
+MODEL ROUTING ACTIVE - it picks the agent, model and effort of a dispatch and adds no dispatches; whether to dispatch is decided outside it (details: the model-routing skill). When a dispatch happens:
 
 - Exploration, by what has to come back: a judgement about what code does -> `scout`; a complete list or ordering verified by following the code -> `surveyor` (haiku); unverified candidate files -> built-in Explore with `model=haiku` (bare, it inherits the session model).
 - Implementation from a plan or spec -> `implementer` (sonnet); pass `model=opus` (Fable sessions too; the pinned medium effort stays) for multi-file/cross-layer work, security/money/migrations/concurrency/public contracts, or a re-dispatch after a weak sonnet result.
