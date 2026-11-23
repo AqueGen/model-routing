@@ -96,12 +96,13 @@ reason written down in `evals/forced-dispatch-tier/NOTES.md`.)
 | `agents/surveyor.md` | haiku | medium | Read-only breadth: enumerate, list, trace a chain end to end. Measured correct on the cheap tier where `scout`'s judgement work is not. |
 | `agents/test-runner.md` | haiku | low | Run tests/builds/linters, report failures compactly. Never fixes anything. |
 | `agents/e2e-runner.md` | sonnet | medium | Drive Playwright/E2E scenarios, interpret failures (product bug vs test bug vs flake). |
-| `agents/implementer.md` | sonnet | medium | Implement one well-defined task from an approved plan. Verifies its own work. Dispatch with `model=opus` for multi-file/architectural/subtle work. |
-| `agents/reviewer.md` | opus | high | Review a diff for correctness bugs, ranked by severity. Final/whole-branch, high-risk and pre-PR review. |
+| `agents/implementer.md` | sonnet | medium | Implement one well-defined task from an approved plan, multi-file work included. Verifies its own work. Caps its context (`autoCompactWindow: 150000`, `maxTurns: 150`). Dispatch with `model=opus` only for security, money, data migrations or concurrency, or a retry. |
+| `agents/reviewer.md` | opus | medium | Review a diff for correctness bugs, ranked by severity. Final/whole-branch, high-risk and pre-PR review; `effort=high` per dispatch for risky diffs. |
 | `agents/task-reviewer.md` | sonnet | high | Per-task reviews and scoped re-reviews inside a plan loop (Superpowers SDD), following the caller's review template. Flags diffs that need `reviewer` instead. |
 | `agents/verifier.md` | haiku | medium | Cheap gate on a subagent's diff: does it match the task (scope, completeness, obvious breakage)? Not a code review. |
 | `skills/model-routing/` | - | - | The routing table Claude follows when choosing the agent, model and effort of a dispatch. |
 | `hooks/routing-anchor.md` | - | - | Short routing anchor auto-injected at session start - zero config. |
+| `hooks/default-model.mjs` | - | - | PreToolUse hook: a bare general-purpose dispatch gets `model=sonnet`, a bare Explore gets `model=haiku`; an explicit `model` is never changed. |
 | `hooks/dispatch-counter.mjs` | - | - | Logs every Agent dispatch; `stats`/`report`/`tokens` modes measure what stayed off the session model. |
 | `commands/stats.md` | - | - | `/model-routing:stats` - dispatch + token-volume report in the chat. |
 
@@ -184,7 +185,7 @@ pie showData title Subagent volume by model (7d, fable-default sessions, million
     "fable - deliberate top-tier review + inheritance" : 2.1
 ```
 
-The opus slice is not a leak - on a Fable session even opus is a cheaper tier, and review plus multi-file implementation are dispatched there deliberately, because a missed bug costs more than the review.
+The opus slice is not a leak - on a Fable session even opus is a cheaper tier, and review plus multi-file implementation were dispatched there deliberately under the 0.13 rules. Multi-file implementation has since moved to sonnet: on `evals/implementer-multi-file` sonnet cost 53% less with every hidden test passing.
 
 The fable slice is worth reading against the previous snapshot (2026-07-20, v0.8.1), where it was 21.4M of 166.8M - mostly Workflow `agent()` calls dispatched with no explicit `model` opt. 0.7.2 added the Workflow routing rule in response to that exact measurement, and the accidental part of this slice is now a rounding error. Most of what remains is the opposite of a leak: a `model=fable` reviewer dispatched ON PURPOSE at the top tier, above the session, to review this release. The counter reports it as above-tier work rather than hiding it, which is the behaviour 0.8.0 added. Tier leaks sit at 1 of 11 unpinned dispatches (9%) - the report states that count, not a verdict on it. The plugin's job is making every slice a decision instead of an accident, and a visible, attributable top-tier slice is what a decision looks like.
 
@@ -195,8 +196,8 @@ flowchart LR
     A["dispatched test run"] --> TR["test-runner<br/>haiku / low"]
     B["dispatched exploration"] --> SC["scout<br/>sonnet / low"]
     C["dispatched plan task"] --> IM["implementer<br/>sonnet / medium"]
-    D["dispatched multi-file refactor"] --> IMO["implementer<br/>model=opus / medium"]
-    E["dispatched diff review"] --> RV["reviewer<br/>opus / high"]
+    D["dispatched security/money/migration change"] --> IMO["implementer<br/>model=opus / medium"]
+    E["dispatched diff review"] --> RV["reviewer<br/>opus / medium"]
     G["plan-loop task review"] --> TRV["task-reviewer<br/>sonnet / high"]
 ```
 
@@ -268,7 +269,7 @@ For local development: clone the repo and
    | Breadth sweep ("list every stage this order goes through") | `surveyor` | haiku / medium |
    | Test or build run | `test-runner` | haiku / low |
    | Plan task | `implementer` | sonnet / medium (`model=opus` for complex work) |
-   | Diff review | `reviewer` | opus / high |
+   | Diff review | `reviewer` | opus / medium (`effort=high` for risky diffs) |
    | Per-task review in a plan loop | `task-reviewer` | sonnet / high |
    | Browser flow | `e2e-runner` | sonnet / medium |
 
@@ -310,8 +311,8 @@ skill routes it:
 - "Run the unit tests in a subagent" - Claude dispatches `test-runner`
   (haiku); you get a compact pass/fail report instead of a wall of logs.
 - "Dispatch tasks 1-3 from the plan" - Claude dispatches `implementer`
-  (sonnet) with self-contained task descriptions; multi-file or subtle
-  work goes out with `model=opus`.
+  (sonnet) with self-contained task descriptions; security, money,
+  migration or concurrency work goes out with `model=opus`.
 - "Get the diff reviewed by an agent" - Claude dispatches `reviewer`
   (opus). For high-risk diffs you can ask for review in the main session
   instead, since one expensive pass is cheaper than a missed bug. Per-task
@@ -336,8 +337,8 @@ earns its cost (the knobs themselves:
 | --------- | ----- | ------ | -------------- | --------------- |
 | Exploration (`scout`) | sonnet | low | Finding and tracing code is retrieval, not reasoning - a cheap tier reports as well as a costly one, and the file volume stays in the subagent regardless. | The work is mechanical lookup; extra thinking buys nothing. |
 | Ordinary implementation (`implementer`) | sonnet | medium | Sonnet 5.5 pairs speed with intelligence at half the opus price ($2/$10 against $4/$20) - for work whose approach the plan already decided, the margin never changes the outcome. | The plan already decided the approach; the agent executes real logic, not design, and medium is where Sonnet 5.5's own guidance starts well-specified agentic coding. |
-| Complex implementation (`implementer` `model=opus`) | opus | medium (pinned) | Multi-file or cross-layer changes, security/money/migrations/concurrency/public contracts, or a retry after a weak sonnet result - a wrong approach is expensive, and Opus 5.5 is stronger again at 20% less than Opus 5 ($4/$20, cache reads 60% less). This holds on every session model, Fable included: Opus 5.5 costs half of Fable 5.2 on input, cache writes and output, and the same on cache reads ($0.20/MTok). (Ambiguous tasks are not an escalation case: implementer stops on ambiguity by contract - clarify first.) | The `model=opus` dispatch changes the model only - the Agent tool has no effort param, so the pinned medium stays; the escalation buys the tier, not extra thinking. |
-| Code review (`reviewer`) | opus | high | Review is an asymmetric bet - one pass guards against a bug that costs far more if it ships, so it is the one place to prefer the top tier by default. | High: subtle correctness bugs hide from shallow reading. The case for `medium` grew with Opus 5.5 - its `medium` matches or exceeds Opus 5 at `high` on coding and it thinks more per turn at a given level, so the same pin costs more - but that is vendor evidence, not this plugin's own review eval; the pin stays high until a medium-vs-high review run on Opus 5.5 is measured. |
+| Risky implementation (`implementer` `model=opus`) | opus | medium (pinned) | Security, money, data migrations or concurrency, or a retry after a weak sonnet result - a wrong approach is expensive there. Multi-file work alone stays on sonnet: on `evals/implementer-multi-file` it cost 53% less than opus with every hidden test passing, and Opus 5.5 is stronger again at 20% less than Opus 5 ($4/$20, cache reads 60% less). This holds on every session model, Fable included: Opus 5.5 costs half of Fable 5.2 on input, cache writes and output, and the same on cache reads ($0.20/MTok). (Ambiguous tasks are not an escalation case: implementer stops on ambiguity by contract - clarify first.) | `model=opus` alone changes the model, not the pinned medium; an `effort` param on the dispatch raises it. |
+| Code review (`reviewer`) | opus | medium | Review is an asymmetric bet - one pass guards against a bug that costs far more if it ships, so it is the one place to prefer the top tier by default. | Medium, `effort=high` per dispatch for security, money, migrations, concurrency, public contracts or a large diff. Opus 5.5 at `medium` matches or exceeds Opus 5 at `high` on coding (vendor evidence); on `evals/reviewer-seeded-bugs` medium and high both found 12/12 seeded bugs at the same warm cost. |
 | Per-task review in a plan loop (`task-reviewer`) | sonnet | high | Superpowers SDD scales the model of its per-task reviews and scoped re-reviews to the diff, with a mid-tier floor; a sonnet-pinned agent takes those seats instead of `reviewer` with `model=sonnet`, which undercuts its pin. Final, whole-branch, high-risk and pre-PR review stays on `reviewer`. | High: same correctness job as `reviewer`, on a smaller diff. |
 | Tests / builds (`test-runner`) | haiku | low | Running a command and summarizing output is mechanical; the value is keeping raw logs out of the main context, not the model doing it. | Low: no reasoning, just report. |
 | Diff sanity gate (`verifier`) | haiku | medium | Checking a diff matches its task (scope, completeness, obvious breakage) is a cheap spot-check, not a quality judgment. | Medium: completeness is the job, and at `low` Haiku 5.5 "is more likely to skip a search, stop early, or skip a check". |
@@ -390,7 +391,7 @@ exact numbers live on
 | Family | Cost vs opus | Role in this plugin |
 | ------ | ------------ | ------------------- |
 | fable | 2x (Fable 5.2, $8/$40; cache reads $0.20/MTok, the same as Opus 5.5) | Frontier reasoning. A main-session choice for all-hard-reasoning days (architecture, subtle debugging hunts) - not a dispatch target. |
-| opus | 1x | The escalation tier: code review, multi-file/cross-layer implementation, security/money/concurrency-sensitive changes. Opus 5 made this tier a step stronger at the same price; Opus 5.5 stronger again at a lower one ($4/$20). |
+| opus | 1x | The escalation tier: code review, security/money/migration/concurrency-sensitive implementation. Opus 5 made this tier a step stronger at the same price; Opus 5.5 stronger again at a lower one ($4/$20). |
 | sonnet | 0.5x (permanent $2/$10) | The workhorse: ordinary implementation from an approved plan, exploration, E2E driving. Sonnet 5.5 is the best speed-intelligence combination on offer, at half of Opus 5.5 on every token type, cache reads included ($0.10 against $0.20/MTok). |
 | haiku | 0.025x (Haiku 5.5, prompts up to 100K tokens; 0.125x above), 0.25x (Haiku 4.5) | Mechanical grind: test/build runs, diff sanity checks, trivial sweeps. |
 
@@ -691,9 +692,10 @@ There is deliberately no config subsystem - four override paths cover it:
 - **Whole session**: since Claude Code 2.1.251 the `CLAUDE_CODE_SUBAGENT_MODEL` env var is a DEFAULT below everything else - an explicit `model` param wins, then a frontmatter pin, then this var, then the session model (`inherit` is the same as leaving it unset) - and the dispatch report marks the rows it actually decided `agent (env=...)`. Since 2.1.257 `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` inverts that and makes the harness ignore every param and every pin: with both set, subagents run the env model, with only FORCE set they run the session model, and those rows read `agent (forced=...)`.
 - **Per dispatch**: the Agent tool's `model` param overrides any
   frontmatter pin (pins-are-ceilings works through exactly this);
-  Workflow `agent()` takes `model` and `effort` opts per call. Plain
-  Agent dispatches have no effort param - effort comes from the agent's
-  frontmatter pin when present, else from the session level.
+  Workflow `agent()` takes `model` and `effort` opts per call, and an
+  Agent dispatch takes an `effort` param for a non-fork subagent;
+  without one, effort comes from the agent's frontmatter pin when
+  present, else from the session level.
 - **Permanent**: edit the `model:` / `effort:` frontmatter in
   `agents/*.md`. A directory-source install picks the change up next
   session. Keep `AGENT_PINS` in `hooks/dispatch-counter.mjs` in step - it
