@@ -183,7 +183,7 @@ actually earns its cost:
   money, data migrations or concurrency, or when a sonnet attempt came
   back weak. Multi-file or cross-layer work alone stays on sonnet, as
   Superpowers' own model selection has it ("standard model"): over 30
-  days of one user's transcripts the earlier multi-file trigger sent 232
+  days of one user's transcripts the earlier opus triggers, led by multi-file, sent 232
   of 316 explicit implementer dispatches to opus, $6,072 of opus
   implementer spend against $529 on sonnet. Ambiguity is NOT an escalation trigger but a
   stop sign: implementer rejects ambiguous tasks by contract, so an
@@ -330,7 +330,8 @@ with `/model-routing:stats`.
   - Run the agents of one change one at a time, or in parallel only when they touch disjoint files.
   - Put the previous agent's "What was changed" list into the next agent's brief, so its decisions and naming carry over.
   - A finished agent does not take the next task. SendMessage continues unfinished or stuck work only.
-  - A single plan task that needs hundreds of turns is a planning problem: split it in the plan before dispatching.- A text-only end of turn does not by itself mean the task is finished. On
+  - A single plan task that needs hundreds of turns is a planning problem: split it in the plan before dispatching.
+- A text-only end of turn does not by itself mean the task is finished. On
   long multi-part work these models end a turn with a progress update
   rather than a tool call, and a caller that reads that as completion
   stops there. Keep the parts in a list the agent reports against - the

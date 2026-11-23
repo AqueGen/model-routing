@@ -61,7 +61,7 @@ session to carry - measured on 2.1.330 as the cache-write difference between
 the small-case arms (10309/10287 against 8413/8412), of which the anchor is
 about 700 and the remaining ~1.2k the skill and agent listings - which is a
 couple of cents against sessions billing $1.40 to $2.00. The anchor figure
-is its 2006 bytes at the ratio an earlier cut measured: on the same eval
+is its 1860 bytes at the ratio an earlier cut measured: on the same eval
 case and CLI, the 3225-byte anchor wrote about 630 fewer cache tokens per
 run than the 5114-byte one it replaced
 ([`evals/evidence/small-case-opus55-*-anchor.json`](evals/evidence/)). The
@@ -101,7 +101,8 @@ reason written down in `evals/forced-dispatch-tier/NOTES.md`.)
 | `agents/task-reviewer.md` | sonnet | high | Per-task reviews and scoped re-reviews inside a plan loop (Superpowers SDD), following the caller's review template. Flags diffs that need `reviewer` instead. |
 | `agents/verifier.md` | haiku | medium | Cheap gate on a subagent's diff: does it match the task (scope, completeness, obvious breakage)? Not a code review. |
 | `skills/model-routing/` | - | - | The routing table Claude follows when choosing the agent, model and effort of a dispatch. |
-| `hooks/routing-anchor.md` | - | - | Short routing anchor auto-injected at session start - zero config. || `hooks/dispatch-counter.mjs` | - | - | Logs every Agent dispatch; `stats`/`report`/`tokens` modes measure what stayed off the session model. |
+| `hooks/routing-anchor.md` | - | - | Short routing anchor auto-injected at session start - zero config. |
+| `hooks/dispatch-counter.mjs` | - | - | Logs every Agent dispatch; `stats`/`report`/`tokens` modes measure what stayed off the session model. |
 | `commands/stats.md` | - | - | `/model-routing:stats` - dispatch + token-volume report in the chat. |
 
 ## Example

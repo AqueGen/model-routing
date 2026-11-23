@@ -43,7 +43,7 @@ const resultsDir = join(EVALS_DIR, "results", stamp);
 mkdirSync(resultsDir, { recursive: true });
 
 const pluginRoot = args.pluginRoot ? resolve(args.pluginRoot) : PLUGIN_ROOT;
-const report = { model: args.model, runs: args.runs, arms, pluginRoot, cases: [] };
+const report = { model: args.modelGiven ? args.model : null, runs: args.runs, arms, pluginRoot, cases: [] };
 
 for (const kase of cases) {
   const runs = args.runs ?? kase.frontmatter.runs ?? 3;
@@ -112,10 +112,16 @@ function fixtureFor(kase) {
     throw new Error(`No fixture "${name}" and no ${name}.gen.mjs to build one`);
   }
 
-  // Regenerate whenever the generator is newer than what it produced. A stale
-  // fixture kept because the directory happened to exist is how a fixed
-  // generator quietly fails to reach the runs that report on it.
-  if (!isDir(dir) || statSync(generator).mtimeMs > statSync(dir).mtimeMs) {
+  // Regenerate whenever the generator or one of its `<name>.*` inputs is newer
+  // than what it produced. A stale fixture kept because the directory happened
+  // to exist is how a fixed generator quietly fails to reach the runs that
+  // report on it.
+  const newestInput = Math.max(
+    ...readdirSync(FIXTURES_DIR)
+      .filter((f) => f.startsWith(`${name}.`))
+      .map((f) => statSync(join(FIXTURES_DIR, f)).mtimeMs),
+  );
+  if (!isDir(dir) || newestInput > statSync(dir).mtimeMs) {
     execFileSync(process.execPath, [generator], { stdio: "inherit" });
   }
   if (!isDir(dir)) throw new Error(`${name}.gen.mjs ran but produced no ${dir}`);
