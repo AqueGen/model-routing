@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.17.0](https://github.com/AqueGen/model-routing/compare/v0.16.8...v0.17.0) (2026-11-23)
+
+
+### Features
+
+* keep multi-file implementer work on sonnet ([#64](https://github.com/AqueGen/model-routing/issues/64)) ([32cc53b](https://github.com/AqueGen/model-routing/commit/32cc53b3150ca7928cbdbc11eab7bba47430910a))
+* route dispatches without nudging toward delegation ([#63](https://github.com/AqueGen/model-routing/issues/63)) ([006a455](https://github.com/AqueGen/model-routing/commit/006a45510fb725aca7a25f6a12baa72b64b43047))
+
 ## [0.16.8](https://github.com/AqueGen/model-routing/compare/v0.16.7...v0.16.8) (2026-11-12)
 
 
