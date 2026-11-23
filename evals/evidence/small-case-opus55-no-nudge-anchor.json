@@ -11,8 +11,8 @@
         "with": [
           {
             "exitCode": 0,
-            "costUsd": 0.12277829999999999,
-            "durationMs": 7135,
+            "costUsd": 0.11600509999999999,
+            "durationMs": 10818,
             "turns": 3,
             "modelUsage": {
               "claude-haiku-5-5": {
@@ -23,11 +23,11 @@
                 "outputTokens": 18
               },
               "claude-opus-5-5": {
-                "costUSD": 0.1226506,
+                "costUSD": 0.1158774,
                 "inputTokens": 6,
-                "cacheReadInputTokens": 110753,
-                "cacheCreationInputTokens": 10947,
-                "outputTokens": 645
+                "cacheReadInputTokens": 111107,
+                "cacheCreationInputTokens": 10309,
+                "outputTokens": 558
               }
             },
             "scores": [
@@ -43,23 +43,23 @@
           },
           {
             "exitCode": 0,
-            "costUsd": 0.358774,
-            "durationMs": 7032,
+            "costUsd": 0.11580589999999999,
+            "durationMs": 7939,
             "turns": 3,
             "modelUsage": {
               "claude-haiku-5-5": {
-                "costUSD": 0.0001842,
+                "costUSD": 0.0001277,
                 "inputTokens": 1187,
                 "cacheReadInputTokens": 0,
                 "cacheCreationInputTokens": 0,
-                "outputTokens": 131
+                "outputTokens": 18
               },
               "claude-opus-5-5": {
-                "costUSD": 0.35858979999999996,
+                "costUSD": 0.1156782,
                 "inputTokens": 6,
-                "cacheReadInputTokens": 81589,
-                "cacheCreationInputTokens": 41256,
-                "outputTokens": 610
+                "cacheReadInputTokens": 111091,
+                "cacheCreationInputTokens": 10287,
+                "outputTokens": 557
               }
             },
             "scores": [

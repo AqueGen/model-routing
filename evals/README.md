@@ -58,7 +58,7 @@ Opus main session, 3 runs per arm, 2026-08-17:
 | answer is correct | 3/3 | 3/3 | 0.00 |
 | scout was the agent (indicator) | 3/3 | 0/3 | - |
 
-The guidance does change what the session does, cleanly and every time - the
+Up to 0.16 the guidance changed what the session did, cleanly and every time - the
 arms separate perfectly, and the baseline is not a straw man: it had `Explore`
 available and still chose to grep inline. That is the control-group number the
 README did not have.
@@ -77,8 +77,8 @@ sonnet instead, which is exactly the mechanism the plugin exists for, visible
 even at this size. The whole increase in the total is the second model - you now
 pay two models for a question one of them could answer alone.
 
-On a four-file fixture that is overhead and nothing else. The plugin's own anchor
-says a dispatch costs more than the answer for anything trivial, and four files
+On a four-file fixture that is overhead and nothing else. The 0.16 anchor
+said a dispatch costs more than the answer for anything trivial, and four files
 is trivial, so the routing fired where its own rule says it should not have.
 
 The deeper limitation is structural, not a matter of fixture size: a `-p` run is
@@ -139,7 +139,7 @@ three runs per arm, one workload, and the sonnet arm's own spread ($1.468 to
 $1.998) is wider than the gap it is being compared across.
 
 The stage-order answer was right in every run of every arm. The three follow-up
-turns were not scored - this case carries two graders, ordering and delegation -
+turns were not scored - this case carried two graders at the time, ordering and delegation -
 so "correctness held" covers the breadth question only, and follow-up 1 in
 particular ("what happens to an order when payment throws a non-retryable
 error") is exactly the kind of question the quality case below shows the cheap
@@ -147,7 +147,7 @@ tier failing. The plugin dispatched exactly once per run and answered the
 follow-ups from `scout`'s summary rather than dispatching again, which is what
 the guidance asked for up to 0.16.
 
-So the shipped configuration costs 23% more than not having the plugin on this
+So the 0.16 configuration cost 23% more than not having the plugin on this
 workload, and pinning `scout` to haiku costs 9% less. The expensive tier drops
 either way - opus spend down 14% with sonnet, 23% with haiku - which is the mechanism
 working in both cases. What differs is whether the subagent's bill comes to less
@@ -162,9 +162,8 @@ of tier routing touches.
 
 What the eval still cannot see is context-window pressure. Four turns never
 compact; a real session does, and a compaction costs a full re-read plus lost
-fidelity. That is a cost the baseline dodges here and would not dodge in
-practice, so read these numbers as the floor of the plugin's case rather than the
-whole of it.
+fidelity. The baseline dodges that cost here and would not always dodge it in
+practice; its net effect on these numbers is unmeasured.
 
 ## Writing another case
 

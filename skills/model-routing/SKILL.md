@@ -5,10 +5,11 @@ description: Pick the agent, model tier and effort for a subagent dispatch that 
 
 # Model Routing
 
-The expensive model thinks, cheaper models grind. The main-session model
-cannot be switched by Claude - routing works through subagent delegation
-(the `model` param of the Agent tool, or the agents bundled with this
-plugin).
+A dispatched subagent runs on the cheapest tier and effort that hold the
+quality its role needs, instead of inheriting the session model. The
+main-session model cannot be switched by Claude - routing works through
+the `model` param of the Agent tool and the agents bundled with this
+plugin.
 
 **Routing makes a dispatch cheaper; it does not make dispatching cheap.**
 A subagent starts empty, so everything it reads is a cache write, while
@@ -109,7 +110,7 @@ example use case for `low` is subagents.
   cost by about a third at `max` with no quality change (less frequent,
   not gone). Two rules follow. Routine work belongs at `high` or below,
   where this is rare. And on a session running `xhigh` or `max`, review
-  what the plan or the user asked for - on `reviewer` when a finished diff
+  what the plan, the user, a skill or a repo policy asked for - on `reviewer` when a finished diff
   is reviewed, on `verifier` when batched output is gated - and do not open a second
   round on top of it because the level invites one. A round is the
   review, the fixes it asked for, and a check that each finding is fixed;
@@ -154,7 +155,7 @@ dispatched:
 | Complex implementation: multi-file refactor, subtle concurrency/security | `implementer` with `model=opus` | medium (pinned) |
 | Trivial mechanical tasks: renames, boilerplate, mirrored constants | sonnet | low |
 | Per-task review and scoped re-review inside a plan loop (Superpowers SDD) | `task-reviewer` (sonnet) | high |
-| Final/whole-branch or pre-PR review of implemented work (high-risk or large diffs: final review stays in the main session) | `reviewer` (opus) | high |
+| Final/whole-branch, high-risk or pre-PR review of implemented work | `reviewer` (opus) | high |
 | Deciding whether external review findings (bots, human reviewers) are real; the brief asks for a verdict per finding. `task-reviewer` findings inside a plan loop stay on the loop's own path | `reviewer` (opus); only confirmed findings go to `implementer` | high |
 | Run tests/builds/linters, report failures | `test-runner` (haiku) | low |
 | Sanity-check another agent's diff against its task | `verifier` (haiku) | medium |
@@ -327,7 +328,7 @@ with `/model-routing:stats`.
   measured; it does not need to be, to be worth avoiding. Reach for the
   pinned agent rather than overriding `scout` downward - the floor rule
   below is not a formality.
-- One plan task with its own verification step or acceptance criterion is one `implementer` dispatch; batch only small edits that touch the same files and share one check. Both are visible at dispatch time, unlike how long a run will take. Each subagent re-reads files from scratch, so ten one-line edits as ten agents cost more than one agent with ten edits. The other end costs more: every turn re-reads the agent's whole context, so a run's volume grows with turns times context. Over 30 days of one user's subagent transcripts (421 `implementer` runs: 232 on Opus 5.5, 180 on Sonnet 5.5, 9 on other models), the heaviest tenth processed 61% of implementer input volume and 60% of implementer cost at API list prices. Those runs took 118-777 turns, their context peaked at 285k-967k tokens, and 98% of their input was cache reads. A median Opus 5.5 run took 73 turns and peaked near 200k. Judged by task description, about half of the fifteen heaviest were multi-task batches or whole review-fix lists and the rest single plan tasks too big for one run. The saving from splitting is a prediction: each fresh agent pays the file re-read and a new cache write again.
+- Sizing advice for a caller that is splitting work into `implementer` dispatches (the caller owns the split): one plan task with its own verification step or acceptance criterion is one `implementer` dispatch; batch only small edits that touch the same files and share one check. Both are visible at dispatch time, unlike how long a run will take. Each subagent re-reads files from scratch, so ten one-line edits as ten agents cost more than one agent with ten edits. The other end costs more: every turn re-reads the agent's whole context, so a run's volume grows with turns times context. Over 30 days of one user's subagent transcripts (421 `implementer` runs: 232 on Opus 5.5, 180 on Sonnet 5.5, 9 on other models), the heaviest tenth processed 61% of implementer input volume and 60% of implementer cost at API list prices. Those runs took 118-777 turns, their context peaked at 285k-967k tokens, and 98% of their input was cache reads. A median Opus 5.5 run took 73 turns and peaked near 200k. Judged by task description, about half of the fifteen heaviest were multi-task batches or whole review-fix lists and the rest single plan tasks too big for one run. The saving from splitting is a prediction: each fresh agent pays the file re-read and a new cache write again.
   - Review-fix lists: group findings by shared root cause or shared files, one group per agent. Never split one defect or invariant across agents.
   - Run the agents of one change one at a time, or in parallel only when they touch disjoint files.
   - Put the previous agent's "What was changed" list into the next agent's brief, so its decisions and naming carry over.
@@ -355,16 +356,15 @@ with `/model-routing:stats`.
   descriptions: goal, files, constraints, verification commands.
 - Repo-specific policies override this table (e.g. "unit tests only,
   never integration tests").
-- Review is one cheap pass; missed bugs are expensive. When a diff is
-  high-risk, escalate the final review to the main session instead of
-  delegating it.
+- Review is one cheap pass; missed bugs are expensive. A dispatched
+  review of a high-risk diff goes to `reviewer` at its opus/high pin, never
+  below it.
 - When batched implementer output needs a gate before it is accepted, that
   gate is `verifier`. It answers one question for pennies: is this diff the task that was
   asked? Scope creep, missing pieces, and obvious breakage get caught
   before the main session builds on a wrong diff or a `reviewer` pass
-  burns opus tokens on work that missed the point. Skip it when the main
-  session reads the full diff anyway - the read IS the verification; a
-  verifier on top would double-pay. The verifier gates ANOTHER agent's
+  burns opus tokens on work that missed the point. It duplicates the main
+  session reading the full diff itself - the read IS the verification. The verifier gates ANOTHER agent's
   cheap-tier diff, never the main session's own work: a current-generation
   model self-verifies, so a subagent that re-checks what the main session
   just wrote burns tokens for no quality gain (this is what Opus 5's
@@ -373,8 +373,8 @@ with `/model-routing:stats`.
 - Advise before the work, not only after it fails. The escalation rules
   below are reactive - they fire on a stuck agent or a weak result. When
   implementation work is dispatched with no approved plan behind it, the
-  cheaper move is proactive: have the cheap-tier agent return its PLAN and
-  check it in the main session - already the strongest model in the loop -
+  cheaper move is proactive: brief the cheap-tier agent "return the plan
+  only, do not edit" and check the plan in the main session - already the strongest model in the loop -
   before it writes code. Anthropic measures this as the advisor strategy,
   "faster, lower-cost worker models to call more intelligent models to
   check their plan and evaluate their work", and reports Sonnet 5 with a
@@ -395,12 +395,12 @@ with `/model-routing:stats`.
   re-dispatch with the packaged state (what was tried, why it failed, the
   chosen direction) so the new agent starts from the decision, not from
   zero.
-- When the user re-asks the same question or calls a subagent's answer
-  shallow, redo it one step up - a higher tier, or higher effort where a Workflow opt can set it - never at the
+- When the user re-asks a question a subagent answered or calls its
+  answer shallow and the work is dispatched again, it goes one step up - a higher tier, or higher effort where a Workflow opt can set it - never at the
   same level that just failed.
 - The escalation ladder generalizes: any failed or visibly weak subagent
-  RESULT (wrong answer, broken diff, report that dodges the question)
-  retries exactly one step up - next tier via the Agent `model` param, or
+  RESULT (wrong answer, broken diff, report that dodges the question),
+  when the caller re-dispatches it, goes exactly one step up - next tier via the Agent `model` param, or
   the same tier at higher effort when the miss looks like shallow thinking
   rather than missing capability and a Workflow opt is there to raise it. One step, not a leap to the top: most
   failures clear one tier up, and jumping straight to the strongest model
@@ -451,10 +451,9 @@ with `/model-routing:stats`.
   forget and where the fan-out multiplies it - a 50-agent workflow with
   one forgotten `model` opt costs more than every other routing decision
   in the session combined. See **Workflows** below for the full set.
-- If an entire session is one phase (pure implementation), suggest the
-  user switch /model instead of delegating everything - a session on the
-  right model beats a swarm of subagents. Suggest it between phases
-  rather than mid-task: a thinking block is bound to the model that
+- Switching /model is the other way to put a whole phase (pure
+  implementation) on a cheaper tier. When that switch happens, it belongs
+  between phases rather than mid-task: a thinking block is bound to the model that
   wrote it, and the families no longer read each other's - Sonnet 5.5
   reads Sonnet 5, Opus 4.8 and Haiku 4.5 blocks but not Opus 5, Opus 5.5
   or any Fable one, and no other model reads Sonnet 5.5's; Opus 5.5 and
@@ -471,10 +470,8 @@ what changes cost there.
 
 - **Boundary.** Workflows are for breadth - auditing many files for one
   issue, a migration across hundreds of files, cross-checking research,
-  looping until a check passes. An ordinary multi-step task stays out of
-  a workflow (in the main session, or a dispatch chain where delegation
-  was asked for): a workflow run can cost substantially more than
-  working the same task in conversation.
+  looping until a check passes. A workflow run can cost substantially
+  more than working the same task in conversation.
 - **Per-stage routing.** Every `agent()` call without `model`/`effort`
   opts inherits the session model at session effort, multiplied by the
   fan-out. Mechanical stages get an explicit cheap model and

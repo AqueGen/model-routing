@@ -3,8 +3,9 @@
 [![tests](https://img.shields.io/github/actions/workflow/status/AqueGen/model-routing/validate.yml?branch=main&label=tests)](https://github.com/AqueGen/model-routing/actions/workflows/validate.yml)
 [![version](https://img.shields.io/github/v/tag/AqueGen/model-routing?label=version)](https://github.com/AqueGen/model-routing/releases)
 
-Tiered model routing for Claude Code token economy: **the strongest model
-thinks, cheaper models grind.**
+Tiered model routing for Claude Code token economy: **every subagent
+dispatch runs on the cheapest tier and effort its role needs, and the
+plugin adds no dispatches of its own.**
 
 The plugin does not decide whether work leaves your main session - you,
 your repo policies and your other skills (Superpowers, workflows) do. It
@@ -40,8 +41,8 @@ What the plugin changes is the price per token, not that penalty. So:
 
 | Your situation | What this plugin does |
 | --- | --- |
-| You already dispatch subagents - Superpowers, workflows, any delegation-heavy practice | **Saves**, by roughly a sixth. $1.68 with the tier routed down, against $2.01 for the same subagent work at your session's tier |
-| You work mostly in one session and rarely delegate | **Neutral** since 0.17: the anchor no longer recommends dispatching, so it costs only the ~1.8k-token surcharge below. On Opus 5.5 the plugin arm answered the small case inline in 2 of 2 runs, as the baseline did ([`evals/evidence/small-case-opus55-no-nudge-anchor.json`](evals/evidence/)); the wide case has not been re-run. Up to 0.16 it pushed dispatches that would not otherwise have happened, and on this workload that cost roughly a fifth: $1.36 doing it inline against $1.68 routed |
+| You already dispatch subagents - Superpowers, workflows, any delegation-heavy practice | **Saves** - roughly a sixth on the one measured workload: $1.68 with the tier routed down, against $2.01 for the same subagent work repriced at your session's tier |
+| You work mostly in one session and rarely delegate | **Close to neutral** since 0.17: the anchor no longer recommends dispatching, so what remains is the ~1.4k-token surcharge below. On Opus 5.5 (Claude Code 2.1.330, two runs an arm) neither arm dispatched on either case; the small case cost $0.116 with the plugin against $0.099 without, the wide case $2.119 against $2.094 ([`evals/evidence/`](evals/evidence/README.md), `*-opus55-no-nudge-anchor.json` and `*-opus55-baseline.json`). Up to 0.16 it pushed dispatches that would not otherwise have happened, and on this workload that cost roughly a fifth: $1.36 doing it inline against $1.68 routed |
 
 One workload, three runs an arm, on a four-turn session that never had to
 compact - so read the direction as solid and the exact percentage as not.
@@ -53,12 +54,12 @@ less and narrow the gap.
 An unpinned subagent inherits the session model, so on an opus session
 Superpowers dispatches opus subagents by default. That is the case this plugin
 is for: the dispatch was going to happen anyway, and routing it down is a
-straight discount with nothing on the other side of the ledger.
+discount whose only cost is the always-on surcharge below.
 
-Note what the surcharge is and is not. The plugin costs about 1.8k tokens a
-session to carry - ~700 for the skill and agent listings, plus a ~1.1k-token
+Note what the surcharge is and is not. The plugin costs about 1.4k tokens a
+session to carry - ~700 for the skill and agent listings, plus a ~700-token
 routing anchor at session start - which is a couple of cents against sessions
-billing $1.40 to $2.00. The anchor figure is its 3342 bytes at the ratio this
+billing $1.40 to $2.00. The anchor figure is its 2021 bytes at the ratio this
 cut measured: on the same eval case and CLI, the 3225-byte anchor wrote
 about 630 fewer cache tokens per run than the 5114-byte one it replaced
 ([`evals/evidence/small-case-opus55-*-anchor.json`](evals/evidence/)). The listing figure comes from
@@ -107,12 +108,12 @@ reason written down in `evals/forced-dispatch-tier/NOTES.md`.)
 A typical feature session on a strong main model (Opus/Fable), where the
 work is delegated because you or a plan-execution skill asked for it:
 
-> Dispatch an implementer for tasks 1-2 from the plan, then have the unit tests run.
+> Dispatch an implementer for tasks 1-2 from the plan.
 
-Without the plugin both subagents inherit the session model, so the file
-reads, the code and the test run all bill at the top tier.
+Without the plugin the subagent inherits the session model, so the file
+reads, the code and its own test run all bill at the top tier.
 
-With the plugin the same two dispatches run on cheaper tiers:
+With the plugin the same dispatch runs on a cheaper tier:
 
 ```text
 Main session (strong model, plans and coordinates):
@@ -122,20 +123,15 @@ Main session (strong model, plans and coordinates):
     OrderServiceTests.cs (3 new tests). Build OK, 214/214 unit
     tests pass.
 
-  dispatches test-runner (haiku) for the final check
-
-    test-runner: PASS. 214/214, 0 skipped.
-    Command: dotnet test src/Orders.Tests.csproj
-
   reports back to you.
 ```
 
-The file reads, diffs, and raw test logs stayed inside the subagents.
-Your expensive main-session context grew by two short reports.
+The file reads, diffs, and raw test logs stayed inside the subagent.
+Your expensive main-session context grew by one short report.
 
 ## What that looks like in tokens
 
-**Snapshot: 2026-08-02, measured with v0.13.0** - the author's live workload over the preceding 7 days, via `dispatch-counter.mjs tokens`, `... tokens --session fable` and `... report --session fable`. A fixed snapshot, not a live figure: the rolling window moves daily and your split depends on your task mix - re-measure your own with the same commands.
+**Snapshot: 2026-08-02, measured with v0.13.0** - the author's live workload over the preceding 7 days, via `dispatch-counter.mjs tokens`, `... tokens --session fable` and `... report --session fable`. A fixed snapshot, not a live figure: the rolling window moves daily and your split depends on your task mix - re-measure your own with the same commands. It was taken under the 0.13 anchor, which still recommended dispatching, so part of this subagent volume was caused by the plugin itself.
 
 **Read the scope before the numbers,** because there are two of them and they are easy to mix up.
 

@@ -19,8 +19,8 @@ Rules:
 
 - Escalate first: if the diff touches security, money, migrations,
   concurrency or public contracts, or is too large to review well in one
-  pass, say so in the first line of the report so the caller can
-  re-dispatch `reviewer`. Then review what you can.
+  pass, say so in the first line of the report; if the caller wants a
+  deeper review, that one belongs on `reviewer`. Then review what you can.
 - Verify before reporting: for each suspected bug, trace the actual code
   path that triggers it. Report only findings you can defend with a
   concrete failure scenario.
