@@ -11,7 +11,9 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "dispatch-counter.mjs");
-const PRICES_FILE = join(dirname(fileURLToPath(import.meta.url)), "lib", "prices.mjs");
+const LIB_DIR = join(dirname(fileURLToPath(import.meta.url)), "lib");
+const PRICES_FILE = join(LIB_DIR, "prices.mjs");
+const TIERS_FILE = join(LIB_DIR, "tiers.mjs");
 
 function run(args, configDir, stdin, extraEnv, cwd) {
   return execFileSync(process.execPath, [SCRIPT, ...args].filter(Boolean), {
@@ -1444,7 +1446,7 @@ function assertRankable(tableName, minFamilies, tableFile = SCRIPT) {
   const rows = readFileSync(tableFile, "utf-8").match(new RegExp(`const ${tableName} = \\[([\\s\\S]*?)^\\];`, "m"))[1];
   const families = [...rows.matchAll(/\[\/([^/]+)\//g)].flatMap((m) => m[1].split("|"));
   assert.ok(families.length >= minFamilies, `expected the documented ${tableName} list, parsed ${families.length}`);
-  const tiers = src.match(/const TIER_PATTERNS = \[([\s\S]*?)\];/)[1];
+  const tiers = readFileSync(TIERS_FILE, "utf-8").match(/const TIER_PATTERNS = \[([\s\S]*?)\]\n/)[1];
   for (const family of families) {
     const ranked = [...tiers.matchAll(/\/([^/]+)\//g)]
       .some((m) => m[1].split("|").some((p) => new RegExp(p).test(`claude-${family}`)));
@@ -1649,7 +1651,7 @@ test("an unreadable manifest costs the stamp, not the report", () => {
   const script = join(dir, "dispatch-counter.mjs");
   writeFileSync(script, readFileSync(join(dirname(fileURLToPath(import.meta.url)), "dispatch-counter.mjs")));
   mkdirSync(join(dir, "lib"));
-  writeFileSync(join(dir, "lib", "prices.mjs"), readFileSync(PRICES_FILE));
+  for (const f of readdirSync(LIB_DIR).filter((f) => !f.endsWith(".test.mjs"))) writeFileSync(join(dir, "lib", f), readFileSync(join(LIB_DIR, f)));
   const cfg = freshConfigDir();
   writeLog(cfg, [{ ts: Date.now(), agent: "general-purpose", model: "sonnet", session: "claude-opus-5" }]);
   try {

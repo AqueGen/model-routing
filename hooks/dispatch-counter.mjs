@@ -25,10 +25,11 @@
 // Log lives in <config>/model-routing/dispatches.jsonl and self-prunes to 30d.
 
 import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { homedir } from "node:os";
+import { configDir } from "./lib/config.mjs";
 import { costOf, LONG_PROMPT, PRICES_ASOF, volOf } from "./lib/prices.mjs";
+import { tierOf } from "./lib/tiers.mjs";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RETENTION_MS = 30 * DAY_MS;
@@ -140,12 +141,6 @@ const exploreModel = (session) => session && (tierOf(session) ?? 0) > tierOf("op
 const BUILTIN_AGENTS = new Set(["Explore", "Plan"]);
 const builtinModel = (e) => e.agent === "Explore" ? exploreModel(e.session) : e.session ?? null;
 const envDecides = (e) => Boolean(e.env) && !BUILTIN_AGENTS.has(e.agent);
-
-function configDir() {
-  return process.env.CLAUDE_CONFIG_DIR?.trim()
-    ? resolve(process.env.CLAUDE_CONFIG_DIR)
-    : join(homedir(), ".claude");
-}
 
 function dataFile() {
   const dir = join(configDir(), "model-routing");
@@ -299,16 +294,6 @@ function readEntries(file) {
     .filter(Boolean);
 }
 
-// Tier ladder shared by dispatch judging and the tokens report. Returns null
-// for models it does not recognize (a future model family) - callers must
-// treat null as "unknown", never as a rank, or new models silently corrupt
-// the routed-down math. Extend TIER_PATTERNS when a new family ships.
-const TIER_PATTERNS = [[/fable|mythos/, 4], [/opus/, 3], [/sonnet/, 2], [/haiku/, 1]];
-const tierOf = (m) => {
-  if (!m) return null;
-  for (const [re, tier] of TIER_PATTERNS) if (re.test(m)) return tier;
-  return null;
-};
 const shortModel = (m) => m ? m.replace(/^claude-/, "").replace(/-\d{8}$/, "") : m;
 
 // Bounded fd reads, NOT readFileSync - these run inside the PostToolUse
