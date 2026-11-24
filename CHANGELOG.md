@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.18.0](https://github.com/AqueGen/model-routing/compare/v0.17.0...v0.18.0) (2026-11-24)
+
+
+### Features
+
+* cost line names the models, prices against the parent model, and stays hidden until the first subagent ([#70](https://github.com/AqueGen/model-routing/issues/70)) ([3c215f8](https://github.com/AqueGen/model-routing/commit/3c215f88a157d69860504404c9303f0fd760cdb3))
+* show subagent cost against the session model in a line above the prompt ([#68](https://github.com/AqueGen/model-routing/issues/68)) ([0b6c717](https://github.com/AqueGen/model-routing/commit/0b6c7175d4a873c76af90101390c7fbf464a7b53))
+
 ## [0.17.0](https://github.com/AqueGen/model-routing/compare/v0.16.8...v0.17.0) (2026-11-23)
 
 
