@@ -50,15 +50,17 @@ It is emitted as JSON carrying the text in both `systemMessage` and `additionalC
 
 ## Bare dispatches
 
-A `general-purpose` or `Explore` dispatch with no `model` runs on the session model (Explore is capped at opus). `bareDispatch` controls what the plugin does about that.
+A `general-purpose` or `Explore` dispatch with no `model` runs on the session model (on the Claude API, Explore is capped at opus). `bareDispatch` controls what the plugin does about that.
 
 - `"warn"` (default) - the dispatch counter hook prints the advice below after the dispatch, in the same JSON shape as the hook notice.
 - `"deny"` - a PreToolUse hook refuses the call before it runs, with the advice as the reason. The model is expected to re-issue the call with `model`. Nothing is re-dispatched by the plugin.
 - `"off"` - nothing is said.
 
 ```text
-model-routing: a bare <agent> dispatch runs on the session model <session model>. Pass model "<suggested>" for ordinary work, or the session model when the task needs its reasoning.
+model-routing: a bare <agent> dispatch runs on <inherited model>. Pass model "<suggested>" for ordinary work, or "<inherited family>" when the task needs that reasoning.
 ```
+
+The inherited model is the session model, or opus for an Explore on a session above opus. The second option names its family (`opus`, `fable`, ...) because the Agent tool's `model` param takes family aliases.
 
 The suggested model is `sonnet` for `general-purpose` and `haiku` for `Explore`. The advice fires only when all of these hold:
 

@@ -3,6 +3,8 @@ import { shortModel } from './notice.mjs'
 import { exploreModel, tierOf } from './tiers.mjs'
 
 const SUGGESTED = { 'general-purpose': 'sonnet', Explore: 'haiku' }
+// The Agent tool's `model` param takes these family aliases, not full model ids.
+const familyOf = (m) => m.match(/fable|opus|sonnet|haiku/)?.[0] ?? shortModel(m)
 
 export function bareDispatchAdvice({ input, session, env, envForce, config }) {
   if (!input || typeof input !== 'object' || Array.isArray(input) || input.model) return null
@@ -17,4 +19,4 @@ export function bareDispatchAdvice({ input, session, env, envForce, config }) {
 }
 
 export const bareDispatchText = ({ agent, inherited, suggested }) =>
-  `model-routing: a bare ${agent} dispatch runs on the session model ${shortModel(inherited)}. Pass model "${suggested}" for ordinary work, or the session model when the task needs its reasoning.`
+  `model-routing: a bare ${agent} dispatch runs on ${shortModel(inherited)}. Pass model "${suggested}" for ordinary work, or "${familyOf(inherited)}" when the task needs that reasoning.`

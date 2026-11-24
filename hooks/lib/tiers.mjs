@@ -17,7 +17,7 @@ export const tierOf = (m) => {
 // records no provider to tell them apart.
 export const exploreModel = (session) => session && (tierOf(session) ?? 0) > tierOf('opus') ? 'opus' : session ?? null
 
-export const isAboveSession =(ran, session) => {
+export const isAboveSession = (ran, session) => {
   const tr = tierOf(ran)
   const ts = tierOf(session)
   return tr != null && ts != null && tr > ts

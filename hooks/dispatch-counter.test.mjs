@@ -2346,7 +2346,7 @@ test("hook judges the model an unpinned dispatch really ran on: the model param,
   }
 });
 
-const ADVICE = "model-routing: a bare general-purpose dispatch runs on the session model opus-5-5. Pass model \"sonnet\" for ordinary work, or the session model when the task needs its reasoning.";
+const ADVICE = "model-routing: a bare general-purpose dispatch runs on opus-5-5. Pass model \"sonnet\" for ordinary work, or \"opus\" when the task needs that reasoning.";
 
 test("hook prints the bare-dispatch advice by default, once, and logs once", () => {
   const { out, lines } = noticeRun({ session: "claude-opus-5-5", agent: "general-purpose" });

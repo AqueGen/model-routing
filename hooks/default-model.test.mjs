@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'default-model.mjs')
-const REASON = 'model-routing: a bare general-purpose dispatch runs on the session model opus-5-5. Pass model "sonnet" for ordinary work, or the session model when the task needs its reasoning.'
+const REASON = 'model-routing: a bare general-purpose dispatch runs on opus-5-5. Pass model "sonnet" for ordinary work, or "opus" when the task needs that reasoning.'
 
 function hook({ config = { bareDispatch: 'deny' }, session = 'claude-opus-5-5', input = {}, stdin } = {}) {
   const cfg = mkdtempSync(join(tmpdir(), 'mr-dm-'))

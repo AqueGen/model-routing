@@ -53,6 +53,14 @@ test('an unknown or missing session, or a non-object input, advises nothing', ()
 test('the advice text is exact', () => {
   assert.equal(
     bareDispatchText({ agent: 'general-purpose', inherited: OPUS, suggested: 'sonnet' }),
-    'model-routing: a bare general-purpose dispatch runs on the session model opus-5-5. Pass model "sonnet" for ordinary work, or the session model when the task needs its reasoning.',
+    'model-routing: a bare general-purpose dispatch runs on opus-5-5. Pass model "sonnet" for ordinary work, or "opus" when the task needs that reasoning.',
+  )
+  assert.equal(
+    bareDispatchText({ agent: 'Explore', inherited: 'opus', suggested: 'haiku' }),
+    'model-routing: a bare Explore dispatch runs on opus. Pass model "haiku" for ordinary work, or "opus" when the task needs that reasoning.',
+  )
+  assert.equal(
+    bareDispatchText({ agent: 'general-purpose', inherited: 'claude-fable-5-2', suggested: 'sonnet' }),
+    'model-routing: a bare general-purpose dispatch runs on fable-5-2. Pass model "sonnet" for ordinary work, or "fable" when the task needs that reasoning.',
   )
 })
