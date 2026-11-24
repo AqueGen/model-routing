@@ -18,7 +18,7 @@ One optional file controls the above-session warning. It does not control pins -
 | `aboveSession` | `"warn"` or `"off"` | `"warn"` |
 | `exempt` | list of agent type names | `[]` |
 
-An `exempt` entry matches an agent type when the full names are equal or the parts after the last colon are. `reviewer` matches `reviewer` and `model-routing:reviewer`.
+An `exempt` entry without a colon matches the agent's name after the last colon, so `reviewer` matches `reviewer` and `model-routing:reviewer`. An entry with a colon matches only that exact agent type, so `other-plugin:reviewer` does not match `model-routing:reviewer`.
 
 A missing, unreadable or invalid file means the defaults. A key with a wrong value falls back to its own default and the other key is still read.
 
@@ -34,12 +34,12 @@ A subagent is above the session when it ran on a higher tier than the session mo
 model-routing: 3 opus, 3 sonnet - API $4.58 vs $2.42 at parent, above session: 3 opus (+$2.16)
 ```
 
-That is a real reading from a Sonnet 5.5 session. The amount is the measured `actual - atParent` of those subagents, printed with its own sign. A higher tier is not always the dearer one when cache reads dominate (Opus 5.5 reads cache cheaper than Sonnet 4.6), so the amount can be negative, for example `(-$0.03)`. Nothing is printed when none ran above the session model, or when `aboveSession` is `"off"`. Two labels can follow:
+This example is built from the figures of a real Sonnet 5.5 session: the cost-line prefix was observed, and the above-session part is computed from it. The amount is the measured `actual - atParent` of those subagents, printed with its own sign. A higher tier is not always the dearer one when cache reads dominate (Opus 5.5 reads cache cheaper than Sonnet 4.6), so the amount can be negative, for example `(-$0.03)`. Nothing is printed when none ran above the session model, or when `aboveSession` is `"off"`. Two labels can follow:
 
 - `(exempt not applied)` - the cost line cannot see agent types yet, so with a non-empty `exempt` it prints the count only, with no amount.
 - `(config not read)` - the mod could not read the config location, so the defaults apply, including `"warn"`.
 
-**The hook notice.** When an `Agent` or `Task` dispatch is recorded and the model it will run on can be inferred, the dispatch counter hook (a PostToolUse hook) prints this, with no amount. The hook infers the model from the `model` parameter, this plugin's agent pins, three curated foreign pins and `CLAUDE_CODE_SUBAGENT_MODEL`. An agent with its own frontmatter pin the plugin cannot see (for example a user-level agent pinned to opus) gets no notice. The cost line reads real usage, so it counts every subagent that actually ran above the session model, notice or not.
+**The hook notice.** When an `Agent` or `Task` dispatch is recorded and the model it will run on can be inferred, the dispatch counter hook (a PostToolUse hook) prints this, with no amount. The hook infers the model from the `model` parameter, this plugin's agent pins, three curated foreign pins and `CLAUDE_CODE_SUBAGENT_MODEL`. An agent with its own frontmatter pin the plugin cannot see (for example a user-level agent pinned to opus) gets no notice, unless `CLAUDE_CODE_SUBAGENT_MODEL` is set: then the notice names that env model, which a pin the plugin cannot see would override. The cost line reads real usage, so it counts every priced subagent that ran above the session model, notice or not.
 
 ```text
 model-routing: <agent> ran on <model>, above the session model <session model>. This may cost more than planned.

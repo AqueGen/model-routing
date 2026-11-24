@@ -6,7 +6,7 @@ export const defaultConfig = () => ({ aboveSession: DEFAULT_CONFIG.aboveSession,
 export function parseConfig(text) {
   let raw
   try {
-    raw = JSON.parse(text)
+    raw = JSON.parse(text.replace(/^﻿/, ''))
   } catch {
     return defaultConfig()
   }
@@ -20,4 +20,4 @@ export function parseConfig(text) {
 const bare = (s) => s.slice(s.lastIndexOf(':') + 1)
 
 export const isExempt = (config, agentType) =>
-  typeof agentType === 'string' && config.exempt.some((x) => bare(x) === bare(agentType))
+  typeof agentType === 'string' && config.exempt.some((x) => (x.includes(':') ? x === agentType : x === bare(agentType)))

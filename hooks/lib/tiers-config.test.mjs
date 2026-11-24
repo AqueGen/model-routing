@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { isAboveSession, tierOf } from './tiers.mjs'
-import { DEFAULT_CONFIG, configDir, isExempt, loadConfig } from './config.mjs'
+import { DEFAULT_CONFIG, configDir, isExempt, loadConfig, parseConfig } from './config.mjs'
 
 test('tierOf keeps the ladder', () => {
   assert.deepEqual(['fable-1', 'mythos-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5', 'claude-x-9', null].map(tierOf), [4, 4, 3, 2, 1, null, null])
@@ -67,9 +67,17 @@ test('configDir honours CLAUDE_CONFIG_DIR', () => {
   }
 })
 
-test('isExempt compares the part after the last colon on both sides', () => {
+test('isExempt: a bare entry matches the bare name, a namespaced entry only the identical full type', () => {
   assert.equal(isExempt({ exempt: ['reviewer'] }, 'model-routing:reviewer'), true)
-  assert.equal(isExempt({ exempt: ['model-routing:reviewer'] }, 'reviewer'), true)
+  assert.equal(isExempt({ exempt: ['reviewer'] }, 'reviewer'), true)
+  assert.equal(isExempt({ exempt: ['model-routing:reviewer'] }, 'model-routing:reviewer'), true)
+  assert.equal(isExempt({ exempt: ['other-plugin:reviewer'] }, 'model-routing:reviewer'), false)
+  assert.equal(isExempt({ exempt: ['model-routing:reviewer'] }, 'reviewer'), false)
   assert.equal(isExempt({ exempt: ['reviewer'] }, 'implementer'), false)
   assert.equal(isExempt({ exempt: ['reviewer'] }, null), false)
+})
+
+test('parseConfig and loadConfig tolerate a UTF-8 BOM', () => {
+  assert.equal(parseConfig('﻿{"aboveSession":"off"}').aboveSession, 'off')
+  withConfig('﻿{"aboveSession":"off"}', (dir) => assert.equal(loadConfig(dir).aboveSession, 'off'))
 })
