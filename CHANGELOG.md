@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.19.0](https://github.com/AqueGen/model-routing/compare/v0.18.0...v0.19.0) (2026-11-24)
+
+A notice now follows each dispatch that runs on a higher tier than the session model, the cost line counts those subagents and shows their measured cost difference (the count alone, exempt types included, when `exempt` is set), a bare general-purpose or Explore dispatch that inherits a model above the suggested tier gets advice after it runs, the dispatch log records the Agent `effort` param, and a new `config.json` switches each of these warnings off or turns the bare-dispatch advice into a refusal before the call.
+
+### Features
+
+* advise on bare general-purpose and Explore dispatches that inherit a pricier session model ([#66](https://github.com/AqueGen/model-routing/issues/66)) ([f040235](https://github.com/AqueGen/model-routing/commit/f040235dfb3fcc718d49ed180a105f77f6760045))
+* log the Agent effort param and count it in the dispatch report ([#73](https://github.com/AqueGen/model-routing/issues/73)) ([21d08d0](https://github.com/AqueGen/model-routing/commit/21d08d0208bc1405535b159d750891ea949743a6))
+* warn when a subagent runs above the session model ([#71](https://github.com/AqueGen/model-routing/issues/71)) ([9684b3b](https://github.com/AqueGen/model-routing/commit/9684b3b97c65269efbd5d18e3715a90c501ddf9f))
+
 ## [0.18.0](https://github.com/AqueGen/model-routing/compare/v0.17.0...v0.18.0) (2026-11-24)
 
 
