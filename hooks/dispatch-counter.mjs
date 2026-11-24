@@ -192,6 +192,8 @@ const EFFORT_SUPPORT = [
   [/opus-4-6|sonnet-4-6/, ["low", "medium", "high", "max"]],
 ];
 const EFFORT_LADDER = ["low", "medium", "high", "xhigh", "max"];
+// The Agent tool ignores `effort` for a fork: it runs at the session's own effort.
+const effortParamOf = (agent, effort) => agent !== "fork" && EFFORT_LADDER.includes(effort) ? effort : null;
 const effortLevelsFor = (m) => (m ? EFFORT_SUPPORT.find(([re]) => re.test(m))?.[1] ?? null : null);
 
 // Claude Code's own model default (Model configuration, "Adjust effort level"):
@@ -547,12 +549,16 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
   // effort support at all.
   const effortLines = [];
   const withEffort = entries.filter((e) => e.effort);
-  const byParam = [...entries.filter((e) => e.effortParam).reduce((m, e) => m.set(`${e.agent} effort=${e.effortParam}`, (m.get(`${e.agent} effort=${e.effortParam}`) ?? 0) + 1), new Map())]
+  const passedEffort = (e) => effortParamOf(e.agent, e.effortParam) !== null;
+  const byParam = [...entries.filter(passedEffort).reduce((m, e) => m.set(`${e.agent} effort=${e.effortParam}`, (m.get(`${e.agent} effort=${e.effortParam}`) ?? 0) + 1), new Map())]
     .sort((a, b) => b[1] - a[1])
     .map(([k, n]) => `${n} ${k}`)
     .join(", ");
   if (withEffort.length) {
-    const inherited = withEffort.filter((e) => !pinnedEffort(e.agent) && !e.effortParam);
+    const inherited = withEffort.filter((e) => !pinnedEffort(e.agent) && !passedEffort(e));
+    // Entries written before the hook recorded the param carry no effortParam key
+    // at all, so for them "passed none" cannot be told from "not recorded".
+    const unrecorded = inherited.filter((e) => !Object.hasOwn(e, "effortParam")).length;
     const byLevel = [...inherited.reduce((m, e) => m.set(e.effort, (m.get(e.effort) ?? 0) + 1), new Map())]
       .sort((a, b) => b[1] - a[1])
       .map(([lvl, n]) => `${n} at ${lvl}`)
@@ -563,10 +569,14 @@ if (process.argv[2] === "stats" || process.argv[2] === "report") {
     const inferred = inherited.filter((e) => e.effortFrom === "default").length;
     // Nothing inherited means nothing for the caveats below to qualify: they
     // explain where an inherited level came from and what it cannot see.
-    if (!inherited.length) effortLines.push("", `Effort: all ${withEffort.length} dispatches ran on an agent type that pins its own effort or passed an \`effort\` param.`);
+    if (!inherited.length) effortLines.push("", byParam
+      ? `Effort: all ${withEffort.length} dispatches ran on an agent type that pins its own effort or passed an \`effort\` param.`
+      : `Effort: all ${withEffort.length} dispatches ran on agent types that pin their own effort.`);
     else effortLines.push(
       "",
-      `Effort: ${inherited.length} of ${withEffort.length} dispatches ran on an agent type carrying no EFFORT pin this plugin knows about and passed no \`effort\` param, and so inherited the session level${byLevel ? ` (${byLevel})` : ""}. Only the bundled agents pin effort here - a foreign agent with a known model pin still counts as inheriting effort.`,
+      unrecorded
+        ? `Effort: ${inherited.length} of ${withEffort.length} dispatches ran on an agent type carrying no EFFORT pin this plugin knows about, and so inherited the session level${byLevel ? ` (${byLevel})` : ""} unless the dispatch passed an \`effort\` param, which this log does not record${unrecorded < inherited.length ? ` for ${unrecorded} of them (logged before it did)` : ""}. Only the bundled agents pin effort here - a foreign agent with a known model pin still counts as inheriting effort.`
+        : `Effort: ${inherited.length} of ${withEffort.length} dispatches ran on an agent type carrying no EFFORT pin this plugin knows about and passed no \`effort\` param, and so inherited the session level${byLevel ? ` (${byLevel})` : ""}. Only the bundled agents pin effort here - a foreign agent with a known model pin still counts as inheriting effort.`,
       `  The bundled agents pin theirs in frontmatter, so routing a mechanical errand through a role agent can buy a cheaper model tier and, where that model supports effort and the pinned level is lower than the one it would otherwise inherit, a lower effort too. An agent from anywhere else may pin its own effort, which is invisible here and counted as inherited.`,
       ...(inferred ? [`  ${inferred} of these levels are the documented model default rather than an observed setting.`] : []),
       `  Source order is CLAUDE_CODE_EFFORT_LEVEL, then the level saved for the model in modelSettings or a settings effortLevel, then the model default (medium on Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5, xhigh on Opus 4.7, high elsewhere). Four states can override that and none are visible here: a /effort or --effort choice inside a running session, ultracode, an organization effort cap, and a per-model maxEffortLevel cap.`,
@@ -1251,7 +1261,7 @@ try {
     ts: Date.now(),
     agent: input.subagent_type ?? "general-purpose",
     model: input.model ?? null,
-    ...(input.effort ? { effortParam: input.effort } : {}),
+    effortParam: effortParamOf(input.subagent_type ?? "general-purpose", input.effort),
     // Since 2.1.251 CLAUDE_CODE_SUBAGENT_MODEL is a DEFAULT below the model
     // param and the frontmatter pin, not an override of them (before that
     // version it outranked both). "inherit" means the session model, i.e. the

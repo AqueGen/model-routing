@@ -1,7 +1,7 @@
 # Dispatch counter
 
 Every Agent dispatch is logged by a PostToolUse hook (agent name, model, the
-session model, and the session effort level - nothing else) to
+`effort` param when the dispatch passed one, the session model, and the session effort level - nothing else) to
 `<config>/model-routing/dispatches.jsonl`, self-pruned to 30 days. Stats show
 how much work routing actually kept off your session model - real counts, not
 invented dollar savings:
@@ -66,7 +66,9 @@ If the cheap tier really was right for that work, the fix is to pick an agent wh
 
 ### The effort line
 
-`report` also prints how many dispatches ran on an agent type carrying no effort pin, and therefore inherited whatever the session was set to. That is the failure a tier-only report scores as a win: a mechanical errand sent to `general-purpose` with `model=sonnet` still thinks as hard as your session does, while `scout` would have run the same errand at `low`.
+`report` also prints how many dispatches ran on an agent type carrying no effort pin and passed no `effort` param, and therefore inherited whatever the session was set to. That is the failure a tier-only report scores as a win: a mechanical errand sent to `general-purpose` with `model=sonnet` still thinks as hard as your session does, while `scout` would have run the same errand at `low`.
+
+Dispatches that passed an `effort` param are listed on their own line, for example `Passed an effort param: 1 model-routing:reviewer effort=high`. Only the five documented levels count, and a `fork` never does, because the Agent tool ignores `effort` for a fork. Entries logged before the hook recorded the param cannot show whether one was passed, and the line says so for them.
 
 Effort is reconstructed rather than observed, because transcripts do not record it. The sources are read in the order Claude Code applies them: `CLAUDE_CODE_EFFORT_LEVEL` first (the only place `max` is accepted), then the level saved for the model in `modelSettings` or, failing that, an `effortLevel` from the settings cascade (local, then project, then user - these accept `low`/`medium`/`high`/`xhigh` only), then the documented model default described in [the effort ladder](/how-it-works/model-tiers). Levels that came from that last rung are counted separately in the report, so an inferred default never reads as a setting somebody chose, and a level the session model does not support is recorded as the one Claude Code falls back to instead. Two cases contribute nothing to the line rather than a guess: a session on a model the docs give no effort support, and a session whose model could not be read at all, since the same configured level means different things on different models.
 
