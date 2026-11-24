@@ -125,6 +125,23 @@ test('an above-session total under a cent reads (+<$0.01)', () => {
   assert.match(bandText(l), /, above session: 1 opus \(\+<\$0\.01\)$/)
 })
 
+test('an above-session agent that ran cheaper than at the parent prints a negative amount with its own sign', () => {
+  const heavy = { input_tokens: 2000, cache_read_input_tokens: 500000, output_tokens: 3000 }
+  const a = addSubagentStep(emptyLedger(), 'a1', { ...heavy, model: OPUS }, 'claude-sonnet-4-6')
+  assert.ok(a.over.a1.extra < -0.01)
+  assert.match(bandText(a), /, above session: 1 opus \(-\$0\.03\)$/)
+  const b = addSubagentStep(emptyLedger(), 'a1', { ...heavy, model: 'claude-fable-5-2' }, 'claude-opus-4-8')
+  assert.ok(b.over.a1.extra < -0.01)
+  assert.match(bandText(b), /, above session: 1 fable \(-\$\d+\.\d\d\)$/)
+  assert.doesNotMatch(bandText(b), /\+\$-|\$-/)
+})
+
+test('a negative above-session total under a cent reads (-<$0.01)', () => {
+  const l = addSubagentStep(emptyLedger(), 'a1', { input_tokens: 1, cache_read_input_tokens: 90000, model: OPUS }, 'claude-sonnet-4-6')
+  assert.ok(l.over.a1.extra < 0 && l.over.a1.extra > -0.01)
+  assert.match(bandText(l), /, above session: 1 opus \(-<\$0\.01\)$/)
+})
+
 test('an unknown agent type with exempt configured prints the count only', () => {
   const l = addSubagentStep(emptyLedger(), 'a1', opusStep, SONNET)
   const t = bandText(l, cfg({ exempt: ['reviewer'] }))

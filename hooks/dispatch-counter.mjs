@@ -1180,7 +1180,7 @@ if (process.argv[2] === "tokens") {
       })() : []),
       ...(metaless ? [`  ${plural(metaless, "transcript")} had no readable agent-<id>.meta.json sidecar and are absent from this section only - every total elsewhere in this report still counts them.`] : []),
     ] : []),
-    ...(unknownAgents ? ["", `${unknownAgents} agents not tier-comparable (${fmtN(unknownVol)}), excluded from routed-down math - either the agent ran an unrecognized model family (extend TIER_PATTERNS in dispatch-counter.mjs) or no model could be read from the parent session transcript, which happens when the transcript is gone or names no model anywhere.`] : []),
+    ...(unknownAgents ? ["", `${unknownAgents} agents not tier-comparable (${fmtN(unknownVol)}), excluded from routed-down math - either the agent ran an unrecognized model family (extend TIER_PATTERNS in hooks/lib/tiers.mjs) or no model could be read from the parent session transcript, which happens when the transcript is gone or names no model anywhere.`] : []),
     ...(unreadablePaths.size ? ["", `${plural(unreadablePaths.size, "transcript")} could not be read (too large to load as one string, or unreadable) - the totals below understate by whatever they held.`
       + (parentUnreadable ? ` ${parentUnreadable} of them ${parentUnreadable === 1 ? "is a parent" : "are parents"} of agents in this window, whose agents fell back to the model in effect at launch or the transcript head.` : "")] : []),
     ...(mainVolTotal ? [

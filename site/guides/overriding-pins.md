@@ -18,7 +18,8 @@ Pins are deliberately not configurable through a config file - four override pat
 - **Reset**: `git checkout -- agents` in the plugin checkout, or
   reinstall from the marketplace.
 
-A runtime config file was considered and rejected: the harness reads
+A runtime config file for pins was considered and rejected: the harness reads
 model pins from agent frontmatter directly, so a config file could only
 be advisory prose asking Claude to pass overrides - more surface, weaker
-guarantee. The agent files are the config.
+guarantee. For pins, the agent files are the config. The above-session
+warning has its own small config file, see [Configuration](/guides/configuration).
