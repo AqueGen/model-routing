@@ -52,3 +52,44 @@ test('the band stays empty until a subagent answers, then names models and both 
   expect(await ui.find({ text: /model-routing/ })).toBeUndefined()
   await ui.unmount()
 })
+
+const USAGE = { input_tokens: 20000, output_tokens: 2000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, model: 'claude-opus-5-5' }
+
+const slashed = (p: string) => p.split(String.fromCharCode(92)).join('/')
+
+async function bandRow($: any, on: any, files: Record<string, string>, env: Record<string, string> = { CLAUDE_CONFIG_DIR: 'C:/cfg' }) {
+  on('turn.step', async function* (_$: any, e: any) {
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: USAGE }
+  })
+  on('session.end', async (_$: any, e: any) => ({ sessionId: e.sessionId }))
+  on('session.model', async () => ({ value: 'claude-sonnet-5-5' }) as any)
+  on('env.get', async (_$: any, e: any) => ({ value: env[e.name] }) as any)
+  on('fs.exists', async (_$: any, e: any) => ({ value: slashed(e.path) in files }) as any)
+  on('fs.read', async (_$: any, e: any) => ({ value: files[slashed(e.path)] }) as any)
+  await $.session.end({ reason: 'clear', sessionId: 's', resume: undefined })
+  const s = $.turn.step({ turnId: 't', index: 0, messageCount: 1, model: 'claude-sonnet-5-5', agentId: 'a1' })
+  for await (const _ of s) { /* drain */ }
+  const ui = await $.ui.mount({ plugin: 'model-routing', surface: 'terminal', component: 'AbovePrompt', props: PROPS })
+  const text = (await ui.find({ text: /model-routing/ }))?.text
+  await ui.unmount()
+  return text
+}
+
+const CONFIG_FILE = 'C:/cfg/model-routing/config.json'
+
+test('a subagent above the session model is named in the band', async ($, on) => {
+  const text = await bandRow($, on, {})
+  expect(text).toMatch(/above session: 1 opus/)
+  expect(text).not.toMatch(/config not read/)
+})
+
+test('aboveSession off in config.json drops the above-session part', async ($, on) => {
+  const text = await bandRow($, on, { [CONFIG_FILE]: '{"aboveSession":"off"}' })
+  expect(text).toMatch(/^model-routing: 1 opus/)
+  expect(text).not.toMatch(/above session/)
+})
+
+test('an unreadable config falls back to warn and says so', async ($, on) => {
+  const text = await bandRow($, on, {}, {})
+  expect(text).toMatch(/above session: 1 opus .*\(config not read\)/)
+})

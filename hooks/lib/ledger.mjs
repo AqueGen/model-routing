@@ -1,4 +1,4 @@
-import { DEFAULT_CONFIG, isExempt } from './config.mjs'
+import { DEFAULT_CONFIG, isExempt } from './config-core.mjs'
 import { costOf, isPriced, LONG_PROMPT, volOf } from './prices.mjs'
 import { isAboveSession } from './tiers.mjs'
 
