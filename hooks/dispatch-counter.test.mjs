@@ -11,7 +11,9 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "dispatch-counter.mjs");
-const PRICES_FILE = join(dirname(fileURLToPath(import.meta.url)), "lib", "prices.mjs");
+const LIB_DIR = join(dirname(fileURLToPath(import.meta.url)), "lib");
+const PRICES_FILE = join(LIB_DIR, "prices.mjs");
+const TIERS_FILE = join(LIB_DIR, "tiers.mjs");
 
 function run(args, configDir, stdin, extraEnv, cwd) {
   return execFileSync(process.execPath, [SCRIPT, ...args].filter(Boolean), {
@@ -1444,7 +1446,7 @@ function assertRankable(tableName, minFamilies, tableFile = SCRIPT) {
   const rows = readFileSync(tableFile, "utf-8").match(new RegExp(`const ${tableName} = \\[([\\s\\S]*?)^\\];`, "m"))[1];
   const families = [...rows.matchAll(/\[\/([^/]+)\//g)].flatMap((m) => m[1].split("|"));
   assert.ok(families.length >= minFamilies, `expected the documented ${tableName} list, parsed ${families.length}`);
-  const tiers = src.match(/const TIER_PATTERNS = \[([\s\S]*?)\];/)[1];
+  const tiers = readFileSync(TIERS_FILE, "utf-8").match(/const TIER_PATTERNS = \[([\s\S]*?)\]\r?\n/)[1];
   for (const family of families) {
     const ranked = [...tiers.matchAll(/\/([^/]+)\//g)]
       .some((m) => m[1].split("|").some((p) => new RegExp(p).test(`claude-${family}`)));
@@ -1649,7 +1651,7 @@ test("an unreadable manifest costs the stamp, not the report", () => {
   const script = join(dir, "dispatch-counter.mjs");
   writeFileSync(script, readFileSync(join(dirname(fileURLToPath(import.meta.url)), "dispatch-counter.mjs")));
   mkdirSync(join(dir, "lib"));
-  writeFileSync(join(dir, "lib", "prices.mjs"), readFileSync(PRICES_FILE));
+  for (const f of readdirSync(LIB_DIR).filter((f) => !f.endsWith(".test.mjs"))) writeFileSync(join(dir, "lib", f), readFileSync(join(LIB_DIR, f)));
   const cfg = freshConfigDir();
   writeLog(cfg, [{ ts: Date.now(), agent: "general-purpose", model: "sonnet", session: "claude-opus-5" }]);
   try {
@@ -2201,4 +2203,72 @@ test("--session scopes the main-session denominator per line model", () => {
     assert.match(out, /Main sessions \(not routable\): 4k across 1 sessions/);
     assert.doesNotMatch(out, /opus-5\s+8k/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+const NOTICE = "model-routing: model-routing:reviewer ran on opus, above the session model sonnet-5-5. This may cost more than planned.";
+
+function noticeRun({ session = "claude-sonnet-5-5", config, rawConfig, env, agent = "model-routing:reviewer", model } = {}) {
+  const cfg = freshConfigDir();
+  try {
+    let transcript;
+    if (session) {
+      transcript = join(cfg, "session.jsonl");
+      writeFileSync(transcript, JSON.stringify({ model: session }) + "\n");
+    }
+    if (config || rawConfig !== undefined) {
+      mkdirSync(join(cfg, "model-routing"), { recursive: true });
+      writeFileSync(join(cfg, "model-routing", "config.json"), rawConfig ?? JSON.stringify(config));
+    }
+    const out = run([], cfg, JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: agent, ...(model ? { model } : {}) }, transcript_path: transcript }), env);
+    const log = readFileSync(join(cfg, "model-routing", "dispatches.jsonl"), "utf-8").trim().split("\n");
+    return { out, lines: log.length };
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+}
+
+test("hook prints one JSON notice for a dispatch above the session model", () => {
+  const { out, lines } = noticeRun();
+  assert.deepEqual(JSON.parse(out), {
+    systemMessage: NOTICE,
+    hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: NOTICE },
+  });
+  assert.equal(lines, 1);
+});
+
+test("hook prints nothing when off, exempt, at or below the session, without a transcript, or under FORCE", () => {
+  const cases = [
+    { config: { aboveSession: "off" } },
+    { config: { exempt: ["reviewer"] } },
+    { session: "claude-opus-4-8" },
+    { session: null },
+    { env: { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1" } },
+    { model: "haiku" },
+    { agent: "Explore" },
+    { agent: "Plan" },
+    { agent: "Explore", env: { CLAUDE_CODE_SUBAGENT_MODEL: "opus" } },
+    { agent: "Plan", env: { CLAUDE_CODE_SUBAGENT_MODEL: "opus" } },
+  ];
+  for (const c of cases) {
+    const { out, lines } = noticeRun(c);
+    assert.equal(out, "", JSON.stringify(c));
+    assert.equal(lines, 1, JSON.stringify(c));
+  }
+});
+
+test("hook judges the model an unpinned dispatch really ran on: the model param, then the env default", () => {
+  const cases = [
+    { agent: "general-purpose", model: "opus" },
+    { agent: "general-purpose", env: { CLAUDE_CODE_SUBAGENT_MODEL: "opus" } },
+  ];
+  for (const c of cases) {
+    const { out, lines } = noticeRun(c);
+    const text = "model-routing: general-purpose ran on opus, above the session model sonnet-5-5. This may cost more than planned.";
+    assert.equal(JSON.parse(out).systemMessage, text, JSON.stringify(c));
+    assert.equal(lines, 1, JSON.stringify(c));
+  }
+});
+
+test("a malformed config.json still exits 0, logs once and judges by the defaults", () => {
+  const { out, lines } = noticeRun({ rawConfig: "{not json" });
+  assert.equal(JSON.parse(out).systemMessage, NOTICE);
+  assert.equal(lines, 1);
 });

@@ -70,3 +70,92 @@ test('amounts under a cent read <$0.01, never $0.00', () => {
 test('no band before the first subagent', () => {
   assert.equal(bandText(emptyLedger()), null)
 })
+
+const opusStep = { ...sonnetStep, model: 'claude-opus-5-5' }
+const SONNET = 'claude-sonnet-5-5'
+const OPUS = 'claude-opus-5-5'
+const cfg = (o) => ({ config: { aboveSession: 'warn', exempt: [], ...o }, configRead: true })
+
+test('an above-session subagent is counted with its measured extra cost', () => {
+  let l = addSubagentStep(emptyLedger(), 'a1', opusStep, SONNET)
+  l = addSubagentStep(l, 'a2', sonnetStep, SONNET)
+  assert.match(bandText(l), /, above session: 1 opus \(\+\$0\.\d\d\)$/)
+  const extra = costOf(OPUS, volumeOf(opusStep)) - costOf(SONNET, volumeOf(opusStep))
+  assert.ok(bandText(l).endsWith(`above session: 1 opus (+${usd(extra)})`))
+  assert.ok(near(l.over.a1.extra, extra))
+})
+
+test('extra accumulates per response of the same agent', () => {
+  let l = addSubagentStep(emptyLedger(), 'a1', opusStep, SONNET, 'model-routing:reviewer')
+  l = addSubagentStep(l, 'a1', opusStep, SONNET)
+  assert.ok(near(l.over.a1.extra, 2 * (costOf(OPUS, volumeOf(opusStep)) - costOf(SONNET, volumeOf(opusStep)))))
+  assert.equal(l.over.a1.type, 'model-routing:reviewer')
+})
+
+test('aboveSession off prints nothing extra', () => {
+  const l = addSubagentStep(emptyLedger(), 'a1', opusStep, SONNET)
+  assert.doesNotMatch(bandText(l, cfg({ aboveSession: 'off' })), /above session/)
+})
+
+test('no above-session text when the parent is the highest tier used', () => {
+  let l = addSubagentStep(emptyLedger(), 'a1', opusStep, OPUS)
+  l = addSubagentStep(l, 'a2', sonnetStep, OPUS)
+  assert.doesNotMatch(bandText(l), /above session/)
+})
+
+test('an exempt agent type, full or bare, is left out', () => {
+  const l = addSubagentStep(emptyLedger(), 'a1', opusStep, SONNET, 'model-routing:reviewer')
+  assert.doesNotMatch(bandText(l, cfg({ exempt: ['reviewer'] })), /above session/)
+  assert.doesNotMatch(bandText(l, cfg({ exempt: ['model-routing:reviewer'] })), /above session/)
+  assert.match(bandText(l, cfg({ exempt: ['other'] })), /above session: 1 opus \(\+\$/)
+})
+
+test('an exempt above-session agent next to a non-exempt one leaves the band count and amount to the non-exempt one', () => {
+  const big = { ...opusStep, input_tokens: 90000 }
+  let l = addSubagentStep(emptyLedger(), 'a1', big, SONNET, 'model-routing:reviewer')
+  l = addSubagentStep(l, 'a2', opusStep, SONNET, 'other')
+  const extra = costOf(OPUS, volumeOf(opusStep)) - costOf(SONNET, volumeOf(opusStep))
+  assert.ok(bandText(l, cfg({ exempt: ['reviewer'] })).endsWith(`, above session: 1 opus (+${usd(extra)})`))
+  assert.ok(bandText(l).endsWith(', above session: 2 opus (+' + usd(l.over.a1.extra + l.over.a2.extra) + ')'))
+})
+
+test('an above-session total under a cent reads (+<$0.01)', () => {
+  const l = addSubagentStep(emptyLedger(), 'a1', { input_tokens: 1000, model: OPUS }, SONNET)
+  assert.ok(l.over.a1.extra > 0 && l.over.a1.extra < 0.01)
+  assert.match(bandText(l), /, above session: 1 opus \(\+<\$0\.01\)$/)
+})
+
+test('an above-session agent that ran cheaper than at the parent prints a negative amount with its own sign', () => {
+  const heavy = { input_tokens: 2000, cache_read_input_tokens: 500000, output_tokens: 3000 }
+  const a = addSubagentStep(emptyLedger(), 'a1', { ...heavy, model: OPUS }, 'claude-sonnet-4-6')
+  assert.ok(a.over.a1.extra < -0.01)
+  assert.match(bandText(a), /, above session: 1 opus \(-\$0\.03\)$/)
+  const b = addSubagentStep(emptyLedger(), 'a1', { ...heavy, model: 'claude-fable-5-2' }, 'claude-opus-4-8')
+  assert.ok(b.over.a1.extra < -0.01)
+  assert.match(bandText(b), /, above session: 1 fable \(-\$\d+\.\d\d\)$/)
+  assert.doesNotMatch(bandText(b), /\+\$-|\$-/)
+})
+
+test('a negative above-session total under a cent reads (-<$0.01)', () => {
+  const l = addSubagentStep(emptyLedger(), 'a1', { input_tokens: 1, cache_read_input_tokens: 90000, model: OPUS }, 'claude-sonnet-4-6')
+  assert.ok(l.over.a1.extra < 0 && l.over.a1.extra > -0.01)
+  assert.match(bandText(l), /, above session: 1 opus \(-<\$0\.01\)$/)
+})
+
+test('an unknown agent type with exempt configured prints the count only', () => {
+  const l = addSubagentStep(emptyLedger(), 'a1', opusStep, SONNET)
+  const t = bandText(l, cfg({ exempt: ['reviewer'] }))
+  assert.match(t, /above session: 1 opus \(exempt not applied\)$/)
+  assert.doesNotMatch(t.split('above session')[1], /\$/)
+})
+
+test('an unread config is flagged after the amount', () => {
+  const l = addSubagentStep(emptyLedger(), 'a1', opusStep, SONNET)
+  assert.match(bandText(l, { ...cfg({}), configRead: false }), /above session: 1 opus \(\+\$0\.\d\d\) \(config not read\)$/)
+})
+
+test('unpriced models and unknown parents are never judged', () => {
+  assert.deepEqual(addSubagentStep(emptyLedger(), 'a1', { ...sonnetStep, model: 'claude-x-9' }, 'claude-haiku-5-5').over, {})
+  assert.deepEqual(addSubagentStep(emptyLedger(), 'a1', opusStep, null).over, {})
+  assert.deepEqual(addSubagentStep(emptyLedger(), 'a1', opusStep, 'claude-x-9').over, {})
+})

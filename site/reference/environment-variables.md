@@ -1,6 +1,6 @@
 # Environment variables
 
-The Claude Code variables the plugin's docs and reports rely on, plus where the plugin looks for its own files. There is deliberately no config subsystem.
+The Claude Code variables the plugin's docs and reports rely on, plus where the plugin looks for its own files. Pins are not configurable here; the only config file is the optional above-session warning, see [Configuration](/guides/configuration).
 
 | Variable | Effect |
 | --- | --- |
