@@ -27,6 +27,7 @@ export function register(on) {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props?.hasSurvey) return next(e)
     const { Box, Text } = $.ui.resolve(e)
-    return Box({ children: [Text({ children: [bandText(ledger, sessionModel)] })] })
+    const theirs = await next(e)
+    return Box({ flexDirection: 'column', children: [Text({ children: [bandText(ledger, sessionModel)] }), ...(theirs ? [theirs] : [])] })
   })
 }

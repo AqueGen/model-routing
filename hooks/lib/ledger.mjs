@@ -70,6 +70,6 @@ export function bandText(ledger, sessionModel) {
   const priced = s.n - s.unpriced
   const tail = s.unpriced ? `, ${s.unpriced} not priced` : ''
   if (!priced) return `model-routing: ${plural(s.n)}, model not priced`
-  if (!sessionModel) return `model-routing: ${plural(priced)} ${usd(s.actual)}${tail}`
+  if (!sessionModel || rateOf(sessionModel) === null) return `model-routing: ${plural(priced)} ${usd(s.actual)}${tail}`
   return `model-routing: ${plural(priced)} ${usd(s.actual)}, the same on ${short(sessionModel)} ${usd(s.atSession)}${tail}`
 }

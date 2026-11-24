@@ -59,6 +59,11 @@ test('without a known session model the band shows only what ran', () => {
   assert.match(bandText(l, null), /^model-routing: 1 subagent \$0\.\d\d$/)
 })
 
+test('a session model with no price shows only what ran, never "$0.00" as the comparison', () => {
+  const l = addSubagentTurn(emptyLedger(), 'a1', sonnetTurn)
+  assert.match(bandText(l, 'claude-x-9'), /^model-routing: 1 subagent \$0\.\d\d$/)
+})
+
 test('before the first subagent the band says so, so a loaded mod is visible', () => {
   assert.equal(bandText(emptyLedger(), 'claude-opus-5-5'), 'model-routing: no subagents yet this session')
 })
