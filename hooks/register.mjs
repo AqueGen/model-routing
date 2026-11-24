@@ -8,8 +8,9 @@ export function register(on) {
     if (!e.agentId && e.model) sessionModel = e.model
     const r = yield* next(e)
     if (e.agentId && r?.usage) {
-      if (!sessionModel) { try { sessionModel = await $.session.model() } catch {} }
-      ledger = addSubagentStep(ledger, e.agentId, r.usage, sessionModel)
+      let parent = sessionModel
+      if (!parent) { try { parent = await $.session.model() } catch {} }
+      ledger = addSubagentStep(ledger, e.agentId, r.usage, parent)
       try { $.ui.invalidate('ui.render') } catch {}
     }
     return r
