@@ -17,8 +17,8 @@ export function register(on) {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props?.hasSurvey) return next(e)
     const text = bandText(ledger, sessionModel)
-    if (!text || e.props?.hasSurvey) return next(e)
     const { Box, Text } = $.ui.resolve(e)
     return Box({ children: [Text({ children: [text] })] })
   })

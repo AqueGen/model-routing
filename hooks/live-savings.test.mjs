@@ -40,6 +40,6 @@ test('ledger accumulates actual and session-model cost; band shows both', () => 
   assert.match(bandText(l, 'claude-opus-5-5'), /^model-routing: 2 subagents \$0\.\d\d, the same on opus-5-5 \$0\.\d\d$/)
 })
 
-test('no band before the first subagent', () => {
-  assert.equal(bandText(emptyLedger(), 'claude-opus-5-5'), null)
+test('before the first subagent the band says so, so a loaded mod is visible', () => {
+  assert.equal(bandText(emptyLedger(), 'claude-opus-5-5'), 'model-routing: no subagents yet this session')
 })

@@ -44,7 +44,7 @@ const usd = (v) => (v >= 10 ? '$' + v.toFixed(0) : '$' + v.toFixed(2))
 const short = (m) => String(m ?? '').replace(/^claude-/, '')
 
 export function bandText(ledger, sessionModel) {
-  if (!ledger.n) return null
+  if (!ledger.n) return 'model-routing: no subagents yet this session'
   const priced = ledger.n - ledger.unpriced
   if (!priced) return `model-routing: ${ledger.n} subagent${ledger.n > 1 ? 's' : ''}, model not priced`
   return `model-routing: ${priced} subagent${priced > 1 ? 's' : ''} ${usd(ledger.actual)}, the same on ${short(sessionModel)} ${usd(ledger.atSession)}`
