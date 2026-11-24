@@ -20,7 +20,7 @@ For local development: clone the repo and
 ## Requirements
 
 - Claude Code with plugin support (agents, skills, hooks).
-- The cost line above the prompt is a Claude Code mod: it needs Claude Code 2.1.287 or later and shows in the terminal and the Desktop Code tab, not in the VS Code chat panel. Without that, everything else works and the line is simply absent. Dollars are Claude API list prices, as in the dispatch report.
+- The cost line above the prompt is a Claude Code mod: it needs Claude Code 2.1.287 or later and appears after the session's first subagent. On an older version everything else works and the line is simply absent. Dollars are Claude API list prices, as in the dispatch report.
 - `node` 18+ on PATH - used only by the dispatch counter and
   `/model-routing:stats`. The routing itself (skill, agents, session
   anchor) works without node; if node is missing you lose stats, nothing

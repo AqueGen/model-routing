@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "dispatch-counter.mjs");
+const PRICES_FILE = join(dirname(fileURLToPath(import.meta.url)), "lib", "prices.mjs");
 
 function run(args, configDir, stdin, extraEnv, cwd) {
   return execFileSync(process.execPath, [SCRIPT, ...args].filter(Boolean), {
@@ -1438,9 +1439,9 @@ test("unpriced subagents still get their main-session cost and their declaration
 // family, effort support and price are properties of the version - so this is
 // the coupling that replaces merging them. Returns the families it parsed so a
 // caller can make further assertions about the same rows.
-function assertRankable(tableName, minFamilies) {
+function assertRankable(tableName, minFamilies, tableFile = SCRIPT) {
   const src = readFileSync(SCRIPT, "utf-8");
-  const rows = src.match(new RegExp(`const ${tableName} = \\[([\\s\\S]*?)^\\];`, "m"))[1];
+  const rows = readFileSync(tableFile, "utf-8").match(new RegExp(`const ${tableName} = \\[([\\s\\S]*?)^\\];`, "m"))[1];
   const families = [...rows.matchAll(/\[\/([^/]+)\//g)].flatMap((m) => m[1].split("|"));
   assert.ok(families.length >= minFamilies, `expected the documented ${tableName} list, parsed ${families.length}`);
   const tiers = src.match(/const TIER_PATTERNS = \[([\s\S]*?)\];/)[1];
@@ -1455,7 +1456,7 @@ function assertRankable(tableName, minFamilies) {
 test("every model in the price table is rankable by the tier table", () => {
   // A model that can be priced but not ranked would be counted in the cost
   // figures while sitting outside the routed-down math.
-  assertRankable("PRICES", 8);
+  assertRankable("PRICES", 8, PRICES_FILE);
 });
 
 test("a cache write with no TTL breakdown is charged at the cheaper rate", () => {
@@ -1506,8 +1507,7 @@ test("a window with nothing priceable says so instead of showing figures", () =>
 test("the price table is stamped with the date it was transcribed", () => {
   // The figure is only as good as the stamp beside it, so the stamp has to be
   // in the output rather than a comment somebody has to go and find.
-  const src = readFileSync(SCRIPT, "utf-8");
-  const asof = src.match(/const PRICES_ASOF = "(\d{4}-\d{2}-\d{2})"/)[1];
+  const asof = readFileSync(PRICES_FILE, "utf-8").match(/const PRICES_ASOF = "(\d{4}-\d{2}-\d{2})"/)[1];
   const cfg = freshConfigDir();
   const dir = join(cfg, "projects", "proj", "sess-1", "subagents");
   mkdirSync(dir, { recursive: true });
@@ -1648,6 +1648,8 @@ test("an unreadable manifest costs the stamp, not the report", () => {
   const dir = mkdtempSync(join(tmpdir(), "mr-noman-"));
   const script = join(dir, "dispatch-counter.mjs");
   writeFileSync(script, readFileSync(join(dirname(fileURLToPath(import.meta.url)), "dispatch-counter.mjs")));
+  mkdirSync(join(dir, "lib"));
+  writeFileSync(join(dir, "lib", "prices.mjs"), readFileSync(PRICES_FILE));
   const cfg = freshConfigDir();
   writeLog(cfg, [{ ts: Date.now(), agent: "general-purpose", model: "sonnet", session: "claude-opus-5" }]);
   try {
