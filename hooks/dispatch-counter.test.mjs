@@ -405,7 +405,7 @@ test("hook logs an effort param and the report counts it instead of calling it i
     assert.equal(log[2].effortParam, null);
     const out = run(["report"], cfg);
     assert.match(out, /Passed an `effort` param: .*1 model-routing:reviewer effort=high/);
-    assert.match(out, /Effort: 1 of 3 dispatches .* and passed no `effort` param, and so inherited/);
+    assert.match(out, /Effort: 1 of 3 dispatches .* and passed no `effort` param the Agent tool applies, and so inherited/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
@@ -445,6 +445,10 @@ test("report keeps the unrecorded-param caveat for entries logged before the par
   writeLog(cfg, [base, { ...base, effortParam: null }]);
   try {
     assert.match(run(["report"], cfg), /Effort: 2 of 2 dispatches .* unless the dispatch passed an `effort` param, which this log does not record for 1 of them \(logged before it did\)\./);
+    writeLog(cfg, [base, base, { ...base, effortParam: "low" }]);
+    const mixed = run(["report"], cfg);
+    assert.match(mixed, /Effort: 2 of 3 dispatches .* which this log does not record for all 2 of them \(logged before it did\)\./);
+    assert.match(mixed, /Passed an `effort` param: 1 general-purpose effort=low\./);
     writeLog(cfg, [base]);
     assert.match(run(["report"], cfg), /Effort: 1 of 1 dispatches .* unless the dispatch passed an `effort` param, which this log does not record\. /);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
