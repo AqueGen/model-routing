@@ -28,6 +28,7 @@ import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, 
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
+import { costOf, LONG_PROMPT, PRICES_ASOF, volOf } from "./lib/prices.mjs";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RETENTION_MS = 30 * DAY_MS;
@@ -309,76 +310,6 @@ const tierOf = (m) => {
   return null;
 };
 const shortModel = (m) => m ? m.replace(/^claude-/, "").replace(/-\d{8}$/, "") : m;
-
-// USD per million BASE INPUT and OUTPUT tokens, transcribed from the Anthropic
-// pricing page, captured on the date below. Enumerated per model rather than
-// per family for the same reason EFFORT_SUPPORT is: families span price changes
-// (Opus 4.1 bills at three times Opus 4.5) and a loose pattern would quietly
-// misprice a retired model. A model absent from this table is reported as
-// unpriced volume, never as zero.
-const PRICES_ASOF = "2026-11-12";
-// A row's optional fourth element is the long-prompt card [inRate, outRate]:
-// "A request's prompt length counts all of its input tokens, including cache
-// reads and cache writes. Each request is priced on its own." Above
-// LONG_PROMPT tokens the request bills on that card; exactly LONG_PROMPT is
-// still the base card.
-const LONG_PROMPT = 100000;
-const PRICES = [
-  // Retired families first: a looser pattern below must not claim them.
-  [/opus-4-1-|opus-4-20/, () => [15, 75]],
-  // Pre-4.x ids put the generation first (claude-3-5-haiku-...), so both orders
-  // are matched; the row above needs the same trick for claude-opus-4-20250514.
-  [/3-5-haiku|haiku-3-5/, () => [0.8, 4]],
-  // 5.2 and 5.1 cache reads at 0.025x base input, ahead of the looser 5.x row below.
-  [/(fable|mythos)-5-2(?!\d)/, () => [8, 40, 0.025]],
-  [/fable-5-1|mythos-5-1/, () => [10, 50, 0.025]],
-  [/fable-5|mythos-5/, () => [10, 50]],
-  // Opus 5.5 cache reads at 0.05x ($0.20/MTok), ahead of the looser opus-5 row.
-  [/opus-5-5/, () => [4, 20, 0.05]],
-  [/opus-5|opus-4-8|opus-4-7|opus-4-6|opus-4-5/, () => [5, 25]],
-  // "Cache hits and refreshes on Claude Opus 5.5 and Claude Sonnet 5.5 are
-  // priced at 0.05x the base input price": $0.10/MTok, ahead of the sonnet-5 row.
-  [/sonnet-5-5/, () => [2, 10, 0.05]],
-  // Permanent $2/$10: the scheduled increase to $3/$15 on 2026-09-01 was
-  // called off.
-  [/sonnet-5/, () => [2, 10]],
-  [/sonnet-4-6|sonnet-4-5|sonnet-4-20/, () => [3, 15]],
-  // $0.10/$0.50 up to LONG_PROMPT, $0.50/$2.50 above it.
-  [/haiku-5-5/, () => [0.1, 0.5, CACHE_READ, [0.5, 2.5]]],
-  [/haiku-4-5/, () => [1, 5]],
-];
-// Prompt-caching multipliers, quoted from the same page: a 5-minute cache write
-// costs 1.25x base input, a 1-hour write 2x, of whichever card the request bills
-// on. Cache reads are 0.1x base input for every model except where the page
-// states otherwise (Fable and Mythos 5.2 and 5.1 read at 0.025x, Opus 5.5 and
-// Sonnet 5.5 at 0.05x - the row's third element overrides CACHE_READ).
-const CACHE_WRITE_5M = 1.25, CACHE_WRITE_1H = 2, CACHE_READ = 0.1;
-
-// Billable input volume: everything the model read, however it was cached.
-// Output is counted separately because it prices an order of magnitude higher.
-const volOf = (v) => v.in + v.cr + v.cw5 + v.cw1h;
-
-// Dollars for one model's token counts, or null when the model is not on the
-// price table. `at` is kept as the hook for a future dated rate; no row on
-// the table uses it today. `v.long` holds the share of `v` that came from
-// requests above LONG_PROMPT; a row without a long card prices all of `v` on
-// its base card.
-function costOf(model, v, at) {
-  const row = model ? PRICES.find(([re]) => re.test(model)) : null;
-  if (!row) return null;
-  const [inRate, outRate, crMul = CACHE_READ, long] = row[1](at);
-  const card = (c, inR, outR) => {
-    const perTok = inR / 1e6;
-    return (c.in * perTok)
-      + (c.cw5 * perTok * CACHE_WRITE_5M)
-      + (c.cw1h * perTok * CACHE_WRITE_1H)
-      + (c.cr * perTok * crMul)
-      + (c.out * outR / 1e6);
-  };
-  if (!long || !v.long) return card(v, inRate, outRate);
-  const base = Object.fromEntries(Object.keys(v.long).map((k) => [k, v[k] - v.long[k]]));
-  return card(base, inRate, outRate) + card(v.long, ...long);
-}
 
 // Bounded fd reads, NOT readFileSync - these run inside the PostToolUse
 // hook and session transcripts can be hundreds of MB. The optional vendor
@@ -1292,7 +1223,7 @@ if (process.argv[2] === "tokens") {
         "The difference is conservative for a documented reason. Models from Opus 4.7, Sonnet 5 and Fable 5 onward use a tokenizer producing about 30% more tokens for the same text than Sonnet 4.6 and earlier, so re-pricing a cheap model's token count at an expensive model's rate understates the inherited side, and with it the difference. It does not touch what actually ran.",
       ] : []),
       "Two more modifiers understate every figure here. Cache writes whose transcript line names no TTL are charged at the cheapest write rate. And nothing in a usage line reveals whether fast mode (which doubles Fable 5.2, Mythos 5.2, Opus 5.5, Opus 5 and Opus 4.8 rates) or US-only inference (1.1x on everything from 4.6) was in effect, so neither is applied.",
-      "Rates are first-party Claude API list prices - Bedrock and Google Cloud bill separately and are not modelled. They are transcribed from the Anthropic pricing page on the date above and will drift; a window straddling a price change is priced wholly at the rates in effect at its end. Re-check PRICES in dispatch-counter.mjs before quoting a figure.",
+      "Rates are first-party Claude API list prices - Bedrock and Google Cloud bill separately and are not modelled. They are transcribed from the Anthropic pricing page on the date above and will drift; a window straddling a price change is priced wholly at the rates in effect at its end. Re-check PRICES in hooks/lib/prices.mjs before quoting a figure.",
     ] : []),
     "",
     "Volume = tokens the subagent processed; cache reads are billed at the subagent's model rate, which is where routing saves when that rate is below the session's - not from Fable 5.2 to Opus 5.5 or Sonnet 5, which read cache at the same rate per token. The tier share above does not know when it does not; the dollar rows do, and the By agent section names the model pairs where it did not.",

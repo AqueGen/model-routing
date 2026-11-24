@@ -52,7 +52,7 @@ More options and requirements: [install guide](https://aquegen.github.io/model-r
 - [Getting started](https://aquegen.github.io/model-routing/get-started/getting-started) and [usage](https://aquegen.github.io/model-routing/get-started/usage)
 - [How it works](https://aquegen.github.io/model-routing/how-it-works/), [why each choice](https://aquegen.github.io/model-routing/how-it-works/why-each-choice), [model tiers and effort ladder](https://aquegen.github.io/model-routing/how-it-works/model-tiers)
 - [Recommended settings](https://aquegen.github.io/model-routing/guides/recommended-settings), [overriding pins](https://aquegen.github.io/model-routing/guides/overriding-pins), [staying up to date](https://aquegen.github.io/model-routing/guides/staying-up-to-date)
-- Live cost line above the prompt (terminal and Desktop Code tab, Claude Code 2.1.287+): [how it works](https://aquegen.github.io/model-routing/how-it-works/)
+- Live cost line above the prompt, e.g. `model-routing: 4 haiku, 2 sonnet - API $0.02 vs $0.18 at parent` (a Claude Code mod, tested on 2.1.330): [how it works](https://aquegen.github.io/model-routing/how-it-works/)
 - [Dispatch counter and `/model-routing:stats`](https://aquegen.github.io/model-routing/reference/dispatch-counter), [environment variables](https://aquegen.github.io/model-routing/reference/environment-variables)
 - [Evals](evals/README.md) and [evidence files](evals/evidence/README.md)
 - [Releasing](https://aquegen.github.io/model-routing/contribute/)
