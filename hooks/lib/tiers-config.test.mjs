@@ -21,11 +21,12 @@ test('isAboveSession is true only when both rank and ran is higher', () => {
   assert.equal(isAboveSession('claude-fable-1', 'claude-mythos-1'), false)
 })
 
+const DIR = Symbol('dir')
 const withConfig = (content, fn) => {
   const dir = mkdtempSync(join(tmpdir(), 'mr-cfg-'))
   try {
-    if (typeof content === 'string') writeFileSync(join(dir, 'config.json'), content)
-    else if (content === 'dir') mkdirSync(join(dir, 'config.json'))
+    if (content === DIR) mkdirSync(join(dir, 'config.json'))
+    else if (typeof content === 'string') writeFileSync(join(dir, 'config.json'), content)
     return fn(dir)
   } finally { rmSync(dir, { recursive: true, force: true }) }
 }
@@ -43,7 +44,7 @@ test('loadConfig falls back on wrong types, invalid JSON and a directory in plac
   withConfig('{"aboveSession":5,"exempt":"x"}', (dir) => assert.deepEqual(loadConfig(dir), DEFAULT_CONFIG))
   withConfig('{not json', (dir) => assert.deepEqual(loadConfig(dir), DEFAULT_CONFIG))
   withConfig('null', (dir) => assert.deepEqual(loadConfig(dir), DEFAULT_CONFIG))
-  withConfig('dir', (dir) => assert.deepEqual(loadConfig(dir), DEFAULT_CONFIG))
+  withConfig(DIR, (dir) => assert.deepEqual(loadConfig(dir), DEFAULT_CONFIG))
 })
 
 test('loadConfig drops non-string exempt entries', () => {

@@ -295,7 +295,6 @@ function readEntries(file) {
     .filter(Boolean);
 }
 
-
 // Bounded fd reads, NOT readFileSync - these run inside the PostToolUse
 // hook and session transcripts can be hundreds of MB. The optional vendor
 // prefix accepts Bedrock/Vertex ids (us.anthropic.claude-...) while

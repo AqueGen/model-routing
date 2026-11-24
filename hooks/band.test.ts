@@ -57,7 +57,7 @@ const USAGE = { input_tokens: 20000, output_tokens: 2000, cache_read_input_token
 
 const slashed = (p: string) => p.split(String.fromCharCode(92)).join('/')
 
-async function bandRow($: any, on: any, files: Record<string, string>, env: Record<string, string> = { CLAUDE_CONFIG_DIR: 'C:/cfg' }) {
+async function bandRow($: any, on: any, files: Record<string, string>, env: Record<string, string> = { CLAUDE_CONFIG_DIR: 'C:/cfg' }, readFails = false) {
   on('turn.step', async function* (_$: any, e: any) {
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: USAGE }
   })
@@ -65,7 +65,10 @@ async function bandRow($: any, on: any, files: Record<string, string>, env: Reco
   on('session.model', async () => ({ value: 'claude-sonnet-5-5' }) as any)
   on('env.get', async (_$: any, e: any) => ({ value: env[e.name] }) as any)
   on('fs.exists', async (_$: any, e: any) => ({ value: slashed(e.path) in files }) as any)
-  on('fs.read', async (_$: any, e: any) => ({ value: files[slashed(e.path)] }) as any)
+  on('fs.read', async (_$: any, e: any) => {
+    if (readFails) throw new Error('unreadable')
+    return { value: files[slashed(e.path)] } as any
+  })
   await $.session.end({ reason: 'clear', sessionId: 's', resume: undefined })
   const s = $.turn.step({ turnId: 't', index: 0, messageCount: 1, model: 'claude-sonnet-5-5', agentId: 'a1' })
   for await (const _ of s) { /* drain */ }
@@ -92,4 +95,38 @@ test('aboveSession off in config.json drops the above-session part', async ($, o
 test('an unreadable config falls back to warn and says so', async ($, on) => {
   const text = await bandRow($, on, {}, {})
   expect(text).toMatch(/above session: 1 opus .*\(config not read\)/)
+})
+
+test('a read that throws falls back to warn and says so', async ($, on) => {
+  const text = await bandRow($, on, { [CONFIG_FILE]: '{"aboveSession":"off"}' }, undefined, true)
+  expect(text).toMatch(/above session: 1 opus .*\(config not read\)$/)
+})
+
+test('a malformed config.json falls back to the defaults without a label', async ($, on) => {
+  const text = await bandRow($, on, { [CONFIG_FILE]: '{not json' })
+  expect(text).toMatch(/above session: 1 opus \(\+\$[\d.<]+\)$/)
+  expect(text).not.toMatch(/config not read/)
+})
+
+test('an exempt list cannot be applied to rows without an agent type', async ($, on) => {
+  const text = await bandRow($, on, { [CONFIG_FILE]: '{"exempt":["reviewer"]}' })
+  expect(text).toMatch(/above session: 1 opus \(exempt not applied\)$/)
+})
+
+const OFF = '{"aboveSession":"off"}'
+const HOME_FILE = 'C:/Users/u/.claude/model-routing/config.json'
+
+test('with CLAUDE_CONFIG_DIR unset the config comes from USERPROFILE', async ($, on) => {
+  const text = await bandRow($, on, { [HOME_FILE]: OFF }, { USERPROFILE: 'C:\\Users\\u' })
+  expect(text).not.toMatch(/above session/)
+})
+
+test('with only HOME set the config comes from HOME', async ($, on) => {
+  const text = await bandRow($, on, { [HOME_FILE]: OFF }, { HOME: 'C:/Users/u' })
+  expect(text).not.toMatch(/above session/)
+})
+
+test('USERPROFILE wins over a Git Bash style HOME', async ($, on) => {
+  const text = await bandRow($, on, { [HOME_FILE]: OFF }, { HOME: '/c/Users/u', USERPROFILE: 'C:\\Users\\u' })
+  expect(text).not.toMatch(/above session/)
 })

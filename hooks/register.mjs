@@ -1,4 +1,4 @@
-import { DEFAULT_CONFIG, parseConfig } from './lib/config-core.mjs'
+import { defaultConfig, parseConfig } from './lib/config-core.mjs'
 import { addSubagentStep, bandText, emptyLedger } from './lib/ledger.mjs'
 
 let ledger = emptyLedger()
@@ -8,13 +8,14 @@ let settings = null
 async function readSettings($) {
   try {
     const own = (await $.env.get('CLAUDE_CONFIG_DIR'))?.trim()
-    const home = own ? null : (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
+    const home = own ? null : (await $.env.get('USERPROFILE'))?.trim() || (await $.env.get('HOME'))?.trim()
     if (!own && !home) throw new Error('no config dir')
-    const file = `${own || `${home}/.claude`}/model-routing/config.json`
-    const config = (await $.fs.exists(file)) ? parseConfig(await $.fs.read(file)) : { ...DEFAULT_CONFIG, exempt: [] }
+    const dir = own || `${home}/.claude`
+    const file = `${dir.replaceAll('\\', '/').replace(/\/+$/, '')}/model-routing/config.json`
+    const config = (await $.fs.exists(file)) ? parseConfig(await $.fs.read(file)) : defaultConfig()
     return { config, configRead: true }
   } catch {
-    return { config: DEFAULT_CONFIG, configRead: false }
+    return { config: defaultConfig(), configRead: false }
   }
 }
 

@@ -1,14 +1,16 @@
 export const DEFAULT_CONFIG = { aboveSession: 'warn', exempt: [] }
 
+export const defaultConfig = () => ({ aboveSession: DEFAULT_CONFIG.aboveSession, exempt: [] })
+
 // Never throws: anything missing, unparseable or wrongly typed falls back to the default for that field.
 export function parseConfig(text) {
   let raw
   try {
     raw = JSON.parse(text)
   } catch {
-    return { ...DEFAULT_CONFIG, exempt: [] }
+    return defaultConfig()
   }
-  if (!raw || typeof raw !== 'object') return { ...DEFAULT_CONFIG, exempt: [] }
+  if (!raw || typeof raw !== 'object') return defaultConfig()
   return {
     aboveSession: raw.aboveSession === 'off' || raw.aboveSession === 'warn' ? raw.aboveSession : DEFAULT_CONFIG.aboveSession,
     exempt: Array.isArray(raw.exempt) ? raw.exempt.filter((x) => typeof x === 'string') : [],

@@ -110,6 +110,21 @@ test('an exempt agent type, full or bare, is left out', () => {
   assert.match(bandText(l, cfg({ exempt: ['other'] })), /above session: 1 opus \(\+\$/)
 })
 
+test('an exempt above-session agent next to a non-exempt one leaves the band count and amount to the non-exempt one', () => {
+  const big = { ...opusStep, input_tokens: 90000 }
+  let l = addSubagentStep(emptyLedger(), 'a1', big, SONNET, 'model-routing:reviewer')
+  l = addSubagentStep(l, 'a2', opusStep, SONNET, 'other')
+  const extra = costOf(OPUS, volumeOf(opusStep)) - costOf(SONNET, volumeOf(opusStep))
+  assert.ok(bandText(l, cfg({ exempt: ['reviewer'] })).endsWith(`, above session: 1 opus (+${usd(extra)})`))
+  assert.ok(bandText(l).endsWith(', above session: 2 opus (+' + usd(l.over.a1.extra + l.over.a2.extra) + ')'))
+})
+
+test('an above-session total under a cent reads (+<$0.01)', () => {
+  const l = addSubagentStep(emptyLedger(), 'a1', { input_tokens: 1000, model: OPUS }, SONNET)
+  assert.ok(l.over.a1.extra > 0 && l.over.a1.extra < 0.01)
+  assert.match(bandText(l), /, above session: 1 opus \(\+<\$0\.01\)$/)
+})
+
 test('an unknown agent type with exempt configured prints the count only', () => {
   const l = addSubagentStep(emptyLedger(), 'a1', opusStep, SONNET)
   const t = bandText(l, cfg({ exempt: ['reviewer'] }))

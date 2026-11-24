@@ -55,8 +55,7 @@ function aboveSessionText(ledger, { config, configRead }) {
   if (!rows.length) return ''
   const head = `, above session: ${mixOf(rows.map((o) => o.model))}`
   if (config.exempt.length && rows.some((o) => o.type == null)) return `${head} (exempt not applied)`
-  const amount = usd(rows.reduce((s, o) => s + o.extra, 0))
-  return `${head} (${amount.startsWith('<') ? amount : '+' + amount})${configRead ? '' : ' (config not read)'}`
+  return `${head} (+${usd(rows.reduce((s, o) => s + o.extra, 0))})${configRead ? '' : ' (config not read)'}`
 }
 
 // null until the first subagent: the band then draws nothing.
