@@ -4,7 +4,7 @@ import { exploreModel, tierOf } from './tiers.mjs'
 
 const SUGGESTED = { 'general-purpose': 'sonnet', Explore: 'haiku' }
 // The Agent tool's `model` param takes these family aliases, not full model ids.
-const familyOf = (m) => m.match(/fable|opus|sonnet|haiku/)?.[0] ?? shortModel(m)
+const aliasOf = (m) => m.match(/fable|opus|sonnet|haiku/)?.[0] ?? null
 
 export function bareDispatchAdvice({ input, session, env, envForce, config }) {
   if (!input || typeof input !== 'object' || Array.isArray(input) || input.model) return null
@@ -18,5 +18,7 @@ export function bareDispatchAdvice({ input, session, env, envForce, config }) {
   return ti != null && ts != null && ti > ts ? { agent, inherited, suggested } : null
 }
 
-export const bareDispatchText = ({ agent, inherited, suggested }) =>
-  `model-routing: a bare ${agent} dispatch runs on ${shortModel(inherited)}. Pass model "${suggested}" for ordinary work, or "${familyOf(inherited)}" when the task needs that reasoning.`
+export function bareDispatchText({ agent, inherited, suggested }) {
+  const alias = aliasOf(inherited)
+  return `model-routing: a bare ${agent} dispatch runs on ${shortModel(inherited)}. Pass model "${suggested}" for ordinary work${alias ? `, or "${alias}" when the task needs that reasoning` : ''}.`
+}

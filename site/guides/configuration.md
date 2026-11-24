@@ -60,7 +60,7 @@ A `general-purpose` or `Explore` dispatch with no `model` runs on the session mo
 model-routing: a bare <agent> dispatch runs on <inherited model>. Pass model "<suggested>" for ordinary work, or "<inherited family>" when the task needs that reasoning.
 ```
 
-The inherited model is the session model, or opus for an Explore on a session above opus. The second option names its family (`opus`, `fable`, ...) because the Agent tool's `model` param takes family aliases.
+The inherited model is the session model, or, on the Claude API, opus for an Explore on a session above opus. The second option names its family (`opus`, `fable`, `sonnet`, `haiku`) because the Agent tool's `model` param takes family aliases; for a model outside those families it is left out.
 
 The suggested model is `sonnet` for `general-purpose` and `haiku` for `Explore`. The advice fires only when all of these hold:
 

@@ -63,4 +63,8 @@ test('the advice text is exact', () => {
     bareDispatchText({ agent: 'general-purpose', inherited: 'claude-fable-5-2', suggested: 'sonnet' }),
     'model-routing: a bare general-purpose dispatch runs on fable-5-2. Pass model "sonnet" for ordinary work, or "fable" when the task needs that reasoning.',
   )
+  assert.equal(
+    bareDispatchText({ agent: 'general-purpose', inherited: 'claude-mythos-5', suggested: 'sonnet' }),
+    'model-routing: a bare general-purpose dispatch runs on mythos-5. Pass model "sonnet" for ordinary work.',
+  )
 })
