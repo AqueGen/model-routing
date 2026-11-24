@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { addSubagentTurn, bandText, costOf, emptyLedger } from './lib/ledger.mjs'
+import { addSubagentTurn, bandText, costOf, emptyLedger, rateOf, summarize } from './lib/ledger.mjs'
 
 // Captured from a real session: sonnet-5-5 subagent turn under an opus-5-5 session.
 const sonnetTurn = {
@@ -16,28 +16,47 @@ test('costOf prices cache reads, writes and output at the model rates', () => {
 })
 
 test('1h cache writes cost 2x input and are not double counted', () => {
-  const u = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 1000, ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 1000 }
+  const u = { cache_creation_input_tokens: 1000, ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 1000 }
   assert.ok(Math.abs(costOf('claude-opus-5-5', u) - 1000 * 4e-6 * 2) < 1e-12)
 })
 
 test('creation tokens without a TTL split count as 5m writes', () => {
-  const u = { cache_creation_input_tokens: 1000 }
-  assert.ok(Math.abs(costOf('claude-opus-5-5', u) - 1000 * 4e-6 * 1.25) < 1e-12)
+  assert.ok(Math.abs(costOf('claude-opus-5-5', { cache_creation_input_tokens: 1000 }) - 1000 * 4e-6 * 1.25) < 1e-12)
 })
 
-test('unknown models are counted but not priced', () => {
-  const l = addSubagentTurn(emptyLedger(), 'claude-opus-5-5', { ...sonnetTurn, model: 'claude-new-9' })
-  assert.deepEqual(l, { n: 1, actual: 0, atSession: 0, unpriced: 1 })
-  assert.match(bandText(l, 'claude-opus-5-5'), /not priced/)
+test('a dated fable-5 id is not priced as fable-5.2', () => {
+  assert.deepEqual(rateOf('claude-fable-5-20261101'), [10, 50, 0.1])
+  assert.deepEqual(rateOf('claude-fable-5-2'), [8, 40, 0.025])
 })
 
-test('ledger accumulates actual and session-model cost; band shows both', () => {
+test('subagents are counted once per id, tokens keep adding', () => {
   let l = emptyLedger()
-  l = addSubagentTurn(l, 'claude-opus-5-5', sonnetTurn)
-  l = addSubagentTurn(l, 'claude-opus-5-5', sonnetTurn)
-  assert.equal(l.n, 2)
-  assert.ok(Math.abs(l.atSession / l.actual - 2) < 1e-9)
-  assert.match(bandText(l, 'claude-opus-5-5'), /^model-routing: 2 subagents \$0\.\d\d, the same on opus-5-5 \$0\.\d\d$/)
+  l = addSubagentTurn(l, 'a1', sonnetTurn)
+  l = addSubagentTurn(l, 'a1', sonnetTurn)
+  l = addSubagentTurn(l, 'a2', sonnetTurn)
+  const s = summarize(l, 'claude-opus-5-5')
+  assert.equal(s.n, 2)
+  assert.ok(Math.abs(s.actual - 3 * costOf('claude-sonnet-5-5', sonnetTurn)) < 1e-12)
+})
+
+test('the session-model side follows the current session model, not the one at completion', () => {
+  const l = addSubagentTurn(emptyLedger(), 'a1', sonnetTurn)
+  const underOpus = summarize(l, 'claude-opus-5-5').atSession
+  const underSonnet = summarize(l, 'claude-sonnet-5-5').atSession
+  assert.ok(Math.abs(underOpus / underSonnet - 2) < 1e-9)
+  assert.match(bandText(l, 'claude-sonnet-5-5'), /the same on sonnet-5-5/)
+})
+
+test('unpriced subagents are reported next to the priced ones', () => {
+  let l = addSubagentTurn(emptyLedger(), 'a1', sonnetTurn)
+  l = addSubagentTurn(l, 'a2', { ...sonnetTurn, model: 'claude-x-9' })
+  assert.match(bandText(l, 'claude-opus-5-5'), /^model-routing: 1 subagent \$0\.\d\d, the same on opus-5-5 \$0\.\d\d, 1 not priced$/)
+  assert.match(bandText(addSubagentTurn(emptyLedger(), 'a1', { ...sonnetTurn, model: 'claude-x-9' }), 'claude-opus-5-5'), /model not priced/)
+})
+
+test('without a known session model the band shows only what ran', () => {
+  const l = addSubagentTurn(emptyLedger(), 'a1', sonnetTurn)
+  assert.match(bandText(l, null), /^model-routing: 1 subagent \$0\.\d\d$/)
 })
 
 test('before the first subagent the band says so, so a loaded mod is visible', () => {

@@ -10,16 +10,23 @@ export function register(on) {
   })
 
   on('turn.complete', async ($, e, next) => {
-    if (e.agentId && e.usage && sessionModel) {
-      ledger = addSubagentTurn(ledger, sessionModel, e.usage)
-      try { $.ui.invalidate('ui.render') } catch {}    }
+    if (e.agentId && e.usage) {
+      ledger = addSubagentTurn(ledger, e.agentId, e.usage)
+      try { $.ui.invalidate('ui.render') } catch {}
+    }
+    return next(e)
+  })
+
+  on('session.end', async ($, e, next) => {
+    ledger = emptyLedger()
+    sessionModel = null
+    try { $.ui.invalidate('ui.render') } catch {}
     return next(e)
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props?.hasSurvey) return next(e)
-    const text = bandText(ledger, sessionModel)
     const { Box, Text } = $.ui.resolve(e)
-    return Box({ children: [Text({ children: [text] })] })
+    return Box({ children: [Text({ children: [bandText(ledger, sessionModel)] })] })
   })
 }
