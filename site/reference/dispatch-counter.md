@@ -137,4 +137,4 @@ Embed the one-liner in your status line by appending the command's output
 to whatever your `statusLine.command` already prints. Delete the `.jsonl`
 any time to reset; a missing file just means zero.
 
-Smoke tests for the counter: `node --test hooks/dispatch-counter.test.mjs`.
+Smoke tests for the counter: `node --test hooks/dispatch-counter.test.mjs`. The cost line above the prompt has its own test, `hooks/band.test.ts`, which runs only under `claude plugin test .`; CI has no Claude Code CLI, so run it locally before changing `hooks/register.mjs` or `hooks/lib/`.

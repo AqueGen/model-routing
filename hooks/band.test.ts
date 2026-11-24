@@ -9,6 +9,7 @@ test('the band stays empty until a subagent answers, then names models and both 
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage }
   })
   on('session.end', async (_$, e) => ({ sessionId: e.sessionId }))
+  on('session.model', async () => ({ value: 'claude-opus-5-5' }) as any)
   const step = async (input: any, u: any) => {
     usage = u
     const s = $.turn.step({ turnId: 't', index: 0, messageCount: 1, ...input })
@@ -33,6 +34,11 @@ test('the band stays empty until a subagent answers, then names models and both 
     await ui.unmount()
   }
 
+  await $.session.end({ reason: 'clear', sessionId: 's', resume: undefined } as any)
+  await step({ model: 'claude-sonnet-5-5', agentId: 'a3' }, { input_tokens: 20000, output_tokens: 2000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, model: 'claude-sonnet-5-5' })
+  const after = await $.ui.mount({ plugin: 'model-routing', surface: 'terminal', component: 'AbovePrompt', props: PROPS })
+  expect((await after.find({ text: /model-routing/ }))?.text).toBe('model-routing: 1 sonnet - API $0.06 vs $0.12 at parent')
+  await after.unmount()
   await $.session.end({ reason: 'clear', sessionId: 's', resume: undefined } as any)
   const ui = await $.ui.mount({ plugin: 'model-routing', surface: 'terminal', component: 'AbovePrompt', props: PROPS })
   expect(await ui.find({ text: /model-routing/ })).toBeUndefined()
