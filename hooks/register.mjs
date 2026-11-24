@@ -1,0 +1,33 @@
+import { addSubagentTurn, bandText, emptyLedger } from './lib/ledger.mjs'
+
+let ledger = emptyLedger()
+let sessionModel = null
+
+export function register(on) {
+  on('turn.step', async function* ($, e, next) {
+    if (!e.agentId && e.model) sessionModel = e.model
+    return yield* next(e)
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    if (e.agentId && e.usage) {
+      ledger = addSubagentTurn(ledger, e.agentId, e.usage)
+      try { $.ui.invalidate('ui.render') } catch {}
+    }
+    return next(e)
+  })
+
+  on('session.end', async ($, e, next) => {
+    ledger = emptyLedger()
+    sessionModel = null
+    try { $.ui.invalidate('ui.render') } catch {}
+    return next(e)
+  })
+
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props?.hasSurvey) return next(e)
+    const { Box, Text } = $.ui.resolve(e)
+    const theirs = await next(e)
+    return Box({ flexDirection: 'column', children: [Text({ children: [bandText(ledger, sessionModel)] }), ...(theirs ? [theirs] : [])] })
+  })
+}

@@ -38,6 +38,7 @@ gateway, nothing extra in the request path.
 | `skills/model-routing/` | - | - | The routing table Claude follows when choosing the agent, model and effort of a dispatch. |
 | `hooks/routing-anchor.md` | - | - | Short routing anchor auto-injected at session start - zero config. |
 | `hooks/dispatch-counter.mjs` | - | - | Logs every Agent dispatch; `stats`/`report`/`tokens` modes measure what stayed off the session model. |
+| `hooks/register.mjs` | - | - | A Claude Code mod: one line above the prompt with what this session's subagents cost on the models they ran on, and what the same tokens would cost on the session model (`hooks/lib/ledger.mjs` holds the prices). Terminal and the Desktop Code tab only; `/clear` resets it. |
 | `commands/stats.md` | - | - | `/model-routing:stats` - dispatch + token-volume report in the chat. |
 
 ## Example
