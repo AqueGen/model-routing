@@ -6,7 +6,7 @@ export const defaultConfig = () => ({ aboveSession: DEFAULT_CONFIG.aboveSession,
 export function parseConfig(text) {
   let raw
   try {
-    raw = JSON.parse(text.replace(/^﻿/, ''))
+    raw = JSON.parse(text.replace(/^\uFEFF/, ''))
   } catch {
     return defaultConfig()
   }

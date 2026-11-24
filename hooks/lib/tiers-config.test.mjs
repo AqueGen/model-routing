@@ -78,6 +78,6 @@ test('isExempt: a bare entry matches the bare name, a namespaced entry only the 
 })
 
 test('parseConfig and loadConfig tolerate a UTF-8 BOM', () => {
-  assert.equal(parseConfig('﻿{"aboveSession":"off"}').aboveSession, 'off')
-  withConfig('﻿{"aboveSession":"off"}', (dir) => assert.equal(loadConfig(dir).aboveSession, 'off'))
+  assert.equal(parseConfig('\uFEFF{"aboveSession":"off"}').aboveSession, 'off')
+  withConfig('\uFEFF{"aboveSession":"off"}', (dir) => assert.equal(loadConfig(dir).aboveSession, 'off'))
 })
