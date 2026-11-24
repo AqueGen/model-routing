@@ -2321,9 +2321,9 @@ test("hook prints nothing when off, exempt, at or below the session, without a t
     { session: null },
     { env: { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1" } },
     { model: "haiku" },
-    { agent: "Explore" },
+    { agent: "Explore", config: { bareDispatch: "off" } },
     { agent: "Plan" },
-    { agent: "Explore", env: { CLAUDE_CODE_SUBAGENT_MODEL: "opus" } },
+    { agent: "Explore", config: { bareDispatch: "off" }, env: { CLAUDE_CODE_SUBAGENT_MODEL: "opus" } },
     { agent: "Plan", env: { CLAUDE_CODE_SUBAGENT_MODEL: "opus" } },
   ];
   for (const c of cases) {
@@ -2342,6 +2342,31 @@ test("hook judges the model an unpinned dispatch really ran on: the model param,
     const { out, lines } = noticeRun(c);
     const text = "model-routing: general-purpose ran on opus, above the session model sonnet-5-5. This may cost more than planned.";
     assert.equal(JSON.parse(out).systemMessage, text, JSON.stringify(c));
+    assert.equal(lines, 1, JSON.stringify(c));
+  }
+});
+
+const ADVICE = "model-routing: a bare general-purpose dispatch runs on the session model opus-5-5. Pass model \"sonnet\" for ordinary work, or the session model when the task needs its reasoning.";
+
+test("hook prints the bare-dispatch advice by default, once, and logs once", () => {
+  const { out, lines } = noticeRun({ session: "claude-opus-5-5", agent: "general-purpose" });
+  assert.deepEqual(JSON.parse(out), {
+    systemMessage: ADVICE,
+    hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: ADVICE },
+  });
+  assert.equal(lines, 1);
+});
+
+test("hook prints no bare-dispatch advice under deny or off config, on a sonnet session, or with a model", () => {
+  const cases = [
+    { config: { bareDispatch: "deny" } },
+    { config: { bareDispatch: "off" } },
+    { session: "claude-sonnet-5-5" },
+    { model: "sonnet" },
+  ];
+  for (const c of cases) {
+    const { out, lines } = noticeRun({ session: "claude-opus-5-5", agent: "general-purpose", ...c });
+    assert.equal(out, "", JSON.stringify(c));
     assert.equal(lines, 1, JSON.stringify(c));
   }
 });

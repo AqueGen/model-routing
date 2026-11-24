@@ -36,12 +36,19 @@ test('loadConfig: no file gives the defaults', () => {
 })
 
 test('loadConfig returns a valid file as written', () => {
-  const cfg = { aboveSession: 'off', exempt: ['pre-push-reviewer'] }
+  const cfg = { aboveSession: 'off', bareDispatch: 'deny', exempt: ['pre-push-reviewer'] }
   withConfig(JSON.stringify(cfg), (dir) => assert.deepEqual(loadConfig(dir), cfg))
 })
 
+test('bareDispatch defaults to warn, keeps deny and off, and falls back on anything else', () => {
+  assert.equal(DEFAULT_CONFIG.bareDispatch, 'warn')
+  for (const v of ['warn', 'deny', 'off']) assert.equal(parseConfig(JSON.stringify({ bareDispatch: v })).bareDispatch, v)
+  for (const v of [5, null, true, 'block', 'DENY', {}]) assert.equal(parseConfig(JSON.stringify({ bareDispatch: v })).bareDispatch, 'warn')
+  assert.equal(parseConfig('{"bareDispatch":"deny","aboveSession":5}').aboveSession, 'warn')
+})
+
 test('loadConfig falls back on wrong types, invalid JSON and a directory in place of the file', () => {
-  withConfig('{"aboveSession":5,"exempt":"x"}', (dir) => assert.deepEqual(loadConfig(dir), DEFAULT_CONFIG))
+  withConfig('{"aboveSession":5,"bareDispatch":5,"exempt":"x"}', (dir) => assert.deepEqual(loadConfig(dir), DEFAULT_CONFIG))
   withConfig('{not json', (dir) => assert.deepEqual(loadConfig(dir), DEFAULT_CONFIG))
   withConfig('null', (dir) => assert.deepEqual(loadConfig(dir), DEFAULT_CONFIG))
   withConfig(DIR, (dir) => assert.deepEqual(loadConfig(dir), DEFAULT_CONFIG))
