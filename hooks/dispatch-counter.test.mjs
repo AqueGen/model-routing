@@ -2204,3 +2204,47 @@ test("--session scopes the main-session denominator per line model", () => {
     assert.doesNotMatch(out, /opus-5\s+8k/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
+
+const NOTICE = "model-routing: model-routing:reviewer ran on opus, above the session model sonnet-5-5. This may cost more than planned.";
+
+function noticeRun({ session = "claude-sonnet-5-5", config, env, agent = "model-routing:reviewer" } = {}) {
+  const cfg = freshConfigDir();
+  try {
+    let transcript;
+    if (session) {
+      transcript = join(cfg, "session.jsonl");
+      writeFileSync(transcript, JSON.stringify({ model: session }) + "\n");
+    }
+    if (config) {
+      mkdirSync(join(cfg, "model-routing"), { recursive: true });
+      writeFileSync(join(cfg, "model-routing", "config.json"), JSON.stringify(config));
+    }
+    const out = run([], cfg, JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: agent }, transcript_path: transcript }), env);
+    const log = readFileSync(join(cfg, "model-routing", "dispatches.jsonl"), "utf-8").trim().split("\n");
+    return { out, lines: log.length };
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+}
+
+test("hook prints one JSON notice for a dispatch above the session model", () => {
+  const { out, lines } = noticeRun();
+  assert.deepEqual(JSON.parse(out), {
+    systemMessage: NOTICE,
+    hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: NOTICE },
+  });
+  assert.equal(lines, 1);
+});
+
+test("hook prints nothing when off, exempt, at or below the session, without a transcript, or under FORCE", () => {
+  const cases = [
+    { config: { aboveSession: "off" } },
+    { config: { exempt: ["reviewer"] } },
+    { session: "claude-opus-4-8" },
+    { session: null },
+    { env: { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1" } },
+  ];
+  for (const c of cases) {
+    const { out, lines } = noticeRun(c);
+    assert.equal(out, "", JSON.stringify(c));
+    assert.equal(lines, 1, JSON.stringify(c));
+  }
+});

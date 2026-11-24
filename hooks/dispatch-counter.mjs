@@ -27,7 +27,8 @@
 import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { configDir } from "./lib/config.mjs";
+import { configDir, loadConfig } from "./lib/config.mjs";
+import { aboveSessionNotice, shortModel } from "./lib/notice.mjs";
 import { costOf, LONG_PROMPT, PRICES_ASOF, volOf } from "./lib/prices.mjs";
 import { tierOf } from "./lib/tiers.mjs";
 
@@ -294,7 +295,6 @@ function readEntries(file) {
     .filter(Boolean);
 }
 
-const shortModel = (m) => m ? m.replace(/^claude-/, "").replace(/-\d{8}$/, "") : m;
 
 // Bounded fd reads, NOT readFileSync - these run inside the PostToolUse
 // hook and session transcripts can be hundreds of MB. The optional vendor
@@ -1265,6 +1265,13 @@ try {
   };
   const file = dataFile();
   appendFileSync(file, JSON.stringify(entry) + "\n");
+  const notice = aboveSessionNotice({ agent: entry.agent, ran: effectiveModel(entry), session, config: loadConfig() });
+  if (notice) {
+    process.stdout.write(JSON.stringify({
+      systemMessage: notice,
+      hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: notice },
+    }));
+  }
   // Self-prune once the log ages: rewrite without entries past retention
   // (30d - long enough for --ago comparisons, still trivially small). The
   // negated >= form also fires when the head entry's ts is missing or NaN,
