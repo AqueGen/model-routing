@@ -391,6 +391,24 @@ test("hook mode accepts Task, samples the session model, defaults the agent", ()
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
+test("hook logs an effort param and the report counts it instead of calling it inherited", () => {
+  const cfg = freshConfigDir();
+  const sess = join(cfg, "fake-session.jsonl");
+  writeFileSync(sess, '{"model":"claude-opus-5-5"}\n');
+  try {
+    run([], cfg, JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: "model-routing:reviewer", effort: "high" }, transcript_path: sess }));
+    run([], cfg, JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: "general-purpose", model: "sonnet", effort: "low" }, transcript_path: sess }));
+    run([], cfg, JSON.stringify({ tool_name: "Agent", tool_input: { subagent_type: "general-purpose", model: "sonnet" }, transcript_path: sess }));
+    const log = readFileSync(join(cfg, "model-routing", "dispatches.jsonl"), "utf-8").trim().split("\n").map((l) => JSON.parse(l));
+    assert.equal(log[0].effortParam, "high");
+    assert.equal(log[1].effortParam, "low");
+    assert.equal(log[2].effortParam, undefined);
+    const out = run(["report"], cfg);
+    assert.match(out, /Passed an `effort` param: .*1 model-routing:reviewer effort=high/);
+    assert.match(out, /Effort: 1 of 3 dispatches/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
 test("hook prunes entries past 30d retention and keeps fresh ones", () => {
   const cfg = freshConfigDir();
   const now = Date.now();
@@ -1199,8 +1217,24 @@ test("report collapses the effort section to one line when nothing inherited", (
   ]);
   try {
     const out = run(["report"], cfg);
-    assert.match(out, /^Effort: all 2 dispatches ran on agent types that pin their own effort\.$/m);
+    assert.match(out, /^Effort: all 2 dispatches ran on an agent type that pins its own effort or passed an `effort` param\.$/m);
     assert.doesNotMatch(out, /Source order is|documented model default rather than/);
+  } finally { rmSync(cfg, { recursive: true, force: true }); }
+});
+
+test("report lists effort params in the one-line branch and without a session effort", () => {
+  const cfg = freshConfigDir();
+  const now = Date.now();
+  writeLog(cfg, [
+    { ts: now, agent: "model-routing:reviewer", session: "claude-opus-5-5", effort: "medium", effortFrom: "settings" },
+    { ts: now, agent: "model-routing:reviewer", session: "claude-opus-5-5", effort: "medium", effortFrom: "settings", effortParam: "high" },
+    { ts: now, agent: "general-purpose", model: "sonnet", session: "claude-haiku-4-5", effortParam: "low" },
+  ]);
+  try {
+    const out = run(["report"], cfg);
+    assert.match(out, /^Effort: all 2 dispatches ran on an agent type that pins its own effort or passed an `effort` param\.$/m);
+    assert.match(out, /Passed an `effort` param: .*1 model-routing:reviewer effort=high/);
+    assert.match(out, /Passed an `effort` param: .*1 general-purpose effort=low/);
   } finally { rmSync(cfg, { recursive: true, force: true }); }
 });
 
