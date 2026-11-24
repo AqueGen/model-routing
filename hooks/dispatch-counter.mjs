@@ -24,13 +24,15 @@
 // agent types with no known pin inherit it, pinned agents do not.
 // Log lives in <config>/model-routing/dispatches.jsonl and self-prunes to 30d.
 
-import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { bareDispatchAdvice, bareDispatchText } from "./lib/bare-dispatch.mjs";
 import { configDir, loadConfig } from "./lib/config.mjs";
 import { aboveSessionNotice, shortModel } from "./lib/notice.mjs";
 import { costOf, LONG_PROMPT, PRICES_ASOF, volOf } from "./lib/prices.mjs";
-import { tierOf } from "./lib/tiers.mjs";
+import { exploreModel, tierOf } from "./lib/tiers.mjs";
+import { firstModelIn, lastModelIn, readSlice } from "./lib/transcript.mjs";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RETENTION_MS = 30 * DAY_MS;
@@ -130,13 +132,6 @@ const pinnedModel = (agent) => AGENT_PINS[agent]?.model ?? FOREIGN_AGENT_PINS[ag
 // measures anything, so it may as well trust the best guess it has.
 const ownPinnedModel = (agent) => AGENT_PINS[agent]?.model ?? null;
 const pinnedEffort = (agent) => AGENT_PINS[agent]?.effort ?? null;
-// Built-in Explore has inherited the session model since Claude Code 2.1.198,
-// capped at opus on the Claude API; before that it always ran haiku, which is
-// why it used to be exempted here as inherently cheap. The cap survives FORCE
-// with no env model. On other providers the cap does not apply, so a Fable
-// session's Explore there runs Fable and this reads it one tier low - the log
-// records no provider to tell them apart.
-const exploreModel = (session) => session && (tierOf(session) ?? 0) > tierOf("opus") ? "opus" : session ?? null;
 // Built-in Explore and Plan carry a model in their own definitions, so a plain
 // CLAUDE_CODE_SUBAGENT_MODEL does not move either, per the subagent docs.
 const BUILTIN_AGENTS = new Set(["Explore", "Plan"]);
@@ -297,34 +292,6 @@ function readEntries(file) {
     .filter(Boolean);
 }
 
-// Bounded fd reads, NOT readFileSync - these run inside the PostToolUse
-// hook and session transcripts can be hundreds of MB. The optional vendor
-// prefix accepts Bedrock/Vertex ids (us.anthropic.claude-...) while
-// capturing from "claude-" so tierOf/shortModel see the same shape.
-const MODEL_RE = /"model":"(?:[a-z0-9-]+\.)*(claude-[a-z0-9.-]+)"/g;
-function readSlice(file, bytes, fromEnd) {
-  let fd;
-  try {
-    fd = openSync(file, "r");
-    const size = fstatSync(fd).size;
-    const len = Math.min(bytes, size);
-    if (!len) return "";
-    const buf = Buffer.alloc(len);
-    const n = readSync(fd, buf, 0, len, fromEnd ? size - len : 0);
-    return buf.toString("utf-8", 0, n);
-  } catch { return ""; }
-  finally { if (fd !== undefined) try { closeSync(fd); } catch {} }
-}
-
-function firstModelIn(file, bytes) {
-  // Session-START model: the head of the session jsonl. The tokens report uses
-  // it only as a LAST resort, when neither the dispatching assistant message
-  // nor the timeline around the agent's first timestamp could name a model -
-  // a /model switch later in the session is invisible to it.
-  const m = readSlice(file, bytes, false).match(/"model":"(?:[a-z0-9-]+\.)*(claude-[a-z0-9.-]+)"/);
-  return m?.[1] ?? null;
-}
-
 // Session model for the tokens report. The head names the model the session
 // STARTED on, but a long session can push the first assistant message past the
 // head window (measured here: 6 of 60 transcripts, all multi-MB), and
@@ -333,16 +300,6 @@ function firstModelIn(file, bytes) {
 // concentrated exactly where it mattered. Fall back to the tail, accepting the
 // lower precision: a late-window model beats no model.
 const sessionModelOf = (file) => firstModelIn(file, 262144) ?? lastModelIn(file, 262144);
-
-function lastModelIn(file, bytes) {
-  // Model in effect NOW: the last model named in the transcript tail. The
-  // dispatch hook uses this so /model switches, opusplan's plan->execute
-  // handoff, and quota fallbacks judge each dispatch against the model the
-  // session was actually on at dispatch time, not at session start.
-  let last = null;
-  for (const m of readSlice(file, bytes, true).matchAll(MODEL_RE)) last = m[1];
-  return last;
-}
 
 // The model a dispatch actually ran on, in harness priority order (Claude Code
 // 2.1.251+): 1. the per-invocation model param, 2. the agent's frontmatter pin
@@ -1281,11 +1238,18 @@ try {
   };
   const file = dataFile();
   appendFileSync(file, JSON.stringify(entry) + "\n");
-  const notice = aboveSessionNotice({ agent: entry.agent, ran: effectiveModel(entry), session, config: loadConfig() });
-  if (notice) {
+  const config = loadConfig();
+  const advice = config.bareDispatch === "warn"
+    ? bareDispatchAdvice({ input, session, env: envModel, envForce, config })
+    : null;
+  const text = [
+    aboveSessionNotice({ agent: entry.agent, ran: effectiveModel(entry), session, config }),
+    advice && bareDispatchText(advice),
+  ].filter(Boolean).join(" ");
+  if (text) {
     process.stdout.write(JSON.stringify({
-      systemMessage: notice,
-      hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: notice },
+      systemMessage: text,
+      hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: text },
     }));
   }
   // Self-prune once the log ages: rewrite without entries past retention

@@ -9,6 +9,14 @@ export const tierOf = (m) => {
   return null
 }
 
+// Built-in Explore has inherited the session model since Claude Code 2.1.198,
+// capped at opus on the Claude API; before that it always ran haiku, which is
+// why it used to be exempted here as inherently cheap. The cap survives FORCE
+// with no env model. On other providers the cap does not apply, so a Fable
+// session's Explore there runs Fable and this reads it one tier low - the log
+// records no provider to tell them apart.
+export const exploreModel = (session) => session && (tierOf(session) ?? 0) > tierOf('opus') ? 'opus' : session ?? null
+
 export const isAboveSession = (ran, session) => {
   const tr = tierOf(ran)
   const ts = tierOf(session)

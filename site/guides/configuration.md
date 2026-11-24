@@ -1,6 +1,6 @@
 # Configuration
 
-One optional file controls the above-session warning. It does not control pins - those stay in the agent files, see [Overriding pins](/guides/overriding-pins).
+One optional file controls the above-session warning and the bare-dispatch advice. It does not control pins - those stay in the agent files, see [Overriding pins](/guides/overriding-pins).
 
 ## The file
 
@@ -16,6 +16,7 @@ One optional file controls the above-session warning. It does not control pins -
 | Key | Values | Default |
 | --- | --- | --- |
 | `aboveSession` | `"warn"` or `"off"` | `"warn"` |
+| `bareDispatch` | `"warn"`, `"deny"` or `"off"` | `"warn"` |
 | `exempt` | list of agent type names | `[]` |
 
 An `exempt` entry without a colon matches the agent's name after the last colon, so `reviewer` matches `reviewer` and `model-routing:reviewer`. An entry with a colon matches only that exact agent type, so `other-plugin:reviewer` does not match `model-routing:reviewer`.
@@ -47,6 +48,29 @@ model-routing: <agent> ran on <model>, above the session model <session model>. 
 
 It is emitted as JSON carrying the text in both `systemMessage` and `additionalContext`. Which of the two reaches you in the Claude Code UI has not been verified here. Both carry the same text, and `exempt` and `"off"` apply to the notice the same way.
 
+## Bare dispatches
+
+A `general-purpose` or `Explore` dispatch with no `model` runs on the session model (on the Claude API, Explore is capped at opus). `bareDispatch` controls what the plugin does about that.
+
+- `"warn"` (default) - the dispatch counter hook prints the advice below after the dispatch, in the same JSON shape as the hook notice.
+- `"deny"` - a PreToolUse hook refuses the call before it runs, with the advice as the reason. The model is expected to re-issue the call with `model`. Nothing is re-dispatched by the plugin.
+- `"off"` - nothing is said.
+
+```text
+model-routing: a bare <agent> dispatch runs on <inherited model>. Pass model "<suggested>" for ordinary work, or "<inherited family>" when the task needs that reasoning.
+```
+
+The inherited model is the session model, or, on the Claude API, opus for an Explore on a session above opus. The second option names its family (`opus`, `fable`, `sonnet`, `haiku`) because the Agent tool's `model` param takes family aliases; for a model outside those families it is left out.
+
+The suggested model is `sonnet` for `general-purpose` and `haiku` for `Explore`. The advice fires only when all of these hold:
+
+- the agent type is `general-purpose` or `Explore` and the call has no `model`;
+- the model it would inherit is a higher tier than the suggested one, so a Sonnet or Haiku session gets nothing for `general-purpose`, and a Haiku session nothing for `Explore`;
+- `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is not set;
+- for `general-purpose`, `CLAUDE_CODE_SUBAGENT_MODEL` is unset or `inherit` (when it names a model, that model already applies; Explore is not moved by it);
+- the agent type is not in `exempt`;
+- the session model can be read from the transcript and is recognized.
+
 ## What it does not do
 
-Nothing is blocked and nothing is dispatched or re-dispatched. The plugin only reports.
+Nothing is dispatched or re-dispatched, and nothing is blocked unless `bareDispatch` is `"deny"`.
