@@ -1,6 +1,6 @@
 # Configuration
 
-One optional file controls the above-session warning and the bare-dispatch advice. It does not control pins - those stay in the agent files, see [Overriding pins](/guides/overriding-pins).
+One optional file controls the above-session warning, the bare-dispatch advice, the [routing modes](/guides/routing-modes) and the band. It does not control pins - those stay in the agent files, see [Overriding pins](/guides/overriding-pins).
 
 ## The file
 
@@ -23,8 +23,8 @@ One optional file controls the above-session warning and the bare-dispatch advic
 | `manualMode` | same as `mode` | the value of `mode` |
 | `autoSwitch` | `true` or `false` | `false` |
 | `showStats` | `true` or `false`: show the Claude 5h and week figures in the band | `true` |
-| `showCodex` | `true` or `false`: show the Codex figures in the band, and poll them | `true` |
 | `redirect` | object, agent type to agent type | `{}` |
+| `fallback` | list of agent types named in opus refusals as alternatives, see [Routing modes](/guides/routing-modes#fallback-agents) | `[]` |
 
 An `exempt` entry without a colon matches the agent's name after the last colon, so `reviewer` matches `reviewer` and `model-routing:reviewer`. An entry with a colon matches only that exact agent type, so `other-plugin:reviewer` does not match `model-routing:reviewer`.
 
@@ -89,11 +89,11 @@ Agent names are compared by the part after the last colon, so `reviewer` covers 
 | `redirect` has the agent | deny, use the target | deny | deny | deny |
 | `reviewer` with model `sonnet` or `haiku`, when the session model is known and higher than that model | allow | deny | deny | deny |
 | `implementer`, `general-purpose` or `Explore` on the opus tier, no tag | allow | deny | deny | deny |
-| the same with `[opus: retry]` or `[opus: concurrency]` | allow | allow | allow | deny, use Codex or sonnet with a fixed brief |
+| the same with `[opus: retry]` or `[opus: concurrency]` | allow | allow | allow | deny, retry on sonnet with a fixed brief |
 | the same with `[opus: security]`, `[opus: money]` or `[opus: migration]` | allow | allow | allow | allow |
 | `general-purpose` or `Explore` with no `model` | as `bareDispatch` | deny | deny | deny |
 | `reviewer` without `[final]` | allow | allow | deny | deny |
-| anything else (`fork`, `pre-push-reviewer`, `ui-reviewer`, ...) | allow | allow | allow | allow |
+| anything else (`fork`, `pre-push-reviewer`, `ui-reviewer`, ...) not named in `redirect` | allow | allow | allow | allow |
 
 The bare-dispatch rows deny only when the inherited model is a higher tier than the suggested one, with the conditions listed under Bare dispatches. `bareDispatch: "off"` wins in every mode. `general-purpose` and `Explore` are matched by the part after the last colon. A `redirect` chain (`a` to `b`, `b` to `c`) is followed to its end; a chain that leads back to an agent already on it, its own key included, redirects nothing.
 
@@ -103,16 +103,17 @@ The mod draws two rows above the prompt on every surface. Row 1 is the controls,
 
 ```text
 routing [on]  [economy] [balanced] [strict] [quality]  [auto]
-model-routing: 3 opus, 3 sonnet - API $4.58 vs $2.42 at parent - 5h 12% - week 41% - codex 3%/20%
+model-routing: 3 opus, 3 sonnet - API $4.58 vs $2.42 at parent - 5h 12% - week 41%
 ```
 
-Pressing a mode sets `mode` and `manualMode` and turns routing on. `on`/`off` flips `isOn`. `auto` flips `autoSwitch`. Each press writes `config.json`, keeping keys the mod does not own, and leaves a file that is not a JSON object untouched. Rendering never writes. `showStats` and `showCodex` have no buttons; edit them in `config.json`.
+Pressing a mode sets `mode` and `manualMode` and turns routing on. `on`/`off` flips `isOn`. `auto` flips `autoSwitch`. Each press writes `config.json`, keeping keys the mod does not own, and leaves a file that is not a JSON object untouched. Rendering never writes. `showStats` has no button; edit it in `config.json`.
 
-Row 2 is the cost line (see What it reports) followed by ` - `-separated limits. With `showStats`, `5h N%` and `week N%` appear once the session has reported that window. With `showCodex`, `codex N%/M%` (5h/week) appears once the Codex figures are read. With no cost line the row is the limits alone, and with nothing to show there is no row 2.
+Row 2 is the cost line (see What it reports) followed by ` - `-separated limits. With `showStats`, `5h N%` and `week N%` each appear once a reading for that window has arrived, so one can show while the other is missing. With no cost line the row is the limits alone, and with nothing to show there is no row 2.
 
-With `autoSwitch` on, the mode follows the Claude weekly limit: at 90% and above `strict`, at 80% and above `economy`, otherwise `manualMode`, and never looser than `manualMode`. It only runs while `isOn` is true and never turns routing back on. The check runs on every limit reading and after every press.
+With `autoSwitch` on, the mode follows the Claude weekly limit: at 90% and above `strict`, at 80% and above `economy`, otherwise `manualMode`, and never looser than `manualMode`. It only runs while `isOn` is true and never turns routing back on. The check runs on every limit reading and after every press, and changes nothing until the first weekly reading has arrived.
 
-Codex limits come from the newest `~/.codex/sessions` logs (`hooks/codex-limits.mjs`, every 10 minutes, only while `showCodex` is true). `config.json` is re-read every minute. Timers start with an interactive session and survive `/clear` and resume.
+`config.json` is re-read every minute. Timers start with an interactive session and survive `/clear` and resume.
+
 ## What it does not do
 
 Nothing is dispatched or re-dispatched. Refusals come only from the modes above and from `bareDispatch: "deny"`.

@@ -18,7 +18,7 @@ const expectRow = (input, expected, session) => {
 test('row 1: redirect denies in every mode, names the target, matches by bare name or full name', () => {
   const input = { subagent_type: 'model-routing:implementer', model: 'sonnet' }
   for (const mode of MODES) {
-    assert.match(decide(input, cfg({ mode, redirect: { implementer: 'codex-implementer' } })), /use codex-implementer/)
+    assert.match(decide(input, cfg({ mode, redirect: { implementer: 'other-implementer' } })), /use other-implementer/)
   }
   assert.equal(decide(input, cfg({ redirect: { 'other:implementer': 'x' } })), null)
   assert.match(decide(input, cfg({ redirect: { 'model-routing:implementer': 'x' } })), /use x/)
@@ -32,6 +32,12 @@ test('row 1: a self-redirect or a redirect to a redirected agent is ignored', ()
   assert.equal(decide(input, cfg({ redirect: { implementer: 'a', a: 'implementer' } })), null)
   assert.equal(decide({ subagent_type: 'a' }, cfg({ redirect: { implementer: 'a', a: 'implementer' } })), null)
   assert.match(decide(input, cfg({ redirect: { implementer: 'b', a: 'implementer' } })), /use b/)
+})
+
+test('row 1: a plugin-qualified key redirecting to its bare name works', () => {
+  const config = cfg({ redirect: { 'model-routing:implementer': 'implementer' } })
+  assert.match(decide({ subagent_type: 'model-routing:implementer', model: 'sonnet' }, config), /use implementer/)
+  assert.equal(decide({ subagent_type: 'implementer', model: 'sonnet' }, config), null)
 })
 
 test('row 1: a redirect chain is followed to its end', () => {
@@ -65,14 +71,33 @@ test('row 3: opus-tier implementer / general-purpose / Explore without a tag', (
   expectRow({ subagent_type: 'Explore', model: 'fable', description: 'x' }, allow)
 })
 
-test('row 4: retry and concurrency tags allow except in strict, which names Codex or sonnet', () => {
+test('row 4: retry and concurrency tags allow except in strict, which names sonnet', () => {
   for (const tag of ['[opus: retry]', '[OPUS:concurrency]']) {
     expectRow({ subagent_type: 'implementer', model: 'opus', description: tag }, { quality: false, balanced: false, economy: false, strict: true })
-    assert.match(decide({ subagent_type: 'implementer', model: 'opus', description: tag }, cfg({ mode: 'strict' })), /Codex.*sonnet/)
+    assert.match(decide({ subagent_type: 'implementer', model: 'opus', description: tag }, cfg({ mode: 'strict' })), /retry on sonnet with a fixed brief/)
   }
   assert.equal(decide({ subagent_type: 'implementer', model: 'opus', prompt: '[opus: retry] brief' }, cfg({ mode: 'balanced' })), null)
   assert.match(decide({ subagent_type: 'implementer', model: 'opus', description: 'x' }, cfg({ mode: 'balanced' })), /\[opus: retry\]/)
   assert.match(decide({ subagent_type: 'implementer', model: 'opus', prompt: 'a'.repeat(300) + '[opus: retry]' }, cfg({ mode: 'balanced' })), /^model-routing:/)
+})
+
+test('fallback: refused opus dispatches list the configured agents, minus the refused one and redirected ones', () => {
+  const plain = { subagent_type: 'model-routing:implementer', model: 'opus', description: 'x' }
+  const base = decide(plain, cfg({ mode: 'balanced' }))
+  assert.doesNotMatch(base, /Or hand it to/)
+  const withFb = decide(plain, cfg({ mode: 'balanced', fallback: ['implementer', 'codex:codex-rescue'] }))
+  assert.equal(withFb, `${base} Or hand it to: codex:codex-rescue.`)
+  const retry = { subagent_type: 'implementer', model: 'opus', description: '[opus: retry]' }
+  assert.match(decide(retry, cfg({ mode: 'strict', fallback: ['a', 'b'] })), /sonnet with a fixed brief\. Or hand it to: a, b\.$/)
+  assert.match(decide(plain, cfg({ mode: 'balanced', fallback: ['a', 'b'], redirect: { a: 'z' } })), /Or hand it to: b\.$/)
+  assert.doesNotMatch(decide(plain, cfg({ mode: 'balanced', fallback: ['a'], redirect: { a: 'z' } })), /Or hand it to/)
+})
+
+test('fallback: other refusals are unchanged', () => {
+  const config = cfg({ mode: 'balanced', fallback: ['a'] })
+  assert.doesNotMatch(decide({ subagent_type: 'model-routing:reviewer', model: 'sonnet', description: '[final]' }, config, 'claude-fable-5-2'), /hand it to/)
+  assert.doesNotMatch(decide({ subagent_type: 'general-purpose' }, { ...config, mode: 'economy' }) ?? '', /hand it to/)
+  assert.doesNotMatch(decide({ subagent_type: 'x' }, cfg({ redirect: { x: 'y' }, fallback: ['a'] })), /hand it to/)
 })
 
 test('row 5: security, money and migration tags allow in every mode', () => {

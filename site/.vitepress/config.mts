@@ -43,6 +43,7 @@ export default withMermaid({
         text: 'Guides',
         items: [
           { text: 'Recommended settings', link: '/guides/recommended-settings' },
+          { text: 'Routing modes', link: '/guides/routing-modes' },
           { text: 'Overriding pins', link: '/guides/overriding-pins' },
           { text: 'Configuration', link: '/guides/configuration' },
           { text: 'Staying up to date', link: '/guides/staying-up-to-date' },
