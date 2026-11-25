@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.20.0](https://github.com/AqueGen/model-routing/compare/v0.19.0...v0.20.0) (2026-11-25)
+
+
+### Features
+
+* fallback agents in refusals, routing modes guide, Claude-only band ([#76](https://github.com/AqueGen/model-routing/issues/76)) ([404f80c](https://github.com/AqueGen/model-routing/commit/404f80c4920f563548060cb08a04181fe19447d0))
+* routing modes, power switch and live limits in the band ([#74](https://github.com/AqueGen/model-routing/issues/74)) ([0a49f10](https://github.com/AqueGen/model-routing/commit/0a49f10d3813a549b78a898fcc0894671026e5bf))
+
 ## [0.19.0](https://github.com/AqueGen/model-routing/compare/v0.18.0...v0.19.0) (2026-11-24)
 
 A notice now follows each dispatch that runs on a higher tier than the session model, the cost line counts those subagents and shows their measured cost difference (the count alone, exempt types included, when `exempt` is set), a bare general-purpose or Explore dispatch that inherits a model above the suggested tier gets advice after it runs, the dispatch log records the Agent `effort` param, and a new `config.json` switches each of these warnings off or turns the bare-dispatch advice into a refusal before the call.
