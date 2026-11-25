@@ -8,7 +8,7 @@ let sessionModel = null
 let settings = null
 let live = null
 let timers = []
-const stats = { claude5h: null, claudeWeek: null, codex5h: null, codexWeek: null }
+const stats = { claude5h: null, claudeWeek: null }
 
 async function configFile($) {
   const own = (await $.env.get('CLAUDE_CONFIG_DIR'))?.trim()
@@ -57,6 +57,7 @@ async function saveConfig($, config) {
 
 async function applyAuto($) {
   const config = live ?? (live = await readLive($))
+  if (stats.claudeWeek == null) return
   const target = autoMode(config, stats.claudeWeek)
   if (config.isOn && target !== config.mode) await saveConfig($, { ...config, mode: target })
 }
@@ -65,20 +66,6 @@ const refresh = ($) => { try { $.ui.invalidate('ui.render') } catch {} }
 
 async function refreshConfig($) {
   live = await readLive($)
-  refresh($)
-}
-
-async function refreshCodex($) {
-  live ??= await readLive($)
-  if (!live.showCodex) return
-  try {
-    const run = await $.process.run(['node', `${$.plugin.root}/hooks/codex-limits.mjs`])
-    const limits = JSON.parse(run.stdout)
-    stats.codex5h = limits?.fiveHour ?? null
-    stats.codexWeek = limits?.week ?? null
-  } catch {
-    stats.codex5h = stats.codexWeek = null
-  }
   refresh($)
 }
 
@@ -93,7 +80,6 @@ function limitsText(config) {
     if (stats.claude5h != null) parts.push(`5h ${pct(stats.claude5h)}`)
     if (stats.claudeWeek != null) parts.push(`week ${pct(stats.claudeWeek)}`)
   }
-  if (config.showCodex && stats.codex5h != null && stats.codexWeek != null) parts.push(`codex ${pct(stats.codex5h)}/${pct(stats.codexWeek)}`)
   return parts
 }
 
@@ -103,9 +89,7 @@ export function register(on) {
     if (e.isInteractive === false) return result
     stopTimers()
     safely(() => refreshConfig($))()
-    safely(() => refreshCodex($))()
     every($, MINUTE, () => refreshConfig($))
-    every($, 10 * MINUTE, () => refreshCodex($))
     return result
   })
 

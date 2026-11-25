@@ -9,11 +9,11 @@ export const DEFAULT_CONFIG = {
   manualMode: 'quality',
   autoSwitch: false,
   showStats: true,
-  showCodex: true,
   redirect: {},
+  fallback: [],
 }
 
-export const defaultConfig = () => ({ ...DEFAULT_CONFIG, exempt: [], redirect: {} })
+export const defaultConfig = () => ({ ...DEFAULT_CONFIG, exempt: [], redirect: {}, fallback: [] })
 
 const isMode = (v) => MODES.includes(v)
 const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
@@ -37,10 +37,10 @@ export function parseConfig(text) {
     manualMode: isMode(raw.manualMode) ? raw.manualMode : mode,
     autoSwitch: typeof raw.autoSwitch === 'boolean' ? raw.autoSwitch : DEFAULT_CONFIG.autoSwitch,
     showStats: typeof raw.showStats === 'boolean' ? raw.showStats : DEFAULT_CONFIG.showStats,
-    showCodex: typeof raw.showCodex === 'boolean' ? raw.showCodex : DEFAULT_CONFIG.showCodex,
     redirect: isPlainObject(raw.redirect)
       ? Object.fromEntries(Object.entries(raw.redirect).filter(([, v]) => typeof v === 'string'))
       : {},
+    fallback: Array.isArray(raw.fallback) ? [...new Set(raw.fallback.filter((x) => typeof x === 'string' && x))] : [],
   }
 }
 

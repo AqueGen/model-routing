@@ -15,16 +15,23 @@ test('an old config with only bareDispatch keeps it and gets the new defaults', 
 })
 
 test('valid new fields are read; manualMode defaults to mode', () => {
-  const c = parseConfig(JSON.stringify({ isOn: false, mode: 'strict', autoSwitch: true, showStats: false, showCodex: false, redirect: { a: 'b' } }))
-  assert.deepEqual(c, { ...defaultConfig(), isOn: false, mode: 'strict', manualMode: 'strict', autoSwitch: true, showStats: false, showCodex: false, redirect: { a: 'b' } })
+  const c = parseConfig(JSON.stringify({ isOn: false, mode: 'strict', autoSwitch: true, showStats: false, redirect: { a: 'b' } }))
+  assert.deepEqual(c, { ...defaultConfig(), isOn: false, mode: 'strict', manualMode: 'strict', autoSwitch: true, showStats: false, redirect: { a: 'b' } })
   assert.equal(parseConfig('{"mode":"economy","manualMode":"quality"}').manualMode, 'quality')
 })
 
 test('each wrong-typed field falls back on its own', () => {
-  const c = parseConfig(JSON.stringify({ isOn: 'yes', mode: 'turbo', manualMode: 5, autoSwitch: 1, showStats: 'no', showCodex: null, redirect: ['x'], bareDispatch: 'deny' }))
+  const c = parseConfig(JSON.stringify({ isOn: 'yes', mode: 'turbo', manualMode: 5, autoSwitch: 1, showStats: 'no',redirect: ['x'], bareDispatch: 'deny' }))
   assert.deepEqual(c, { ...defaultConfig(), bareDispatch: 'deny' })
   assert.deepEqual(parseConfig('{"redirect":{"a":"b","c":5}}').redirect, { a: 'b' })
   assert.equal(parseConfig('{"mode":"strict","manualMode":"nope"}').manualMode, 'strict')
+})
+
+test('fallback parses to unique non-empty strings in order, else []', () => {
+  assert.deepEqual(parseConfig('{}').fallback, [])
+  assert.deepEqual(parseConfig('{"fallback":"a"}').fallback, [])
+  assert.deepEqual(parseConfig('{"fallback":{"a":1}}').fallback, [])
+  assert.deepEqual(parseConfig('{"fallback":["a",5,"",null,"b","a"]}').fallback, ['a', 'b'])
 })
 
 test('autoMode: pressure raises strictness, never loosens, off or unknown keeps manual', () => {

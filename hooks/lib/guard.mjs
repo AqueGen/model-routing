@@ -9,16 +9,16 @@ const FINAL_REVIEW = /\[final\]/i
 
 const matchesAgent = (key, agent) => (key.includes(':') ? key === agent : key === bare(agent))
 
-// Follows a redirect chain to its end; a chain that returns to an agent already seen (self or cycle) redirects nothing.
+// Follows a redirect chain to its end; reusing an entry (cycle) or redirecting to the same name redirects nothing.
 function redirectTarget(redirects, agent) {
-  const seen = [agent]
+  const used = new Set()
   let current = agent
   for (;;) {
-    const next = redirects.find(([key]) => matchesAgent(key, current))?.[1]
-    if (!next) return current === agent ? null : current
-    if (seen.some((s) => s === next || matchesAgent(next, s))) return null
-    seen.push(next)
-    current = next
+    const entry = redirects.find(([key]) => matchesAgent(key, current))
+    if (!entry) return current === agent ? null : current
+    if (used.has(entry[0]) || entry[1] === current) return null
+    used.add(entry[0])
+    current = entry[1]
   }
 }
 
@@ -43,11 +43,14 @@ export function guardDecision({ input, config, session, env = '', envForce = fal
   }
 
   if (mode !== 'quality' && (name === 'implementer' || UNPINNED.includes(name)) && /opus|fable/.test(model)) {
+    const entries = Object.entries(config.redirect)
+    const usable = config.fallback.filter((f) => !matchesAgent(f, agent) && !matchesAgent(agent, f) && redirectTarget(entries, f) === null)
+    const handTo = usable.length ? ` Or hand it to: ${usable.join(', ')}.` : ''
     if (mode === 'strict' && !STRICT_REASON.test(text)) {
-      return `model-routing: ${agent} with model=${model} in routing mode 'strict': opus only with [opus: security], [opus: money] or [opus: migration] in the description. For a retry or concurrency work use Codex (codex-implement skill), or sonnet with a fixed brief.`
+      return `model-routing: ${agent} with model=${model} in routing mode 'strict': opus only with [opus: security], [opus: money] or [opus: migration] in the description. For a retry or concurrency work retry on sonnet with a fixed brief.${handTo}`
     }
     if (!OPUS_REASON.test(text)) {
-      return `model-routing: ${agent} with model=${model} in routing mode '${mode}' needs a stated reason: add [opus: retry], [opus: security], [opus: money], [opus: migration] or [opus: concurrency] to the description. Otherwise drop model or pass model=sonnet.`
+      return `model-routing: ${agent} with model=${model} in routing mode '${mode}' needs a stated reason: add [opus: retry], [opus: security], [opus: money], [opus: migration] or [opus: concurrency] to the description. Otherwise drop model or pass model=sonnet.${handTo}`
     }
   }
 

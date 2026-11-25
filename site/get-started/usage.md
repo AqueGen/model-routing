@@ -25,3 +25,5 @@ Claude dispatches work. Two rules worth knowing:
 - **Batch small edits, not plan tasks.** Each subagent re-reads files from scratch, so ten one-line edits as ten agents cost more than one agent with ten edits. A plan task with its own verification step gets its own fresh agent: a long run re-reads its whole growing context every turn. Over 30 days of one user's transcripts, the heaviest tenth of implementer runs took 60% of implementer cost.
 - **Repo policies win.** If your project says "never run integration
   tests", the runner respects it.
+
+To have the plugin enforce cheaper tiers instead of only advising them, pick a mode in the band above the prompt; see [Routing modes](/guides/routing-modes).

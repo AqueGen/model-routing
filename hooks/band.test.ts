@@ -154,7 +154,6 @@ test('row 1 has the power, four mode and auto buttons on every surface and no sh
       expect(await ui.find({ type: 'Button', text: label })).toBeDefined()
     }
     expect(await ui.find({ type: 'Button', text: 'stats' })).toBeUndefined()
-    expect(await ui.find({ type: 'Button', text: 'codex' })).toBeUndefined()
     expect(await ui.find({ text: /show/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /7d|denials|opus \?/ })).toBeUndefined()
     await ui.unmount()
