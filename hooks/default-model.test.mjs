@@ -47,3 +47,11 @@ test('nothing is printed for warn or off config, a sonnet session, an explicit m
   assert.equal(hook({ stdin: '{not json' }), '')
   assert.equal(hook({ stdin: '' }), '')
 })
+
+test('a mode in config.json applies to the hook; isOn false allows even a deny config', () => {
+  const input = { subagent_type: 'implementer', model: 'opus', description: 'x' }
+  assert.match(JSON.parse(hook({ config: { mode: 'strict' }, input })).hookSpecificOutput.permissionDecisionReason, /^model-routing:.*\[opus: security\]/)
+  assert.equal(hook({ config: { mode: 'quality' }, input }), '')
+  assert.equal(hook({ config: { mode: 'strict', isOn: false }, input }), '')
+  assert.equal(hook({ config: { bareDispatch: 'deny', isOn: false } }), '')
+})

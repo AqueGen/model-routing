@@ -37,7 +37,7 @@ test('loadConfig: no file gives the defaults', () => {
 
 test('loadConfig returns a valid file as written', () => {
   const cfg = { aboveSession: 'off', bareDispatch: 'deny', exempt: ['pre-push-reviewer'] }
-  withConfig(JSON.stringify(cfg), (dir) => assert.deepEqual(loadConfig(dir), cfg))
+  withConfig(JSON.stringify(cfg), (dir) => assert.deepEqual(loadConfig(dir), { ...DEFAULT_CONFIG, ...cfg }))
 })
 
 test('bareDispatch defaults to warn, keeps deny and off, and falls back on anything else', () => {
